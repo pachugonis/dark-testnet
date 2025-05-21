@@ -1,8 +1,9 @@
 # By default, Authorities are not configured as exits
 Authority = Node(tag="a", authority=1, relay=1)
 ExitRelay = Node(tag="r", relay=1, exit=1)
-Client = Node(tag="c", client=1, backend=NodeBackend.ARTI)
+TorClient = Node(tag="torc", client=1, backend=NodeBackend.TOR)
+ArtiClient = Node(tag="artic", client=1, backend=NodeBackend.ARTI)
 
-NODES = Authority.getN(4) + ExitRelay.getN(5) + Client.getN(2)
+NODES = Authority.getN(4) + ExitRelay.getN(5) + TorClient.getN(1) + ArtiClient.getN(1)
 
 ConfigureNodes(NODES)
