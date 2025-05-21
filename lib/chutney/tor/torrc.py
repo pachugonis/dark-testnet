@@ -88,6 +88,7 @@ def format(n: TorNet.Node) -> str:
         {n._config.owning_controller_process}
 
         SocksPort {n.socksport.unwrap_or(0)}
+        DnsPort {n.dnsport.unwrap_or(0)}
 
         UseMicrodescriptors {int(n._config.use_microdescriptors)}
         """

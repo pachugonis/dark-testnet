@@ -280,6 +280,14 @@ class Node(object):
             return Option(None)
 
     @property
+    def dnsport(self) -> Option[int]:
+        """DnsPort that this node exposes, if any."""
+        if self._config.enable_dnsport:
+            return Option(self._network.dnsport_base + self.nodenum)
+        else:
+            return Option(None)
+
+    @property
     def dirport(self) -> Option[int]:
         """DirPort that this node exposes"""
         if self._config.relay and not self._config.bridge:
@@ -396,6 +404,7 @@ class Node(object):
             orport=self.orport,
             controlport=self.controlport,
             socksport=self.socksport.as_optional(),
+            dnsport=self.dnsport.as_optional(),
             dirport=self.dirport.as_optional(),
             extorport=self.extorport,
             ptport=self.ptport,
@@ -674,6 +683,9 @@ class NodeConfig:
     # Two relays are in the same family if they have any identifier in common.
     families: list[str] = dataclasses.field(default_factory=list)
 
+    # Whether to open a port for DNS requests. (e.g. DnsPort directive for tor)
+    enable_dnsport: bool = False
+
     # "Escape hatch" for injecting raw lines at the end of the generated torrc.
     # Generally this should only be used as a short-term workaround. For
     # long-term usage, prefer to add more-specific (and arti-compatible)
@@ -854,6 +866,7 @@ class Network(object):
         self.socksport_base: int = 9000
         self.extorport_base: int = 9500
         self.ptport_base: int = 9900
+        self.dnsport_base: int = 10000
 
     @property
     def nodes(self) -> Iterable[Node]:

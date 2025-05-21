@@ -58,6 +58,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             },
             "proxy": {
                 "socks_listen": self._node.socksport.unwrap(),
+                "dns_listen": self._node.dnsport.unwrap_or(0),
             },
             "logging": {
                 "files": [
