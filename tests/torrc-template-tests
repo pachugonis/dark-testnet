@@ -116,6 +116,12 @@ configs = [
         tag="c",
         client=True,
     ),
+    # client, but with dns enabled
+    NodeConfig(
+        tag="c",
+        client=True,
+        enable_dnsport=True,
+    ),
     # Was: hs-v3-only-v6-md.tmpl
     NodeConfig(
         tag="h",

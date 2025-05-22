@@ -59,12 +59,15 @@ shadow_network_config_tests () {
     fi
     mkdir -p "$dst"/net
     mkdir -p "$dst"/shadow
-    shadow-exec --temp-dir="$dst"/shadow --preserve=always -- bash -c "
-        set -xeuo pipefail
-        export PATH='$PATH'
-        export CHUTNEY_DATA_DIR='$dst/net'
-        cd '$chutney_top'
-        ./tests/network-config-tests"
+    for netdir in "$chutney_top"/lib/chutney/data/networks/*; do
+        network=$(basename "$netdir")
+        shadow-exec --temp-dir="$dst"/shadow --preserve=always -- bash -c "
+            set -xeuo pipefail
+            export PATH='$PATH'
+            export CHUTNEY_DATA_DIR='$dst/net'
+            cd '$chutney_top'
+            '$head_top_level'/tests/network-config-test '$network'"
+    done
     mv "$dst" "$final_dst"
 }
 
