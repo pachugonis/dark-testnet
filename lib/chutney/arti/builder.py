@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import tomli_w
 
+from typeguard import check_type
 from typing_extensions import override
 from typing import Optional
 
 import chutney.TorNet as TorNet
+import chutney.arti.config as arti_config
 
 from chutney.errors import (
-    ChutneyError,
     ChutneyInternalError,
 )
 from chutney.Util import (
@@ -37,30 +38,27 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             raise ChutneyInternalError("Arti bridge unimplemented")
         if self._node._config.pt_bridge:
             raise ChutneyInternalError("Arti pt_bridge unimplemented")
-        config = {
-            "application": {
+        config = arti_config.tor_config(net)
+
+        # We're adding several sections that we expect not to exist in `config`.
+        # If they do exist, then we need to consider how to merge our updates here.
+        def get_new_section(d: dict[str, object], name: str) -> dict[str, object]:
+            assert name not in d
+            return check_type(d.setdefault(name, {}), dict[str, object])
+
+        get_new_section(config, "application").update(
+            {
                 "allow_running_as_root": True,
-            },
-            "storage": {
-                "cache_dir": str(self._node.dir.joinpath("cache")),
-                "state_dir": str(self._node.dir.joinpath("state")),
-            },
-            "path_rules": {
-                # These values disable enforce_distance entirely; we can replace them
-                # with something like Tor's "EnforceDistinctSubnets 0" if Arti ever
-                # implements it.
-                "ipv4_subnet_family_prefix": 33,
-                "ipv6_subnet_family_prefix": 129,
-            },
-            "address_filter": {
-                # Allow the client to accept requests to connect to e.g. 127.0.0.1
-                "allow_local_addrs": True
-            },
-            "proxy": {
+            }
+        )
+        get_new_section(config, "proxy").update(
+            {
                 "socks_listen": self._node.socksport.unwrap(),
                 "dns_listen": self._node.dnsport.unwrap_or(0),
-            },
-            "logging": {
+            }
+        )
+        get_new_section(config, "logging").update(
+            {
                 "files": [
                     {
                         "path": str(self._node.dir.joinpath("debug.log")),
@@ -70,59 +68,22 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                         "path": str(self._node.dir.joinpath("info.log")),
                         "filter": "info",
                     },
-                ],
-            },
-            "tor_network": {
-                "fallback_caches": [
-                    {
-                        "rsa_identity": auth.fingerprint.replace(" ", ""),
-                        "ed_identity": auth.fingerprint_ed25519,
-                        "orports": (
-                            [f"{auth.ipv4}:{auth.orport}"]
-                            + (
-                                [f"{auth.ipv6.unwrap()}:{auth.orport}"]
-                                if auth.ipv6.is_some()
-                                else []
-                            )
-                        ),
-                    }
-                    for auth in net.authorities
-                    if auth.alt_dir_auth
-                ],
-                "authorities": [
-                    {
-                        "name": auth.nick,
-                        "v3ident": auth.v3id,
-                    }
-                    for auth in net.authorities
-                    if auth.alt_dir_auth
-                ],
-            },
-        }
-        if self._node._config.bridgeclient:
-            config["bridges"] = {
-                "enabled": "auto",
-                "bridges": [
-                    (
-                        "{transport} {ip}:{port} {fp} {pt_extra}".format(
-                            transport=bd.pt_transport.unwrap(),
-                            ip=bd.ipaddr,
-                            port=bd.port,
-                            fp=bd.fingerprint,
-                            pt_extra=bd.pt_extra.unwrap_or_raise(
-                                ChutneyError("Missing pt_extra")
-                            ),
-                        )
-                        if bd.pt_transport.is_some()
-                        else "{ip}:{port} {fp}".format(
-                            ip=bd.ipaddr,
-                            port=bd.port,
-                            fp=bd.fingerprint,
-                        )
-                    )
-                    for bd in net.bridges
-                ],
+                ]
             }
+        )
+
+        # the storage section *does* exist in the base config, and we
+        # intentionally overwrite it.
+        config["storage"] = {
+            "cache_dir": str(self._node.dir.joinpath("cache")),
+            "state_dir": str(self._node.dir.joinpath("state")),
+        }
+        # The "tor_network.bridges" section may exist in the base config, and may contain
+        # bridge entries.  Here we just override whether bridges are enabled at
+        # all and leave the other settings in place.
+        bridges = check_type(config.setdefault("bridges", {}), dict)
+        bridges["enabled"] = bool(self._node._config.bridgeclient)
+
         return tomli_w.dumps(config)
 
     @override
