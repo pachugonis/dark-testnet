@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import chutney.TorNet as TorNet
+
+from chutney.errors import ChutneyError
+
+
+def tor_config(net: TorNet.Network) -> dict[str, object]:
+    """Returns an configuration `arti-client` configuration for connecting to `net`.
+
+    The returned configuration represents an `arti_client::TorClientConfig`
+    suitable for clients of `net`.
+
+    i.e. these are common options used by applications embedding arti via the
+    `arti-client` Rust crate. It does
+    *not* include configuration options specific to the `arti` command-line tool
+    (Rust crate `arti::cfg::ArtiConfig`).
+    """
+    return {
+        "storage": {
+            "cache_dir": str(net.dir.joinpath("arti", "cache")),
+            "state_dir": str(net.dir.joinpath("arti", "state")),
+        },
+        "path_rules": {
+            # These values disable enforce_distance entirely; we can replace them
+            # with something like Tor's "EnforceDistinctSubnets 0" if Arti ever
+            # implements it.
+            "ipv4_subnet_family_prefix": 33,
+            "ipv6_subnet_family_prefix": 129,
+        },
+        "address_filter": {
+            # Allow the client to accept requests to connect to e.g. 127.0.0.1
+            "allow_local_addrs": True
+        },
+        "tor_network": {
+            "fallback_caches": [
+                {
+                    "rsa_identity": auth.fingerprint.replace(" ", ""),
+                    "ed_identity": auth.fingerprint_ed25519,
+                    "orports": (
+                        [f"{auth.ipv4}:{auth.orport}"]
+                        + (
+                            [f"{auth.ipv6.unwrap()}:{auth.orport}"]
+                            if auth.ipv6.is_some()
+                            else []
+                        )
+                    ),
+                }
+                for auth in net.authorities
+                if auth.alt_dir_auth
+            ],
+            "authorities": [
+                {
+                    "name": auth.nick,
+                    "v3ident": auth.v3id,
+                }
+                for auth in net.authorities
+                if auth.alt_dir_auth
+            ],
+        },
+        "bridges": {
+            "bridges": [
+                (
+                    "{transport} {ip}:{port} {fp} {pt_extra}".format(
+                        transport=bd.pt_transport.unwrap(),
+                        ip=bd.ipaddr,
+                        port=bd.port,
+                        fp=bd.fingerprint,
+                        pt_extra=bd.pt_extra.unwrap_or_raise(
+                            ChutneyError("Missing pt_extra")
+                        ),
+                    )
+                    if bd.pt_transport.is_some()
+                    else "{ip}:{port} {fp}".format(
+                        ip=bd.ipaddr,
+                        port=bd.port,
+                        fp=bd.fingerprint,
+                    )
+                )
+                for bd in net.bridges
+            ]
+        },
+    }

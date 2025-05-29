@@ -34,6 +34,7 @@ import signal
 import sys
 import textwrap
 import time
+import tomli_w
 import json
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
@@ -54,6 +55,7 @@ from collections.abc import Collection
 from importlib.abc import Traversable
 from typeguard import check_type
 
+import chutney.arti.config
 import chutney.tor.torrc
 import chutney.tor.util
 import chutney.Host
@@ -1118,98 +1120,19 @@ class Network(object):
         with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
             json.dump(self.as_jsonable_dict(), f, indent=2)
 
-        arti_fallback_lines = []
-        arti_auth_lines = []
-        for auth in self.authorities:
-            if not auth.alt_dir_auth:
-                # We only configure dir auths, not bridge auths.
-                # TODO: configure bridge auths too, once arti supports them.
-                continue
-
-            addrs = '"%s:%s"' % (auth.ipv4, auth.orport)
-            if auth.ipv6.is_some():
-                addrs += ', "%s:%s"' % (
-                    auth.ipv6.unwrap(),
-                    auth.orport,
-                )
-            arti_fallback_lines.append(
-                "    {"
-                + f'rsa_identity = "{auth.fingerprint.replace(" ", "")}"'
-                + f', ed_identity = "{auth.fingerprint_ed25519}"'
-                + f", orports = [{addrs}]"
-                + "},\n"
-            )
-            arti_auth_lines.append(
-                "    {"
-                + f'name = "{auth.nick}"'
-                + f', v3ident = "{auth.v3id}"'
-                + "},\n"
-            )
-
-        with open(os.path.join(get_absolute_nodes_path(), "arti.toml"), "w") as f:
-            f.write(
-                textwrap.dedent(
-                    f"""
-                    [storage]
-                    cache_dir = "{self.dir}/arti/cache"
-                    state_dir = "{self.dir}/arti/state"
-
-                    [path_rules]
-                    # These values disable enforce_distance entirely; we can replace them
-                    # with something like Tor's "EnforceDistinceSubnets 0" if Arti ever
-                    # implements it.
-                    ipv4_subnet_family_prefix = 33
-                    ipv6_subnet_family_prefix = 129
-
-                    [address_filter]
-                    # Allow the client to accept requests to connect to e.g. 127.0.0.1
-                    allow_local_addrs = true
-                    """
-                )
-            )
+        arti_tor_config = chutney.arti.config.tor_config(self)
+        with get_absolute_nodes_path().joinpath("arti.toml").open("wb") as f:
             f.write(
                 textwrap.dedent(
                     """
-                    [tor_network]
-                    fallback_caches = [
-                    """
-                )
+                # Base `arti_client::TorClientConfig` options for configuring
+                # applications (not necessarily `arti`) that embed an arti
+                # client. For `arti` processes, consider instead adding network
+                # nodes with `backend=NodeBackend.ARTI`.
+                """
+                ).encode()
             )
-            f.write("".join(arti_fallback_lines))
-            f.write("]\n")
-            f.write("authorities = [\n")
-            f.write("".join(arti_auth_lines))
-            f.write("]\n")
-
-            f.write(
-                textwrap.dedent(
-                    """
-                    [bridges]
-                    enabled = "auto"
-                    bridges = '''
-                    """
-                )
-            )
-            for bd in bridgelines:
-                bridgeline: str
-                if bd.pt_transport.is_some():
-                    bridgeline = "{transport} {ip}:{port} {fp} {pt_extra}\n".format(
-                        transport=bd.pt_transport.unwrap(),
-                        ip=bd.ipaddr,
-                        port=bd.port,
-                        fp=bd.fingerprint,
-                        pt_extra=bd.pt_extra.unwrap_or_raise(
-                            ChutneyError("Missing pt_extra")
-                        ),
-                    )
-                else:
-                    bridgeline = "{ip}:{port} {fp}\n".format(
-                        ip=bd.ipaddr,
-                        port=bd.port,
-                        fp=bd.fingerprint,
-                    )
-                f.write(bridgeline)
-            f.write("'''\n")
+            tomli_w.dump(arti_tor_config, f)
 
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
