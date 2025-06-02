@@ -138,21 +138,31 @@ chutney environmental variables documented below:
 ## Standard Actions
 
 ``` shell
+# Creates configuration files for the network `basic`.
 ./chutney configure basic
+# Starts running the network `basic`.
+# Requires `configure` to have already been run.
 ./chutney start basic
+# Checks and prints the status of the network `basic`.
 ./chutney status basic
+# Waits for the network `basic` to be fully bootstrapped.
+# Requires `start` to have already been run.
 ./chutney wait_for_bootstrap basic
+# Combines `configure`, `start`, and `wait_for_bootstrap`.
+./chutney bootstrap basic
+# Verifies functionality of network clients and hidden services.
+# Requires network to already be bootstrapped.
 ./chutney verify basic
+# Sends SIGHUP to all network nodes.
 ./chutney hup basic
+# Stops the network.
 ./chutney stop basic
 ```
 
 ## Bandwidth Tests
 
 ``` shell
-./chutney configure basic-min
-./chutney start basic-min
-./chutney status basic-min
+./chutney bootstrap basic-min
 ```
 
 Send 100MB of data per client connection:
@@ -174,9 +184,7 @@ network performance is infinite.
 ## Connection Tests
 
 ``` shell
-./chutney configure basic-025
-./chutney start basic-025
-./chutney status basic-025
+./chutney bootstrap basic-025
 ```
 
 Make 5 simultaneous connections from each client through a random exit
@@ -195,9 +203,7 @@ CHUTNEY_ROUNDS=5 ./tools/test-network.sh --flavour basic
 ## HS Connection Tests
 
 ``` shell
-./chutney configure hs-025
-./chutney start hs-025
-./chutney status hs-025
+./chutney bootstrap hs-025
 ```
 
 Make a connection from each client to each hs Default behavior is one client
@@ -320,6 +326,26 @@ implemented in chutney.
 If the `CHUTNEY_START_TIME` has elapsed, and some nodes have not bootstrapped,
 or there are some nodes missing from the consensus, `wait_for_bootstrap` dumps
 the bootstrap statuses, and exits with a failure.
+
+The chutney command `bootstrap` combines the `start`, `run`, and `wait_for_bootstrap` commands.
+
+## Multi-phase networks
+
+Some networks use multiple configuration or launch phases. These can be used to
+ensure some nodes are brought up after other nodes are configured and/or
+launched. For example, pluggable transport bridge clients can only be correctly
+configured after their corresponding bridge has started running for the first
+time, which is when it generates its bridge line.
+
+In network definition files, nodes that are to be configured or launched at a later
+phase than the default phase 1 set the `config_phase` or `launch_phase` options.
+
+Commands such as `config`, `start`, and `wait_for_bootstrap` identify the
+current phases by checking the environment variables `CHUTNEY_CONFIG_PHASE` and
+`CHUTNEY_LAUNCH_PHASE`.
+
+The `bootstrap` command identifies all of the phases that the current network
+uses, and then runs `config`, `start`, and `wait_for_bootstrap` for each phase.
 
 ## Verifying the network
 
