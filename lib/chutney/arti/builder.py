@@ -59,6 +59,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         )
         get_new_section(config, "logging").update(
             {
+                "log_sensitive_information": True,
                 "files": [
                     {
                         "path": str(self._node.dir.joinpath("debug.log")),
@@ -68,7 +69,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                         "path": str(self._node.dir.joinpath("info.log")),
                         "filter": "info",
                     },
-                ]
+                ],
             }
         )
 
