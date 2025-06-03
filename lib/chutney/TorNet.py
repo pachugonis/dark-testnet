@@ -308,6 +308,18 @@ class Node(object):
         return self._network.ptport_base + self.nodenum
 
     @property
+    def hs_virtport(self) -> Option[int]:
+        """Virtual hidden service port that this node exposes, if any."""
+        if self._config.hs:
+            # We can use the same port for multiple nodes, or hypothetically
+            # even multiple hidden services on the same node. We would only need
+            # to use multiple ports if we wanted to expose multiple ports on the
+            # same onion address.
+            return Option(5858)
+        else:
+            return Option(None)
+
+    @property
     def dir(self) -> Path:
         """Directory where this node stores its configuration and data (DataDirectory)"""
         return Path(
@@ -417,6 +429,7 @@ class Node(object):
             backend=self._config.backend.name,
             is_client=self.is_client,
             is_hs=self.is_hs,
+            hs_virtport=self.hs_virtport.as_optional(),
         )
 
 
