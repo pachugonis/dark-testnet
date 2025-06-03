@@ -422,6 +422,7 @@ class Node(object):
             is_hs=self.is_hs,
             hs_virtport=self.hs_virtport.as_optional(),
             hs_targetport=self.hs_targetport.as_optional(),
+            hs_hostname=self.hs_hostname.as_optional(),
         )
 
 
@@ -1135,8 +1136,7 @@ class Network(object):
         for n in cur_phase_nodes:
             n._builder.config(network)
 
-        with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
-            json.dump(self.as_jsonable_dict(), f, indent=2)
+        self._write_network_json()
 
         arti_tor_config = chutney.arti.config.tor_config(self)
         with get_absolute_nodes_path().joinpath("arti.toml").open("wb") as f:
@@ -1154,6 +1154,11 @@ class Network(object):
 
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
+
+    def _write_network_json(self) -> None:
+        """Write out the json file describing this network."""
+        with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
+            json.dump(self.as_jsonable_dict(), f, indent=2)
 
     def as_jsonable_dict(self) -> dict[str, object]:
         """Return a dict describing this object using primitive types.
@@ -1396,6 +1401,11 @@ class Network(object):
                     time.sleep(sleep_time)
                     now = time.time()
                     elapsed = now - start
+
+                # Write out json metadata, which may include details that were
+                # missing before, such as hidden service hostnames.
+                self._write_network_json()
+
                 return
             if now >= limit:
                 break
