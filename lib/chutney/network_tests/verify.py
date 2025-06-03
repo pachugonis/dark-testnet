@@ -10,11 +10,14 @@ import chutney.Traffic
 
 from . import NetworkTestFailure
 from chutney.Util import getenv_int, getenv_bool
+from chutney.errors import ChutneyInternalError
 
 # Try to verify twice each consensus, but don't verify too fast
 V3_AUTH_VOTING_INTERVAL = chutney.TorNet.V3_AUTH_VOTING_INTERVAL
 VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
 TIMEOUT_INTERVAL = max(VERIFY_ATTEMPT_INTERVAL - 1.0, 5.0)
+
+LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
 
 
 def run_test(network: chutney.TorNet.Network) -> None:
@@ -52,7 +55,6 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     # XXX don't hard-code this.
     # LISTEN_ADDR = network._dfltEnv["ip"]
     LISTEN_ADDR = "127.0.0.1"
-    LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
     # The amount of data to send between each source-sink pair,
     # each time the source connects.
     # We create a source-sink pair for each (bridge) client to an exit,
@@ -231,6 +233,14 @@ def _configure_hs(
     # Setup the connections from each client in hs_client_list to each hs
     for hs in hs_list:
         hs_bind_to = (hs.hs_hostname, hs.hs_virtport.unwrap())
+        # We currently require that all hidden services use the same port as `LISTEN_PORT`.
+        # Otherwise we would need to extend the `TrafficTester` to bind to multiple ports,
+        # or run multiple `TrafficTester`s.
+        if hs.hs_targetport.as_optional() != LISTEN_PORT:
+            raise ChutneyInternalError(
+                f"Node {hs.nick} uses unsupported hs targetport {hs.hs_targetport}; "
+                + f"expected {LISTEN_PORT}"
+            )
         for client in hs_client_list:
             print(
                 "  HS to %s:%d (%s:%d) via client %s:%s"

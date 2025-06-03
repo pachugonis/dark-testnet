@@ -123,7 +123,7 @@ def format(n: TorNet.Node) -> str:
             HiddenServiceDir {n.dir}/hidden_service
 
             # Redirect requests to the port used by chutney verify
-            HiddenServicePort {n.hs_virtport.unwrap()} 127.0.0.1:4747
+            HiddenServicePort {n.hs_virtport.unwrap()} 127.0.0.1:{n.hs_targetport.unwrap()}
 
             # v3 is the only current supported version.
             HiddenServiceVersion 3

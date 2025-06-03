@@ -320,6 +320,18 @@ class Node(object):
             return Option(None)
 
     @property
+    def hs_targetport(self) -> Option[int]:
+        """Target port of this node's hidden service, if any."""
+        if self._config.hs:
+            # Currently all hidden services redirect to the same port,
+            # for compatibility with the test in `network_tests/verify.py`
+            import chutney.network_tests.verify
+
+            return Option(chutney.network_tests.verify.LISTEN_PORT)
+        else:
+            return Option(None)
+
+    @property
     def dir(self) -> Path:
         """Directory where this node stores its configuration and data (DataDirectory)"""
         return Path(
@@ -430,6 +442,7 @@ class Node(object):
             is_client=self.is_client,
             is_hs=self.is_hs,
             hs_virtport=self.hs_virtport.as_optional(),
+            hs_targetport=self.hs_targetport.as_optional(),
         )
 
 
