@@ -550,16 +550,9 @@ class NodeController(ABC):
         ...
 
     @abstractmethod
-    def updateLastBootstrapStatus(self) -> None:
-        """Look through the logs and cache the last bootstrap message
-        received.
-        """
-        ...
-
-    @abstractmethod
     def getLastBootstrapStatus(self) -> DirInfoStatus:
         """Return the last bootstrap message fetched by
-        updateLastBootstrapStatus as a 3-tuple of percentage
+        updateLastStatus as a 3-tuple of percentage
         complete, keyword (optional), and message.
 
         The return status depends on the last time updateLastStatus()

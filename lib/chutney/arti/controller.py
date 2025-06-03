@@ -27,6 +27,7 @@ class LocalArtiNodeController(TorNet.NodeController):
         TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
+        self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None
 
     @override
     def getPtExtra(self) -> Option[str]:
@@ -159,10 +160,18 @@ class LocalArtiNodeController(TorNet.NodeController):
         )
 
     @override
-    def updateLastBootstrapStatus(self) -> None:
+    def getLastBootstrapStatus(self) -> DirInfoStatus:
+        rv = self._most_recent_bootstrap_status
+        # Caller is required to have set this via `updateLastStatus` first.
+        # TODO: just call it ourselves if None, or use a default value?
+        assert rv is not None
+        return rv
+
+    @override
+    def updateLastStatus(self) -> None:
         logfname = self._debug_log_path()
         if not logfname.exists():
-            self.most_recent_bootstrap_status = DirInfoStatus(
+            self._most_recent_bootstrap_status = DirInfoStatus(
                 percent_or_code=DirInfoStatusCode.MISSING_FILE,
                 keyword="no_logfile",
                 message="There is no logfile yet.",
@@ -187,19 +196,7 @@ class LocalArtiNodeController(TorNet.NodeController):
                         keyword="",
                         message=message,
                     )
-        self.most_recent_bootstrap_status = status
-
-    @override
-    def getLastBootstrapStatus(self) -> DirInfoStatus:
-        rv = self.most_recent_bootstrap_status
-        # Caller is required to have set this via `updateLastStatus` first.
-        # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
-        return rv
-
-    @override
-    def updateLastStatus(self) -> None:
-        self.updateLastBootstrapStatus()
+        self._most_recent_bootstrap_status = status
 
     @override
     def isBootstrapped(self) -> bool:
