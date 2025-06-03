@@ -4,7 +4,15 @@ ExitRelay = Node(tag="r", relay=1, exit=1)
 Client = Node(tag="c", client=1)
 
 BridgeAuthority = Node(tag="ba", authority=1, bridgeauthority=1, relay=1)
-Bridge = Node(tag="br", bridge=1, pt_bridge=1, relay=1, pt_transport="obfs4")
+Bridge = Node(
+    tag="br",
+    bridge=1,
+    pt_bridge=1,
+    relay=1,
+    pt_transport="obfs4",
+    # incompatible with pt_transport
+    sandbox=0,
+)
 BridgeClient = Node(
     tag="bc",
     client=1,
@@ -12,6 +20,8 @@ BridgeClient = Node(
     pt_transport="obfs4",
     config_phase=2,
     launch_phase=2,
+    # incompatible with pt_transport
+    sandbox=0,
 )
 
 NODES = (
