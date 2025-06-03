@@ -230,6 +230,7 @@ shadow-test-network:
       tor
       libssl3
       libsqlite3-0
+      obfs4proxy
   # install shadow
   - apt-get install libglib2.0-0
   - mkdir -p "$HOME"/.local
@@ -246,6 +247,7 @@ shadow-test-network:
           basic-families \
           bridges-min \
           bridges-min-arti \
+          bridges-obfs4 \
           ; do
       shadow-exec \
         -- \
