@@ -191,21 +191,6 @@ def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
     return family_key_dir.joinpath(fn)
 
 
-@chutney.Util.memoized
-def _hs_hostname(hs_directory: Path) -> str:
-    """Generated hostname for a hidden service"""
-    # a file containing a single line with the hs' .onion address
-    hs_hostname_file = Path(hs_directory, "hostname")
-    try:
-        with open(hs_hostname_file, "r") as hostnamefp:
-            hostname = hostnamefp.read()
-        # the hostname file ends with a newline
-        hostname = hostname.strip()
-        return hostname
-    except IOError as e:
-        raise ChutneyError("Error opening hostname file") from e
-
-
 class Node(object):
     """A Node represents a Tor node or a set of Tor nodes.  It's created
     in a network configuration file.
@@ -382,16 +367,10 @@ class Node(object):
         """Is this node an onion service?"""
         return self._config.hs
 
-    # A hs generates its key on first run,
-    # so check for it at the last possible moment,
-    # but cache it in memory to avoid repeatedly reading the file
-    # XXXX - this is not like the other functions in this class,
-    # as it reads from a file created by the hidden service
     @property
-    def hs_hostname(self) -> str:
+    def hs_hostname(self) -> Option[str]:
         """Generated hostname for this hidden service"""
-        # Call memoized helper function.
-        return _hs_hostname(Path(self.dir, self._config.hs_directory))
+        return self._builder.get_hs_hostname()
 
     ######
     # Chutney uses these:
@@ -500,6 +479,15 @@ class NodeBuilder(ABC):
     def getBridgeLines(self) -> list[BridgeLine]:
         """Return descriptors that a client can use to connect to this bridge.
         Non-bridge relays return [].
+        """
+        ...
+
+    @abstractmethod
+    def get_hs_hostname(self) -> Option[str]:
+        """Return the hidden service hostname, if any.
+
+        Returns `Option(None)` if there is no hidden service for this node,
+        or if the hostname isn't available yet.
         """
         ...
 

@@ -232,7 +232,7 @@ def _configure_hs(
         hs_client_list = client_list[:1]
     # Setup the connections from each client in hs_client_list to each hs
     for hs in hs_list:
-        hs_bind_to = (hs.hs_hostname, hs.hs_virtport.unwrap())
+        hs_bind_to = (hs.hs_hostname.unwrap(), hs.hs_virtport.unwrap())
         # We currently require that all hidden services use the same port as `LISTEN_PORT`.
         # Otherwise we would need to extend the `TrafficTester` to bind to multiple ports,
         # or run multiple `TrafficTester`s.
@@ -245,7 +245,7 @@ def _configure_hs(
             print(
                 "  HS to %s:%d (%s:%d) via client %s:%s"
                 % (
-                    hs.hs_hostname,
+                    hs.hs_hostname.unwrap(),
                     hs.hs_virtport.unwrap(),
                     LISTEN_ADDR,
                     LISTEN_PORT,

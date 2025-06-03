@@ -133,3 +133,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         if self._node._config.bridge:
             raise ChutneyInternalError("arti bridges unimplemented")
         return []
+
+    @override
+    def get_hs_hostname(self) -> Option[str]:
+        if not self._node._config.hs:
+            return Option(None)
+        raise ChutneyUnimplementedError("arti hidden services unimplemented")
