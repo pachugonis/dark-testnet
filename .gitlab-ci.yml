@@ -170,7 +170,7 @@ build-arti:
   <<: *debian-template
   variables:
     JOB_ARTI_REPO: "https://gitlab.torproject.org/tpo/core/arti.git"
-    JOB_ARTI_TAG: "arti-v1.4.2"
+    JOB_ARTI_TAG: "arti-v1.4.3"
     JOB_ARTI_PROFILE: "quicktest"
     JOB_RUST_TOOLCHAIN: "1.87.0"
   artifacts:
