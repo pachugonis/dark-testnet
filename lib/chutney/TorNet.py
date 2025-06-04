@@ -579,6 +579,8 @@ class NodeController(ABC):
         ...
 
 
+# TODO: Consider getting rid of these globals, particularly since they're not
+# contants; e.g. we change them at runtime in `Network.bootstrap`.
 CUR_CONFIG_PHASE: int = getenv_int("CHUTNEY_CONFIG_PHASE", 1)
 CUR_LAUNCH_PHASE: int = getenv_int("CHUTNEY_LAUNCH_PHASE", 1)
 
@@ -1495,6 +1497,28 @@ class Network(object):
         # wait for tor to exit, but don't cleanup logging
         self.final_cleanup(False, any_tor_was_running, True)
 
+    def bootstrap(self) -> None:
+        """Bootstrap the network.
+
+        Configures, starts, and waits for bootstrap, for all of the network
+        nodes' configure and launch phases."""
+
+        cfg_phase_max = max(n._config.config_phase for n in self._nodes)
+        launch_phase_max = max(n._config.launch_phase for n in self._nodes)
+        phase_max = max(cfg_phase_max, launch_phase_max)
+        for phase in range(1, phase_max + 1):
+            if phase <= cfg_phase_max:
+                print("Starting configure-phase ", phase)
+                global CUR_CONFIG_PHASE
+                CUR_CONFIG_PHASE = phase
+                self.configure()
+            if phase <= launch_phase_max:
+                print("Starting launch-phase ", phase)
+                global CUR_LAUNCH_PHASE
+                CUR_LAUNCH_PHASE = phase
+                self.start()
+                self.wait_for_bootstrap()
+
 
 class CLICommands:
     """
@@ -1573,6 +1597,13 @@ class CLICommands:
     def stop(self) -> None:
         """Stop our network's running tor nodes."""
         self._net.stop()
+
+    def bootstrap(self) -> None:
+        """Bootstrap the network.
+
+        Configures, starts, and waits for bootstrap, for all of the network
+        nodes' configure and launch phases."""
+        self._net.bootstrap()
 
 
 def getTests() -> list[str]:
