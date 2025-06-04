@@ -180,7 +180,7 @@ build-arti:
     # around for longer.
     expire_in: 1 day
   cache:
-    - key: V0-bookworm-$CI_JOB_NAME-$JOB_ARTI_TAG-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
+    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_TAG-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
       paths:
       - opt/arti
   tags:
@@ -203,6 +203,7 @@ build-arti:
 
         # Build and install arti
         cargo install \
+          --locked \
           --root="$CI_PROJECT_DIR"/opt/arti \
           --profile=$JOB_ARTI_PROFILE \
           --git=$JOB_ARTI_REPO \
