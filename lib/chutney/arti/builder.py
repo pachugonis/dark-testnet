@@ -49,6 +49,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         get_new_section(config, "application").update(
             {
                 "allow_running_as_root": True,
+                "permit_debugging": True,
             }
         )
         get_new_section(config, "proxy").update(
