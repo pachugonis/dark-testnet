@@ -59,12 +59,6 @@ if ! "$CHUTNEY" supported "$CHUTNEY_NETWORK"; then
     exit 77
 fi
 
-# Find out how many phases there are.  This will set CHUTNEY_CONFIG_PHASES
-# and CHUTNEY_LAUNCH_PHASES.
-if [ -z "${CHUTNEY_CONFIG_PHASES:-}" ] || [ -z "${CHUTNEY_LAUNCH_PHASES:-}" ]; then
-    eval "$("$CHUTNEY" print_phases "$CHUTNEY_NETWORK" |grep '=')"
-fi
-
 $ECHO "$myname: bootstrapping network: $NETWORK_FLAVOUR"
 if ! "$CHUTNEY" bootstrap "$CHUTNEY_NETWORK"; then
     "$DIAGNOSTICS"
