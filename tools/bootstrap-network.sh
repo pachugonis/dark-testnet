@@ -24,43 +24,39 @@ set -o nounset
 : "${CHUTNEY_DIAGNOSTICS:=false}"
 : "${CHUTNEY_DATA_DIR:=}"
 
-# Get a working chutney path
-if [ ! -d "$CHUTNEY_PATH" ] || [ ! -x "$CHUTNEY_PATH/chutney" ]; then
-    # looks like a broken path: use the path to this tool instead
-    TOOLS_PATH=$(dirname "$0")
-    CHUTNEY_PATH=$(dirname "$TOOLS_PATH")
-    export CHUTNEY_PATH
-fi
-if [ -d "$PWD/$CHUTNEY_PATH" ] && [ -x "$PWD/$CHUTNEY_PATH/chutney" ]; then
-    # looks like a relative path: make chutney path absolute
-    export CHUTNEY_PATH="$PWD/$CHUTNEY_PATH"
-fi
-
-CHUTNEY="$CHUTNEY_PATH/chutney"
 myname=$(basename "$0")
 
-[ -d "$CHUTNEY_PATH" ] || \
-    { echo "$myname: missing chutney directory: $CHUTNEY_PATH"; exit 1; }
-[ -x "$CHUTNEY" ] || \
-    { echo "$myname: missing chutney: $CHUTNEY"; exit 1; }
+# Get a working chutney
+if [ -n "$CHUTNEY_PATH" ]; then
+  # CHUTNEY_PATH is set; use the corresponding chutney bin
+  CHUTNEY="$CHUTNEY_PATH/chutney"
+  if [ ! -x "$CHUTNEY" ]; then
+    echo "$myname: CHUTNEY_PATH was set to '$CHUTNEY_PATH', but doesn't contain a chutney executable"
+    exit 1
+  fi
+else
+  tools_dir_path=$(dirname "$0")
+  chutney_dir_path=$(dirname "$tools_dir_path")
+  CHUTNEY="$chutney_dir_path"/chutney
+  if [ ! -x "$CHUTNEY" ]; then
+    echo "$myname: No chutney executable found at $CHUTNEY. Try setting $CHUTNEY_PATH."
+    exit 1
+  fi
+fi
 
 # Set the variables for the chutney network flavour
-export NETWORK_FLAVOUR="${NETWORK_FLAVOUR:-bridges+hs-v23}"
+NETWORK_FLAVOUR="${NETWORK_FLAVOUR:-bridges+hs-v23}"
 [ -n "${1-}" ] && { NETWORK_FLAVOUR=$1; shift; }
-export CHUTNEY_NETWORK="$CHUTNEY_PATH/networks/$NETWORK_FLAVOUR"
 
-[ -e "$CHUTNEY_NETWORK" ] || \
-    { echo "$myname: missing network file: $CHUTNEY_NETWORK"; exit 1; }
-
-"$CHUTNEY" stop "$CHUTNEY_NETWORK"
-
-if ! "$CHUTNEY" supported "$CHUTNEY_NETWORK"; then
-    echo "%myname: network not supported."
+if ! "$CHUTNEY" supported "$NETWORK_FLAVOUR"; then
+    echo "$myname: network not supported."
     exit 77
 fi
 
+"$CHUTNEY" stop "$NETWORK_FLAVOUR"
+
 $ECHO "$myname: bootstrapping network: $NETWORK_FLAVOUR"
-if ! "$CHUTNEY" bootstrap "$CHUTNEY_NETWORK"; then
+if ! "$CHUTNEY" bootstrap "$NETWORK_FLAVOUR"; then
     "$DIAGNOSTICS"
     CHUTNEY_WARNINGS_IGNORE_EXPECTED=false \
     CHUTNEY_WARNINGS_SUMMARY=false \
@@ -71,6 +67,6 @@ if ! "$CHUTNEY" bootstrap "$CHUTNEY_NETWORK"; then
 fi
 
 $ECHO "Chutney network launched and running. To stop the network, use:"
-$ECHO "$CHUTNEY stop $CHUTNEY_NETWORK"
+$ECHO "$CHUTNEY stop $NETWORK_FLAVOUR"
 "$DIAGNOSTICS"
 "$WARNINGS"
