@@ -16,6 +16,12 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
     *not* include configuration options specific to the `arti` command-line tool
     (Rust crate `arti::cfg::ArtiConfig`).
     """
+    # From
+    # <https://gitlab.torproject.org/tpo/core/tor/-/blob/d8ca300d5aa0e5727366f626fc692e34957ba4dc/src/feature/hs_common/shared_random_client.h#L33>
+    SHARED_RANDOM_N_ROUNDS = 12
+    # From
+    # <https://gitlab.torproject.org/tpo/core/tor/-/blob/d8ca300d5aa0e5727366f626fc692e34957ba4dc/src/feature/hs_common/shared_random_client.h#L35>
+    SHARED_RANDOM_N_PHASES = 2
     return {
         "storage": {
             "cache_dir": str(net.dir.joinpath("arti", "cache")),
@@ -79,5 +85,17 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                 )
                 for bd in net.bridges
             ]
+        },
+        "override_net_params": {
+            # When TestingTorNetwork is set, tor internally overrides hsdir_interval:
+            # <https://gitlab.torproject.org/tpo/core/tor/-/blob/d8ca300d5aa0e5727366f626fc692e34957ba4dc/src/feature/hs/hs_common.c#L253>
+            #
+            # See also <https://gitlab.torproject.org/tpo/core/chutney/-/issues/40038>.
+            "hsdir_interval": int(
+                SHARED_RANDOM_N_ROUNDS
+                * SHARED_RANDOM_N_PHASES
+                * TorNet.V3_AUTH_VOTING_INTERVAL
+                / 60
+            ),
         },
     }
