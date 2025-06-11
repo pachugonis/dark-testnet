@@ -60,8 +60,10 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     # The amount of data to send between each source-sink pair,
     # each time the source connects.
     # We create a source-sink pair for each (bridge) client to an exit,
-    # and a source-sink pair for a (bridge) client to each hidden service
-    DATALEN: int = getenv_int("CHUTNEY_DATA_BYTES", 10 * 1024)
+    # and a source-sink pair for a (bridge) client to each hidden service.
+    #
+    # Default value of 5 MB should be large enough to exercise SENDMEs.
+    DATALEN: int = getenv_int("CHUTNEY_DATA_BYTES", 5_000_000)
     # Calculate the amount of random data we should use
     randomlen = _calculate_randomlen(DATALEN)
     reps = _calculate_reps(DATALEN, randomlen)
