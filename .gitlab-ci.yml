@@ -170,7 +170,11 @@ build-arti:
   <<: *debian-template
   variables:
     JOB_ARTI_REPO: "https://gitlab.torproject.org/tpo/core/arti.git"
-    JOB_ARTI_TAG: "arti-v1.4.3"
+    # This can be a tag or commit-hash.
+    # main @ 2025-06-11.
+    JOB_ARTI_REV: "0a677a9b42558f23ceb1d46e6ee1d4251bd8acd7"
+    # comma-separated list of features to build with
+    JOB_ARTI_FEATURES: onion-service-service
     JOB_ARTI_PROFILE: "quicktest"
     JOB_RUST_TOOLCHAIN: "1.87.0"
   artifacts:
@@ -180,7 +184,7 @@ build-arti:
     # around for longer.
     expire_in: 1 day
   cache:
-    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_TAG-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
+    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
       paths:
       - opt/arti
   tags:
@@ -207,7 +211,8 @@ build-arti:
           --root="$CI_PROJECT_DIR"/opt/arti \
           --profile=$JOB_ARTI_PROFILE \
           --git=$JOB_ARTI_REPO \
-          --tag=$JOB_ARTI_TAG \
+          --rev=$JOB_ARTI_REV \
+          --features=$JOB_ARTI_FEATURES \
           arti
       fi
 
