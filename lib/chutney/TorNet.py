@@ -353,6 +353,11 @@ class Node(object):
         """Whether this node is configured as a client"""
         return self._config.client
 
+    @property
+    def is_hs(self) -> bool:
+        """Is this node an onion service?"""
+        return self._config.hs
+
     # A hs generates its key on first run,
     # so check for it at the last possible moment,
     # but cache it in memory to avoid repeatedly reading the file
@@ -366,10 +371,6 @@ class Node(object):
 
     ######
     # Chutney uses these:
-
-    def isOnionService(self) -> bool:
-        """Is this node an onion service?"""
-        return self.tag.startswith("h") or self._config.hs
 
     def expected_in_dir_formats(self, other_node: Node) -> Collection[DirFormat]:
         """Returns the set of `other_node`'s dir formats in which *this* node is

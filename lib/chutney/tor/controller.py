@@ -109,7 +109,7 @@ class LocalNodeController(TorNet.NodeController):
 
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
-        if self._node.isOnionService():
+        if self._node.is_hs:
             return LocalNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
         elif self._node._config.bridge:
             return LocalNodeController.BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO
@@ -384,7 +384,7 @@ class LocalNodeController(TorNet.NodeController):
         status = self.getLastBootstrapStatus()
         if status.percent_or_code != DirInfoStatusCode.SUCCESS:
             return False
-        if self._node.isOnionService():
+        if self._node.is_hs:
             status = self.getLastOnionServiceDescStatus()
             if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                 return False
