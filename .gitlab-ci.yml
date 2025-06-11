@@ -50,6 +50,7 @@ include:
     # Defined in tpo/tpa/ci-templates
     - !reference [.apt-init]
     # We install binaries such as shadow here.
+    - mkdir "$HOME"/.local
     - export PATH="$PATH:$HOME/.local/bin"
     # Create and initialize a python venv
     - apt-get install
@@ -113,11 +114,15 @@ torrc-template-tests:
 
 network-config-tests:
   <<: *debian-template
+  needs:
+  - build-arti
   script:
   - apt-get install
       obfs4proxy
+      stow
       tor
   - python3 -m pip install .
+  - stow -d opt -t "$HOME"/.local arti
   - ./tests/network-config-tests
 
 # We currently only use shadow in one job, but building it is complex enough
@@ -287,6 +292,7 @@ network-config-tests-diff:
   <<: *debian-template
   needs:
   - build-shadow
+  - build-arti
   tags:
     - amd64
     # Non-TPA runners may not support running shadow.
@@ -303,6 +309,7 @@ network-config-tests-diff:
       diffoscope-minimal
       git
       obfs4proxy
+      stow
       tor
 
   # install shadow
@@ -312,6 +319,9 @@ network-config-tests-diff:
 
   # install shadowtools, for `shadow-exec`
   - python3 -m pip install --no-index --find-links=./wheels shadowtools
+
+  # install arti
+  - stow -d opt -t "$HOME"/.local arti
 
   # install chutney
   - python3 -m pip install .
