@@ -259,6 +259,7 @@ shadow-test-network:
           bridges-min \
           bridges-min-arti \
           bridges-obfs4 \
+          hs-v3-arti \
           ; do
       shadow-exec \
         -- \
@@ -268,6 +269,10 @@ shadow-test-network:
         set -euo pipefail
         # Too noisy
         export CHUTNEY_DEBUG=0
+        # Tell the "verify" test to connect to hidden services with *every*
+        # client. We want this to e.g. validate cross-compatibility between tor
+        # and arti clients and servers.
+        CHUTNEY_HS_MULTI_CLIENT=1
         export PATH=\"$PATH\"
         export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
         tools/test-network.sh \
