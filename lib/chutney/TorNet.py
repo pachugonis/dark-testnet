@@ -415,7 +415,8 @@ class Node(object):
             controlsocket=str(self.controlsocket) if self.controlsocket else None,
             tag=self._config.tag,
             backend=self._config.backend.name,
-            is_client=self._config.client,
+            is_client=self.is_client,
+            is_hs=self.is_hs,
         )
 
 
