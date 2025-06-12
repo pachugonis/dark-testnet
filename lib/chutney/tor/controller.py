@@ -109,7 +109,7 @@ class LocalNodeController(TorNet.NodeController):
 
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
-        if self._node.isOnionService():
+        if self._node.is_hs:
             return LocalNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
         elif self._node._config.bridge:
             return LocalNodeController.BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO
@@ -282,7 +282,7 @@ class LocalNodeController(TorNet.NodeController):
             logname = "notice.log"
         return datadir.joinpath(logname)
 
-    def updateLastOnionServiceDescStatus(self) -> None:
+    def _update_last_onion_service_desc_status(self) -> None:
         """Look through the logs and cache the last onion service
         descriptor status received.
         """
@@ -335,8 +335,7 @@ class LocalNodeController(TorNet.NodeController):
         assert rv is not None
         return rv
 
-    @override
-    def updateLastBootstrapStatus(self) -> None:
+    def _update_last_bootstrap_status(self) -> None:
         logfname = self.getLogfile()
         if not logfname.exists():
             self.most_recent_bootstrap_status = DirInfoStatus(
@@ -376,15 +375,15 @@ class LocalNodeController(TorNet.NodeController):
 
     @override
     def updateLastStatus(self) -> None:
-        self.updateLastOnionServiceDescStatus()
-        self.updateLastBootstrapStatus()
+        self._update_last_onion_service_desc_status()
+        self._update_last_bootstrap_status()
 
     @override
     def isBootstrapped(self) -> bool:
         status = self.getLastBootstrapStatus()
         if status.percent_or_code != DirInfoStatusCode.SUCCESS:
             return False
-        if self._node.isOnionService():
+        if self._node.is_hs:
             status = self.getLastOnionServiceDescStatus()
             if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                 return False

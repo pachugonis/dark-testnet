@@ -191,21 +191,6 @@ def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
     return family_key_dir.joinpath(fn)
 
 
-@chutney.Util.memoized
-def _hs_hostname(hs_directory: Path) -> str:
-    """Generated hostname for a hidden service"""
-    # a file containing a single line with the hs' .onion address
-    hs_hostname_file = Path(hs_directory, "hostname")
-    try:
-        with open(hs_hostname_file, "r") as hostnamefp:
-            hostname = hostnamefp.read()
-        # the hostname file ends with a newline
-        hostname = hostname.strip()
-        return hostname
-    except IOError as e:
-        raise ChutneyError("Error opening hostname file") from e
-
-
 class Node(object):
     """A Node represents a Tor node or a set of Tor nodes.  It's created
     in a network configuration file.
@@ -308,6 +293,30 @@ class Node(object):
         return self._network.ptport_base + self.nodenum
 
     @property
+    def hs_virtport(self) -> Option[int]:
+        """Virtual hidden service port that this node exposes, if any."""
+        if self._config.hs:
+            # We can use the same port for multiple nodes, or hypothetically
+            # even multiple hidden services on the same node. We would only need
+            # to use multiple ports if we wanted to expose multiple ports on the
+            # same onion address.
+            return Option(5858)
+        else:
+            return Option(None)
+
+    @property
+    def hs_targetport(self) -> Option[int]:
+        """Target port of this node's hidden service, if any."""
+        if self._config.hs:
+            # Currently all hidden services redirect to the same port,
+            # for compatibility with the test in `network_tests/verify.py`
+            import chutney.network_tests.verify
+
+            return Option(chutney.network_tests.verify.LISTEN_PORT)
+        else:
+            return Option(None)
+
+    @property
     def dir(self) -> Path:
         """Directory where this node stores its configuration and data (DataDirectory)"""
         return Path(
@@ -353,23 +362,18 @@ class Node(object):
         """Whether this node is configured as a client"""
         return self._config.client
 
-    # A hs generates its key on first run,
-    # so check for it at the last possible moment,
-    # but cache it in memory to avoid repeatedly reading the file
-    # XXXX - this is not like the other functions in this class,
-    # as it reads from a file created by the hidden service
     @property
-    def hs_hostname(self) -> str:
+    def is_hs(self) -> bool:
+        """Is this node an onion service?"""
+        return self._config.hs
+
+    @property
+    def hs_hostname(self) -> Option[str]:
         """Generated hostname for this hidden service"""
-        # Call memoized helper function.
-        return _hs_hostname(Path(self.dir, self._config.hs_directory))
+        return self._builder.get_hs_hostname()
 
     ######
     # Chutney uses these:
-
-    def isOnionService(self) -> bool:
-        """Is this node an onion service?"""
-        return self.tag.startswith("h") or self._config.hs
 
     def expected_in_dir_formats(self, other_node: Node) -> Collection[DirFormat]:
         """Returns the set of `other_node`'s dir formats in which *this* node is
@@ -414,7 +418,11 @@ class Node(object):
             controlsocket=str(self.controlsocket) if self.controlsocket else None,
             tag=self._config.tag,
             backend=self._config.backend.name,
-            is_client=self._config.client,
+            is_client=self.is_client,
+            is_hs=self.is_hs,
+            hs_virtport=self.hs_virtport.as_optional(),
+            hs_targetport=self.hs_targetport.as_optional(),
+            hs_hostname=self.hs_hostname.as_optional(),
         )
 
 
@@ -472,6 +480,15 @@ class NodeBuilder(ABC):
     def getBridgeLines(self) -> list[BridgeLine]:
         """Return descriptors that a client can use to connect to this bridge.
         Non-bridge relays return [].
+        """
+        ...
+
+    @abstractmethod
+    def get_hs_hostname(self) -> Option[str]:
+        """Return the hidden service hostname, if any.
+
+        Returns `Option(None)` if there is no hidden service for this node,
+        or if the hostname isn't available yet.
         """
         ...
 
@@ -533,16 +550,9 @@ class NodeController(ABC):
         ...
 
     @abstractmethod
-    def updateLastBootstrapStatus(self) -> None:
-        """Look through the logs and cache the last bootstrap message
-        received.
-        """
-        ...
-
-    @abstractmethod
     def getLastBootstrapStatus(self) -> DirInfoStatus:
         """Return the last bootstrap message fetched by
-        updateLastBootstrapStatus as a 3-tuple of percentage
+        updateLastStatus as a 3-tuple of percentage
         complete, keyword (optional), and message.
 
         The return status depends on the last time updateLastStatus()
@@ -1119,8 +1129,7 @@ class Network(object):
         for n in cur_phase_nodes:
             n._builder.config(network)
 
-        with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
-            json.dump(self.as_jsonable_dict(), f, indent=2)
+        self._write_network_json()
 
         arti_tor_config = chutney.arti.config.tor_config(self)
         with get_absolute_nodes_path().joinpath("arti.toml").open("wb") as f:
@@ -1138,6 +1147,11 @@ class Network(object):
 
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
+
+    def _write_network_json(self) -> None:
+        """Write out the json file describing this network."""
+        with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
+            json.dump(self.as_jsonable_dict(), f, indent=2)
 
     def as_jsonable_dict(self) -> dict[str, object]:
         """Return a dict describing this object using primitive types.
@@ -1380,6 +1394,11 @@ class Network(object):
                     time.sleep(sleep_time)
                     now = time.time()
                     elapsed = now - start
+
+                # Write out json metadata, which may include details that were
+                # missing before, such as hidden service hostnames.
+                self._write_network_json()
+
                 return
             if now >= limit:
                 break

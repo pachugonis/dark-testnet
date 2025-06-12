@@ -13,6 +13,7 @@ from typing_extensions import override
 import chutney
 import chutney.TorNet as TorNet
 
+from chutney.errors import ChutneyError, ChutneyInternalError
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     launch_process,
@@ -440,3 +441,30 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 )
             )
         return res
+
+    @override
+    def get_hs_hostname(self) -> Option[str]:
+        if not self._node._config.hs:
+            return Option(None)
+        # a file containing a single line with the hs' .onion address, generated
+        # on first run.
+        hs_hostname_file = self._node.dir.joinpath(
+            self._node._config.hs_directory, "hostname"
+        )
+        try:
+            hostname_file_contents = hs_hostname_file.read_text()
+        except FileNotFoundError:
+            # We're not a hidden service, or the file isn't ready yet.
+            logger.debug(f"hostname file {hs_hostname_file} not found")
+            return Option(None)
+        except IOError as e:
+            # Unexpected error
+            raise ChutneyError(f"Error opening hostname file {hs_hostname_file}") from e
+        # the hostname file ends with a newline
+        hostname = hostname_file_contents.strip()
+        # shouldn't be empty
+        if not hostname:
+            raise ChutneyInternalError(
+                f"Unexpectedly empty hostname in {hs_hostname_file}"
+            )
+        return Option(hostname)

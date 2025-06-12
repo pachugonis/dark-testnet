@@ -2,8 +2,11 @@
 # stringification.
 from __future__ import annotations
 
+import logging
+import subprocess
 import tomli_w
 
+from pathlib import Path
 from typeguard import check_type
 from typing_extensions import override
 from typing import Optional
@@ -12,6 +15,7 @@ import chutney.TorNet as TorNet
 import chutney.arti.config as arti_config
 
 from chutney.errors import (
+    ChutneyError,
     ChutneyInternalError,
 )
 from chutney.Util import (
@@ -19,15 +23,23 @@ from chutney.Util import (
     Option,
 )
 
+_HS_NICKNAME = "chutney_onion_service"
+
+logger = logging.getLogger(__name__)
+
 
 class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def __init__(self, node: TorNet.Node):
         TorNet.NodeBuilder.__init__(self)
         self._node = node
 
+    def _debug_log_path(self) -> Path:
+        return self._node.dir.joinpath("debug.log")
+
+    def _info_log_path(self) -> Path:
+        return self._node.dir.joinpath("info.log")
+
     def _gen_config_str(self, net: TorNet.Network) -> str:
-        if not self._node._config.client:
-            raise ChutneyInternalError("Arti non-client unimplemented")
         if self._node._config.exit:
             raise ChutneyInternalError("Arti exit unimplemented")
         if self._node._config.authority:
@@ -54,7 +66,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         )
         get_new_section(config, "proxy").update(
             {
-                "socks_listen": self._node.socksport.unwrap(),
+                "socks_listen": self._node.socksport.unwrap_or(0),
                 "dns_listen": self._node.dnsport.unwrap_or(0),
             }
         )
@@ -63,16 +75,35 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "log_sensitive_information": True,
                 "files": [
                     {
-                        "path": str(self._node.dir.joinpath("debug.log")),
+                        "path": str(self._debug_log_path()),
                         "filter": "debug",
                     },
                     {
-                        "path": str(self._node.dir.joinpath("info.log")),
+                        "path": str(self._info_log_path()),
                         "filter": "info",
                     },
                 ],
             }
         )
+        if self._node.is_hs:
+            ip = (
+                self._node._config.ip.as_optional()
+                or self._node._config.ipv6_addr.as_optional()
+            )
+            if not ip:
+                raise ChutneyError("No usable local address")
+            get_new_section(config, "onion_services").update(
+                {
+                    _HS_NICKNAME: {
+                        "proxy_ports": [
+                            [
+                                self._node.hs_virtport.unwrap(),
+                                f"{ip}:{self._node.hs_targetport.unwrap()}",
+                            ]
+                        ]
+                    }
+                }
+            )
 
         # the storage section *does* exist in the base config, and we
         # intentionally overwrite it.
@@ -133,3 +164,32 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         if self._node._config.bridge:
             raise ChutneyInternalError("arti bridges unimplemented")
         return []
+
+    @override
+    def get_hs_hostname(self) -> Option[str]:
+        if not self._node._config.hs:
+            return Option(None)
+        sp = subprocess.run(
+            [
+                self._node._config.arti,
+                # Only available as a flag, not in config file.
+                "--disable-fs-permission-checks",
+                # Disable console logging, which otherwise goes to
+                # stdout along with the actual output we want.
+                # <https://gitlab.torproject.org/tpo/core/arti/-/issues/2024>
+                "--log-level=",
+                f"--config={str(self._node.torrc_path)}",
+                "hss",
+                f"--nickname={_HS_NICKNAME}",
+                "onion-address",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        # TODO: recognize specific return codes?
+        if sp.returncode != 0:
+            logger.debug(
+                f"Couldn't get onion address. stdout:{sp.stdout}\n\tstderr:{sp.stderr}"
+            )
+            return Option(None)
+        return Option(sp.stdout.strip())

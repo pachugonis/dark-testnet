@@ -10,11 +10,14 @@ import chutney.Traffic
 
 from . import NetworkTestFailure
 from chutney.Util import getenv_int, getenv_bool
+from chutney.errors import ChutneyInternalError
 
 # Try to verify twice each consensus, but don't verify too fast
 V3_AUTH_VOTING_INTERVAL = chutney.TorNet.V3_AUTH_VOTING_INTERVAL
 VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
 TIMEOUT_INTERVAL = max(VERIFY_ATTEMPT_INTERVAL - 1.0, 5.0)
+
+LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
 
 
 def run_test(network: chutney.TorNet.Network) -> None:
@@ -52,11 +55,6 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     # XXX don't hard-code this.
     # LISTEN_ADDR = network._dfltEnv["ip"]
     LISTEN_ADDR = "127.0.0.1"
-    LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
-    # HSs must have a HiddenServiceDir with
-    # "HiddenServicePort <HS_PORT> <CHUTNEY_LISTEN_ADDRESS>:<LISTEN_PORT>"
-    # TODO: Test <CHUTNEY_LISTEN_ADDRESS_V6>:<LISTEN_PORT>
-    HS_PORT = 5858
     # The amount of data to send between each source-sink pair,
     # each time the source connects.
     # We create a source-sink pair for each (bridge) client to an exit,
@@ -134,7 +132,6 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
         reps,
         client_list,
         hs_list,
-        HS_PORT,
         LISTEN_ADDR,
         LISTEN_PORT,
         connection_count,
@@ -207,19 +204,18 @@ def _configure_exits(
     return exit_path_node_count
 
 
-# The HS redirects .onion connections made to hs_hostname:HS_PORT
+# The HS redirects .onion connections made to hs_hostname:hs_virtport
 # to the Traffic Tester's CHUTNEY_LISTEN_ADDRESS:LISTEN_PORT
 # an arbitrary client / bridge client transmits via 8 nodes
 # (including the client and hs) to each hidden service
 # Instead of binding directly to LISTEN_PORT via an Exit relay,
-# we bind to hs_hostname:HS_PORT via a hidden service connection
+# we bind to hs_hostname:hs_virtport via a hidden service connection
 def _configure_hs(
     tt: chutney.Traffic.TrafficTester,
     tmpdata: bytes,
     reps: int,
     client_list: list[chutney.TorNet.Node],
     hs_list: list[chutney.TorNet.Node],
-    HS_PORT: int,
     LISTEN_ADDR: str,
     LISTEN_PORT: int,
     connection_count: int,
@@ -236,13 +232,21 @@ def _configure_hs(
         hs_client_list = client_list[:1]
     # Setup the connections from each client in hs_client_list to each hs
     for hs in hs_list:
-        hs_bind_to = (hs.hs_hostname, HS_PORT)
+        hs_bind_to = (hs.hs_hostname.unwrap(), hs.hs_virtport.unwrap())
+        # We currently require that all hidden services use the same port as `LISTEN_PORT`.
+        # Otherwise we would need to extend the `TrafficTester` to bind to multiple ports,
+        # or run multiple `TrafficTester`s.
+        if hs.hs_targetport.as_optional() != LISTEN_PORT:
+            raise ChutneyInternalError(
+                f"Node {hs.nick} uses unsupported hs targetport {hs.hs_targetport}; "
+                + f"expected {LISTEN_PORT}"
+            )
         for client in hs_client_list:
             print(
                 "  HS to %s:%d (%s:%d) via client %s:%s"
                 % (
-                    hs.hs_hostname,
-                    HS_PORT,
+                    hs.hs_hostname.unwrap(),
+                    hs.hs_virtport.unwrap(),
                     LISTEN_ADDR,
                     LISTEN_PORT,
                     "localhost",

@@ -50,6 +50,7 @@ include:
     # Defined in tpo/tpa/ci-templates
     - !reference [.apt-init]
     # We install binaries such as shadow here.
+    - mkdir "$HOME"/.local
     - export PATH="$PATH:$HOME/.local/bin"
     # Create and initialize a python venv
     - apt-get install
@@ -113,11 +114,15 @@ torrc-template-tests:
 
 network-config-tests:
   <<: *debian-template
+  needs:
+  - build-arti
   script:
   - apt-get install
       obfs4proxy
+      stow
       tor
   - python3 -m pip install .
+  - stow -d opt -t "$HOME"/.local arti
   - ./tests/network-config-tests
 
 # We currently only use shadow in one job, but building it is complex enough
@@ -170,7 +175,11 @@ build-arti:
   <<: *debian-template
   variables:
     JOB_ARTI_REPO: "https://gitlab.torproject.org/tpo/core/arti.git"
-    JOB_ARTI_TAG: "arti-v1.4.3"
+    # This can be a tag or commit-hash.
+    # main @ 2025-06-11.
+    JOB_ARTI_REV: "0a677a9b42558f23ceb1d46e6ee1d4251bd8acd7"
+    # comma-separated list of features to build with
+    JOB_ARTI_FEATURES: onion-service-service
     JOB_ARTI_PROFILE: "quicktest"
     JOB_RUST_TOOLCHAIN: "1.87.0"
   artifacts:
@@ -180,7 +189,7 @@ build-arti:
     # around for longer.
     expire_in: 1 day
   cache:
-    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_TAG-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
+    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
       paths:
       - opt/arti
   tags:
@@ -207,7 +216,8 @@ build-arti:
           --root="$CI_PROJECT_DIR"/opt/arti \
           --profile=$JOB_ARTI_PROFILE \
           --git=$JOB_ARTI_REPO \
-          --tag=$JOB_ARTI_TAG \
+          --rev=$JOB_ARTI_REV \
+          --features=$JOB_ARTI_FEATURES \
           arti
       fi
 
@@ -249,6 +259,7 @@ shadow-test-network:
           bridges-min \
           bridges-min-arti \
           bridges-obfs4 \
+          hs-v3-arti \
           ; do
       shadow-exec \
         -- \
@@ -258,6 +269,10 @@ shadow-test-network:
         set -euo pipefail
         # Too noisy
         export CHUTNEY_DEBUG=0
+        # Tell the "verify" test to connect to hidden services with *every*
+        # client. We want this to e.g. validate cross-compatibility between tor
+        # and arti clients and servers.
+        CHUTNEY_HS_MULTI_CLIENT=1
         export PATH=\"$PATH\"
         export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
         tools/test-network.sh \
@@ -282,6 +297,7 @@ network-config-tests-diff:
   <<: *debian-template
   needs:
   - build-shadow
+  - build-arti
   tags:
     - amd64
     # Non-TPA runners may not support running shadow.
@@ -298,6 +314,7 @@ network-config-tests-diff:
       diffoscope-minimal
       git
       obfs4proxy
+      stow
       tor
 
   # install shadow
@@ -307,6 +324,9 @@ network-config-tests-diff:
 
   # install shadowtools, for `shadow-exec`
   - python3 -m pip install --no-index --find-links=./wheels shadowtools
+
+  # install arti
+  - stow -d opt -t "$HOME"/.local arti
 
   # install chutney
   - python3 -m pip install .

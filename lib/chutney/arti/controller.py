@@ -21,12 +21,19 @@ from chutney.Util import (
 
 logger = logging.getLogger(__name__)
 
+# TODO: Consider merging NodeController and NodeBuilder so that this sort of
+# thing can be shared more naturally. Currently the implementations unsafely
+# assume that the associated counter-part is being used anyway.
+_HS_NICKNAME = chutney.arti.builder._HS_NICKNAME
+
 
 class LocalArtiNodeController(TorNet.NodeController):
     def __init__(self, network: TorNet.Network, node: TorNet.Node):
         TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
+        self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None
+        self._most_recent_oniondesc_status: Optional[DirInfoStatus] = None
 
     @override
     def getPtExtra(self) -> Option[str]:
@@ -45,7 +52,7 @@ class LocalArtiNodeController(TorNet.NodeController):
 
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
-        if self._node.isOnionService():
+        if self._node.is_hs:
             return LocalArtiNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
         else:
             return LocalArtiNodeController.DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO
@@ -147,22 +154,25 @@ class LocalArtiNodeController(TorNet.NodeController):
         return self._node.dir.joinpath("debug.log")
 
     def _getLastOnionServiceDescStatus(self) -> DirInfoStatus:
-        """Return the last onion descriptor message fetched by
-        updateLastOnionServiceDescStatus as a 3-tuple of percentage
-        complete, the hidden service version, and message.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
-        raise chutney.errors.ChutneyUnimplementedError(
-            "get onion service descriptor status"
-        )
+        status = self._most_recent_oniondesc_status
+        # Caller is required to have set this via `updateLastStatus` first.
+        # TODO: just call it ourselves if None, or use a default value?
+        assert status is not None
+        return status
 
     @override
-    def updateLastBootstrapStatus(self) -> None:
+    def getLastBootstrapStatus(self) -> DirInfoStatus:
+        rv = self._most_recent_bootstrap_status
+        # Caller is required to have set this via `updateLastStatus` first.
+        # TODO: just call it ourselves if None, or use a default value?
+        assert rv is not None
+        return rv
+
+    @override
+    def updateLastStatus(self) -> None:
         logfname = self._debug_log_path()
         if not logfname.exists():
-            self.most_recent_bootstrap_status = DirInfoStatus(
+            self._most_recent_bootstrap_status = DirInfoStatus(
                 percent_or_code=DirInfoStatusCode.MISSING_FILE,
                 keyword="no_logfile",
                 message="There is no logfile yet.",
@@ -173,12 +183,14 @@ class LocalArtiNodeController(TorNet.NodeController):
             keyword="no_message",
             message="No bootstrap messages yet.",
         )
+        self._most_recent_bootstrap_status = status
+        self._most_recent_oniondesc_status = status
         with logfname.open(mode="r") as f:
             for line in f:
                 m = re.search(r" arti_client::status: (\d+)%: (.*)", line)
                 if m:
                     percent_s, message = m.groups()
-                    status = DirInfoStatus(
+                    self._most_recent_bootstrap_status = DirInfoStatus(
                         percent_or_code=(
                             DirInfoStatusCode.SUCCESS
                             if percent_s == "100"
@@ -187,26 +199,28 @@ class LocalArtiNodeController(TorNet.NodeController):
                         keyword="",
                         message=message,
                     )
-        self.most_recent_bootstrap_status = status
-
-    @override
-    def getLastBootstrapStatus(self) -> DirInfoStatus:
-        rv = self.most_recent_bootstrap_status
-        # Caller is required to have set this via `updateLastStatus` first.
-        # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
-        return rv
-
-    @override
-    def updateLastStatus(self) -> None:
-        self.updateLastBootstrapStatus()
+                if not self._node.is_hs:
+                    # No need to scan for hs descriptor updates
+                    continue
+                m = re.search(
+                    r" descriptor uploaded successfully to "
+                    + r"\d+/\d+ HSDirs nickname="
+                    + _HS_NICKNAME,
+                    line,
+                )
+                if m:
+                    self._most_recent_oniondesc_status = DirInfoStatus(
+                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                        keyword=TorNet.HSV3_KEYWORD,
+                        message=m.group(0),
+                    )
 
     @override
     def isBootstrapped(self) -> bool:
         status = self.getLastBootstrapStatus()
         if status.percent_or_code != DirInfoStatusCode.SUCCESS:
             return False
-        if self._node.isOnionService():
+        if self._node.is_hs:
             status = self._getLastOnionServiceDescStatus()
             if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                 return False
