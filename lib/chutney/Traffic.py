@@ -40,6 +40,7 @@ import asyncore
 import asynchat
 
 from typing import Any, Callable, Optional, cast
+from typing_extensions import override
 
 logger = logging.getLogger(__name__)
 
@@ -158,9 +159,11 @@ class Listener(asyncore.dispatcher):
         self.listen(0)
         self.tt = tt
 
+    @override
     def writable(self) -> bool:
         return False
 
+    @override
     def handle_accept(self) -> None:
         # deprecated in python 3.2
         pair = self.accept()
@@ -209,6 +212,7 @@ class DataSource(AsynChatProducer):
         assert not self.sent_any
         return DataSource(self.data, self.repetitions)
 
+    @override
     def more(self) -> bytes:
         self.sent_any = True
         if self.repetitions > 0:
@@ -266,6 +270,7 @@ class Sink(asynchat.async_chat):
     def get_test_names(self) -> list[str]:
         return [self.testname]
 
+    @override
     def collect_incoming_data(self, inp: bytes) -> None:
         # shortcut read when we don't ever expect any data
 
@@ -291,6 +296,7 @@ class CloseSourceProducer(AsynChatProducer):
     def __init__(self, source: Source):
         self.source = source
 
+    @override
     def more(self) -> bytes:
         self.source.note("Flushed")
         self.source.sent_ok()
@@ -336,6 +342,7 @@ class Source(asynchat.async_chat):
     def note(self, s: str) -> None:
         self.tt.tests.note(self.testname, s)
 
+    @override
     def handle_connect(self) -> None:
         if self.proxy:
             self.state = self.CONNECTING_THROUGH_PROXY
@@ -345,6 +352,7 @@ class Source(asynchat.async_chat):
             self.state = self.CONNECTED
             self.push_output()
 
+    @override
     def collect_incoming_data(self, data: bytes) -> None:
         self.inbuf += data
         if self.state == self.CONNECTING_THROUGH_PROXY:
@@ -389,6 +397,7 @@ class EchoServer(asynchat.async_chat):
         self.tt = tt
         self.am_closing = False
 
+    @override
     def collect_incoming_data(self, data: bytes) -> None:
         self.push(data)
 
@@ -408,9 +417,11 @@ class EchoClient(Source):
     def enote(self, s: str) -> None:
         self.tt.tests.note(self.testname_check, s)
 
+    @override
     def get_test_names(self) -> list[str]:
         return [self.testname, self.testname_check]
 
+    @override
     def collect_incoming_data(self, data: bytes) -> None:
         if self.state == self.CONNECTING_THROUGH_PROXY:
             Source.collect_incoming_data(self, data)
