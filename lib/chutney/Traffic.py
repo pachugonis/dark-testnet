@@ -173,11 +173,9 @@ class Listener(object):
         await server.serve_forever()
 
     @property
-    async def socket(self) -> Optional[socket.socket]:
+    async def socket(self) -> socket.socket:
         server = await self._server
         sockets = server.sockets
-        if not sockets:
-            return None
         assert len(sockets) == 1, f"Unexpectedly got {len(sockets)} sockets"
         return sockets[0]
 
@@ -209,7 +207,6 @@ class Listener(object):
 
     async def fileno(self) -> int:
         socket = await self.socket
-        assert socket is not None
         return socket.fileno()
 
 
@@ -375,11 +372,13 @@ class AsyncioChat(object):
 
     @final
     @property
-    async def socket(self) -> Optional[socket.socket]:
+    async def socket(self) -> socket.socket:
         writer = await self._writer
         s = writer.get_extra_info("socket")
         # The documentation claims we should get a socket.socket here, but we
         # actually only get an internal type that *acts* like one.
+        # Sanity-check that we got something socket-like, and return it.
+        assert hasattr(s, 'fileno')
         return cast(socket.socket, s)
 
     @final
