@@ -91,6 +91,24 @@ def socks_cmd(addr_port: HostPortTuple) -> bytes:
     return struct.pack("!BBH", ver, cmd, port) + addr + user + dnsname_enc
 
 
+class SocksError(Exception):
+    def __init__(self, code: int):
+        self._code = code
+
+    def __str__(self) -> str:
+        return f"Server returned code {self._code}"
+
+
+async def _do_socks_client_handshake(
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, server: HostPortTuple
+) -> None:
+    await writer.drain()
+    writer.write(socks_cmd(server))
+    handshake_response = await reader.readexactly(8)
+    if not handshake_response.startswith(b"\x00\x5a"):
+        raise SocksError(handshake_response[1])
+
+
 class TestSuite(object):
     """Keep a tab on how many tests are pending, how many have failed
     and how many have succeeded."""
@@ -420,19 +438,6 @@ class AsyncioChat(object):
         return socket.fileno()
 
 
-class CloseSourceProducer(AsynChatProducer):
-    """Helper: when this producer is returned, a source is successful."""
-
-    def __init__(self, source: EchoClient):
-        self.source = source
-
-    @override
-    def more(self) -> bytes:
-        self.source.note("Flushed")
-        self.source.sent_ok()
-        return b""
-
-
 class EchoServer(AsyncioChat):
     def __init__(
         self,
@@ -452,11 +457,6 @@ class EchoServer(AsyncioChat):
 
 
 class EchoClient(object):
-    NOT_CONNECTED = 0
-    CONNECTING = 1
-    CONNECTING_THROUGH_PROXY = 2
-    CONNECTED = 5
-
     def __init__(
         self,
         tt: TrafficTester,
@@ -468,51 +468,41 @@ class EchoClient(object):
         self._reader: asyncio.Future[asyncio.StreamReader] = loop.create_future()
         self._writer: asyncio.Future[asyncio.StreamWriter] = loop.create_future()
 
-        # After connecting we'll start additional tasks to do the reading and writing.
-        self._reader_task: Optional[asyncio.Task[None]] = None
-        self._writer_task: Optional[asyncio.Task[None]] = None
-
-        async def _connect() -> None:
-            dest = proxy or server
-            logger.debug("connecting to %r...", dest)
-            try:
-                reader, writer = await asyncio.open_connection(
-                    host=dest[0], port=dest[1]
-                )
-                self._reader.set_result(reader)
-                self._writer.set_result(writer)
-            except Exception as e:
-                self._reader.set_exception(e)
-                self._writer.set_exception(e)
-                raise
-
-            # Set up initial write
-            if proxy:
-                self.state = self.CONNECTING_THROUGH_PROXY
-                self.note("connected, sending socks handshake")
-                self.push(socks_cmd(server))
-            else:
-                self.state = self.CONNECTED
-                self.push_output()
-
-            # Start asynchronously handling the reader and writer.
-            assert self._reader_task is None
-            self._reader_task = asyncio.create_task(self._reader_closure())
-            assert self._writer_task is None
-            self._writer_task = asyncio.create_task(self._writer_closure())
-
-        self._connect_task: asyncio.Task[None] = asyncio.create_task(_connect())
-        self._producers: asyncio.Queue[Optional[AsynChatProducer]] = asyncio.Queue()
-
         self.data_source = tt.data_source.copy()
-        self.inbuf = b""
         self.proxy = proxy
         self.server = server
         self.tt = tt
         self.testname = uniq("send-data")
-        self.state = self.CONNECTING
         self.data_checker = DataChecker(tt.data_source.copy())
         self.testname_check = uniq("check")
+        self._run_task: asyncio.Task[None] = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        dest = self.proxy or self.server
+        logger.debug("connecting to %r...", dest)
+        try:
+            reader, writer = await asyncio.open_connection(host=dest[0], port=dest[1])
+            self._reader.set_result(reader)
+            self._writer.set_result(writer)
+        except Exception as e:
+            self._reader.set_exception(e)
+            self._writer.set_exception(e)
+            raise
+        if self.proxy:
+            self.note("connected, sending socks handshake")
+            await _do_socks_client_handshake(reader, writer, self.server)
+            self.note("proxy handshake successful")
+            logger.debug("successfully connected (fd=%d)" % await self.fileno())
+
+        # Start asynchronously handling the reader and writer.
+        validate_incoming_task = asyncio.create_task(self._validate_incoming())
+        write_outgoing_task = asyncio.create_task(self._write_outgoing())
+
+        # Wait for both to complete or one to throw an exception
+        await asyncio.wait(
+            [validate_incoming_task, write_outgoing_task],
+            return_when=asyncio.FIRST_EXCEPTION,
+        )
 
     def enote(self, s: str) -> None:
         self.tt.tests.note(self.testname_check, s)
@@ -527,78 +517,40 @@ class EchoClient(object):
         logger.debug(f"adding note: {s}")
         self.tt.tests.note(self.testname, s)
 
-    async def collect_incoming_data(self, data: bytes) -> None:
-        self.inbuf += data
-        if self.state == self.CONNECTING_THROUGH_PROXY:
-            if len(self.inbuf) < 8:
-                return
-            if self.inbuf[:2] != b"\x00\x5a":
-                logger.debug(
-                    "proxy handshake failed (0x%x)! (fd=%d)"
-                    % (self.inbuf[1], await self.fileno())
-                )
-                self.state = self.NOT_CONNECTED
-                self.close()
-                return
-            self.note("proxy handshake successful")
-            self.state = self.CONNECTED
-            logger.debug("successfully connected (fd=%d)" % await self.fileno())
-            self.inbuf = self.inbuf[8:]
-            self.push_output()
-        data = self.inbuf
-        self.inbuf = b""
-        self.data_checker.consume(data)
-        self.enote("consumed some")
-        if self.data_checker.succeeded:
-            self.enote("successful verification")
-            logger.debug("successful verification")
-            self.close()
-            self.tt.success(self.testname_check)
-        elif self.data_checker.failed:
-            logger.debug("receive comparison failed")
-            self.tt.failure(self.testname_check)
-            self.close()
-
-    def push_output(self) -> None:
-        self.note("pushed output")
-        self.push_with_producer(self.data_source)
-        self.push_with_producer(CloseSourceProducer(self))
-
-    async def _reader_closure(self) -> None:
-        # 64K; this is the default in asynchat.
-        _BUFSIZE = 64 * 1024 * 1024
+    async def _validate_incoming(self) -> None:
         reader = await self._reader
         while True:
+            # 64K; this is the default in asynchat.
+            _BUFSIZE = 64 * 1024
             data = await reader.read(_BUFSIZE)
             if not data:
-                break
-            await self.collect_incoming_data(data)
+                self.enote("Unexpected EOF")
+                self.tt.failure(self.testname_check)
+            self.data_checker.consume(data)
+            self.enote("consumed some")
+            if self.data_checker.succeeded:
+                self.enote("successful verification")
+                logger.debug("successful verification")
+                self.close()
+                self.tt.success(self.testname_check)
+                return
+            elif self.data_checker.failed:
+                logger.debug("receive comparison failed")
+                self.tt.failure(self.testname_check)
+                self.close()
+                return
 
-    async def _writer_closure(self) -> None:
+    async def _write_outgoing(self) -> None:
         writer = await self._writer
         while True:
-            # Wait until we have something to write.
-            # We're relying on no threading being in use to not have races
-            # between `_producers_ready` and `_producers`.
-            producer = await self._producers.get()
-            if producer is None:
-                writer.write_eof()
+            data = self.data_source.more()
+            if not data:
+                self.note("Flushed")
+                self.sent_ok()
+                # TODO: write EOF?
                 break
-            while True:
-                # Get more data
-                data = producer.more()
-                if not data:
-                    # this producer is exhausted
-                    break
-                # Wait until writer is ready for more data
-                await writer.drain()
-                writer.write(data)
-
-    def push_with_producer(self, producer: AsynChatProducer) -> None:
-        self._producers.put_nowait(producer)
-
-    def push(self, data: bytes) -> None:
-        self.push_with_producer(DataSource(data))
+            await writer.drain()
+            writer.write(data)
 
     async def _socket(self) -> asyncio.trsock.TransportSocket:
         writer = await self._writer
@@ -606,35 +558,17 @@ class EchoClient(object):
         return check_type(s, asyncio.trsock.TransportSocket)
 
     def close(self) -> None:
-        self._connect_task.cancel()
-        if self._reader_task is not None:
-            self._reader_task.cancel()
-        if self._writer_task is not None:
-            self._writer_task.cancel()
+        self._run_task.cancel()
         if self._writer.done():
             self._writer.result().close()
 
     async def wait_closed(self) -> None:
         try:
-            await self._connect_task
+            await self._run_task
         except asyncio.CancelledError:
             pass
-        if self._reader_task is not None:
-            try:
-                await self._reader_task
-            except asyncio.CancelledError:
-                pass
-        if self._writer_task is not None:
-            try:
-                await self._writer_task
-            except asyncio.CancelledError:
-                pass
         if self._writer.done():
             await self._writer.result().wait_closed()
-
-    async def handle_connect(self) -> None:
-        """Called when the connection is ready"""
-        pass
 
     async def fileno(self) -> int:
         socket = await self._socket()
