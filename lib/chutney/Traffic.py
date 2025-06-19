@@ -314,6 +314,8 @@ class EchoServer(object):
                 break
             await self._writer.drain()
             self._writer.write(data)
+        self.close()
+        await self.wait_closed()
 
     def close(self) -> None:
         """Start closing"""
@@ -379,6 +381,10 @@ class EchoClient(object):
                 [validate_incoming_task, write_outgoing_task],
                 return_when=asyncio.FIRST_EXCEPTION,
             )
+            # Close the socket, flushing any pending writes.
+            writer.close()
+            await writer.wait_closed()
+
         except Exception as e:
             for t in self.get_test_names():
                 self.tt.wont_complete(t, f"Got exception: {e}")
@@ -404,20 +410,21 @@ class EchoClient(object):
             _BUFSIZE = 64 * 1024
             data = await reader.read(_BUFSIZE)
             if not data:
+                # We would have already stopped reading earlier if we'd gotten
+                # all the data we expected.
                 self.enote("Unexpected EOF")
                 self.tt.failure(self.testname_check)
+                return
             self.data_checker.consume(data)
             self.enote("consumed some")
             if self.data_checker.succeeded:
                 self.enote("successful verification")
                 logger.debug("successful verification")
-                self.close()
                 self.tt.success(self.testname_check)
                 return
             elif self.data_checker.failed:
                 logger.debug("receive comparison failed")
                 self.tt.failure(self.testname_check)
-                self.close()
                 return
 
     async def _write_outgoing(self) -> None:
@@ -427,7 +434,34 @@ class EchoClient(object):
             if not data:
                 self.note("Flushed")
                 self.sent_ok()
-                # TODO: write EOF?
+                # Do *not* shut down the write-end here
+                # (e.g. via `writer.write_eof`). When connected via tor, doing
+                # so results in the circuit getting closed, potentially before
+                # we're done reading.
+                # See
+                # <https://gitlab.torproject.org/tpo/core/torspec/-/issues/138>.
+
+                # There is no straight-forward "flush all the buffered data" API
+                # other than closing the socket. `StreamWriter.drain` only
+                # ensures that data is flushed until some low watermark is
+                # reached. So we set that watermark to 0 and *then* call
+                # `drain`.
+                #
+                # * discussion:
+                #   <https://discuss.python.org/t/completely-flushing-a-streamwriter/9621>
+                # * drain:
+                #   <https://docs.python.org/3/library/asyncio-stream.html#asyncio.StreamWriter.drain>
+                # * set_write_buffer_limits:
+                #   <https://docs.python.org/3/library/asyncio-protocol.html#asyncio.WriteTransport.set_write_buffer_limits>
+                #
+                # This *might* not be necessary. I suspect the framework
+                # actually feeds buffered data to the kernel as quickly as the
+                # kernel will take it, and waiting on `drain` is just to apply
+                # back-pressure. Still, without some documented promise of that
+                # behavior, let's force the issue.
+                writer.transport.set_write_buffer_limits(0, 0)
+                await writer.drain()
+
                 break
             await writer.drain()
             writer.write(data)
