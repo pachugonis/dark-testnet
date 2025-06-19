@@ -445,22 +445,40 @@ class AsyncioChat(object):
         return socket.fileno()
 
 
-class EchoServer(AsyncioChat):
+class EchoServer(object):
     def __init__(
         self,
         tt: TrafficTester,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ):
-        async def _reader_writer() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-            return (reader, writer)
-
-        AsyncioChat.__init__(self, _reader_writer())
         self.tt = tt
+        self._reader = reader
+        self._writer = writer
+        self._run_task = asyncio.create_task(self._run())
 
-    @override
-    async def collect_incoming_data(self, data: bytes) -> None:
-        self.push(data)
+    async def _run(self) -> None:
+        while True:
+            # 64K; this is the default in asynchat.
+            _BUFSIZE = 64 * 1024
+            data = await self._reader.read(_BUFSIZE)
+            if not data:
+                break
+            await self._writer.drain()
+            self._writer.write(data)
+
+    def close(self) -> None:
+        """Start closing"""
+        self._run_task.cancel()
+        self._writer.close()
+
+    async def wait_closed(self) -> None:
+        """Wait for close to complete"""
+        try:
+            await self._run_task
+        except asyncio.CancelledError:
+            pass
+        await self._writer.wait_closed()
 
 
 class EchoClient(object):
@@ -612,7 +630,7 @@ class TrafficTester(object):
         self.timeout = timeout
         self.tests = TestSuite()
         self.data_source = DataSource(data, repetitions)
-        self.responders: list[AsyncioChat] = []
+        self.responders: list[EchoServer] = []
 
         # In `add_client` we just store the specifications for the clients.
         # We actually create them after we start running.
