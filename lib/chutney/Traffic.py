@@ -236,23 +236,7 @@ class Listener(object):
         return socket.fileno()
 
 
-class AsynChatProducer(abc.ABC):
-    """A Producer as defined in the AsynChat documentation."""
-
-    @abc.abstractmethod
-    def more(self) -> bytes: ...
-
-    """Produce some bytes.
-
-    From <https://docs.python.org/3.11/library/asynchat.html>:
-    "A producer need have only one method, more(), which should return data to
-    be transmitted on the channel. The producer indicates exhaustion (i.e. that
-    it contains no more data) by having its more() method return the empty bytes
-    object."
-    """
-
-
-class DataSource(AsynChatProducer):
+class DataSource(object):
     """A data source generates some number of bytes of data, and then
     returns None.
 
@@ -268,7 +252,6 @@ class DataSource(AsynChatProducer):
         assert not self.sent_any
         return DataSource(self.data, self.repetitions)
 
-    @override
     def more(self) -> bytes:
         self.sent_any = True
         if self.repetitions > 0:
