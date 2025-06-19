@@ -145,6 +145,13 @@ class TestSuite(object):
         self.not_done -= 1
         self.failures += 1
 
+    def wont_complete(self, name: str, note: str) -> None:
+        """Declare that a test won't complete, if it hasn't already"""
+        if self.tests[name].done():
+            return
+        self.failure(name)
+        self.note(name, note)
+
     def failure_count(self) -> int:
         return self.failures
 
@@ -478,31 +485,38 @@ class EchoClient(object):
         self._run_task: asyncio.Task[None] = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
-        dest = self.proxy or self.server
-        logger.debug("connecting to %r...", dest)
         try:
-            reader, writer = await asyncio.open_connection(host=dest[0], port=dest[1])
-            self._reader.set_result(reader)
-            self._writer.set_result(writer)
+            dest = self.proxy or self.server
+            logger.debug("connecting to %r...", dest)
+            try:
+                reader, writer = await asyncio.open_connection(
+                    host=dest[0], port=dest[1]
+                )
+                self._reader.set_result(reader)
+                self._writer.set_result(writer)
+            except Exception as e:
+                self._reader.set_exception(e)
+                self._writer.set_exception(e)
+                raise
+            if self.proxy:
+                self.note("connected, sending socks handshake")
+                await _do_socks_client_handshake(reader, writer, self.server)
+                self.note("proxy handshake successful")
+                logger.debug("successfully connected (fd=%d)" % await self.fileno())
+
+            # Start asynchronously handling the reader and writer.
+            validate_incoming_task = asyncio.create_task(self._validate_incoming())
+            write_outgoing_task = asyncio.create_task(self._write_outgoing())
+
+            # Wait for both to complete or one to throw an exception
+            await asyncio.wait(
+                [validate_incoming_task, write_outgoing_task],
+                return_when=asyncio.FIRST_EXCEPTION,
+            )
         except Exception as e:
-            self._reader.set_exception(e)
-            self._writer.set_exception(e)
+            for t in self.get_test_names():
+                self.tt.wont_complete(t, f"Got exception: {e}")
             raise
-        if self.proxy:
-            self.note("connected, sending socks handshake")
-            await _do_socks_client_handshake(reader, writer, self.server)
-            self.note("proxy handshake successful")
-            logger.debug("successfully connected (fd=%d)" % await self.fileno())
-
-        # Start asynchronously handling the reader and writer.
-        validate_incoming_task = asyncio.create_task(self._validate_incoming())
-        write_outgoing_task = asyncio.create_task(self._write_outgoing())
-
-        # Wait for both to complete or one to throw an exception
-        await asyncio.wait(
-            [validate_incoming_task, write_outgoing_task],
-            return_when=asyncio.FIRST_EXCEPTION,
-        )
 
     def enote(self, s: str) -> None:
         self.tt.tests.note(self.testname_check, s)
@@ -630,6 +644,10 @@ class TrafficTester(object):
     def failure(self, name: str) -> None:
         """Declare that a single test has failed."""
         self.tests.failure(name)
+
+    def wont_complete(self, name: str, note: str) -> None:
+        """Declare that a test won't complete, if it hasn't already"""
+        self.tests.wont_complete(name, note)
 
     async def _run(self) -> bool:
         # This does the real work of running the tests.
