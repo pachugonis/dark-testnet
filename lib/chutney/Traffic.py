@@ -451,7 +451,7 @@ class EchoServer(AsyncioChat):
         self.push(data)
 
 
-class EchoClient(AsyncioChat):
+class EchoClient(object):
     NOT_CONNECTED = 0
     CONNECTING = 1
     CONNECTING_THROUGH_PROXY = 2
@@ -463,12 +463,47 @@ class EchoClient(AsyncioChat):
         server: HostPortTuple,
         proxy: Optional[HostPortTuple] = None,
     ):
-        async def _connect() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        # We'll get the reader and writer themselves asynchronously.
+        loop = asyncio.get_running_loop()
+        self._reader: asyncio.Future[asyncio.StreamReader] = loop.create_future()
+        self._writer: asyncio.Future[asyncio.StreamWriter] = loop.create_future()
+
+        # After connecting we'll start additional tasks to do the reading and writing.
+        self._reader_task: Optional[asyncio.Task[None]] = None
+        self._writer_task: Optional[asyncio.Task[None]] = None
+
+        async def _connect() -> None:
             dest = proxy or server
             logger.debug("connecting to %r...", dest)
-            return await asyncio.open_connection(host=dest[0], port=dest[1])
+            try:
+                reader, writer = await asyncio.open_connection(
+                    host=dest[0], port=dest[1]
+                )
+                self._reader.set_result(reader)
+                self._writer.set_result(writer)
+            except Exception as e:
+                self._reader.set_exception(e)
+                self._writer.set_exception(e)
+                raise
 
-        AsyncioChat.__init__(self, _connect())
+            # Set up initial write
+            if proxy:
+                self.state = self.CONNECTING_THROUGH_PROXY
+                self.note("connected, sending socks handshake")
+                self.push(socks_cmd(server))
+            else:
+                self.state = self.CONNECTED
+                self.push_output()
+
+            # Start asynchronously handling the reader and writer.
+            assert self._reader_task is None
+            self._reader_task = asyncio.create_task(self._reader_closure())
+            assert self._writer_task is None
+            self._writer_task = asyncio.create_task(self._writer_closure())
+
+        self._connect_task: asyncio.Task[None] = asyncio.create_task(_connect())
+        self._producers: asyncio.Queue[Optional[AsynChatProducer]] = asyncio.Queue()
+
         self.data_source = tt.data_source.copy()
         self.inbuf = b""
         self.proxy = proxy
@@ -492,17 +527,6 @@ class EchoClient(AsyncioChat):
         logger.debug(f"adding note: {s}")
         self.tt.tests.note(self.testname, s)
 
-    @override
-    async def handle_connect(self) -> None:
-        if self.proxy:
-            self.state = self.CONNECTING_THROUGH_PROXY
-            self.note("connected, sending socks handshake")
-            self.push(socks_cmd(self.server))
-        else:
-            self.state = self.CONNECTED
-            self.push_output()
-
-    @override
     async def collect_incoming_data(self, data: bytes) -> None:
         self.inbuf += data
         if self.state == self.CONNECTING_THROUGH_PROXY:
@@ -540,6 +564,83 @@ class EchoClient(AsyncioChat):
         self.push_with_producer(self.data_source)
         self.push_with_producer(CloseSourceProducer(self))
 
+    async def _reader_closure(self) -> None:
+        # 64K; this is the default in asynchat.
+        _BUFSIZE = 64 * 1024 * 1024
+        reader = await self._reader
+        while True:
+            data = await reader.read(_BUFSIZE)
+            if not data:
+                break
+            await self.collect_incoming_data(data)
+
+    async def _writer_closure(self) -> None:
+        writer = await self._writer
+        while True:
+            # Wait until we have something to write.
+            # We're relying on no threading being in use to not have races
+            # between `_producers_ready` and `_producers`.
+            producer = await self._producers.get()
+            if producer is None:
+                writer.write_eof()
+                break
+            while True:
+                # Get more data
+                data = producer.more()
+                if not data:
+                    # this producer is exhausted
+                    break
+                # Wait until writer is ready for more data
+                await writer.drain()
+                writer.write(data)
+
+    def push_with_producer(self, producer: AsynChatProducer) -> None:
+        self._producers.put_nowait(producer)
+
+    def push(self, data: bytes) -> None:
+        self.push_with_producer(DataSource(data))
+
+    async def _socket(self) -> asyncio.trsock.TransportSocket:
+        writer = await self._writer
+        s = writer.get_extra_info("socket")
+        return check_type(s, asyncio.trsock.TransportSocket)
+
+    def close(self) -> None:
+        self._connect_task.cancel()
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+        if self._writer_task is not None:
+            self._writer_task.cancel()
+        if self._writer.done():
+            self._writer.result().close()
+
+    async def wait_closed(self) -> None:
+        try:
+            await self._connect_task
+        except asyncio.CancelledError:
+            pass
+        if self._reader_task is not None:
+            try:
+                await self._reader_task
+            except asyncio.CancelledError:
+                pass
+        if self._writer_task is not None:
+            try:
+                await self._writer_task
+            except asyncio.CancelledError:
+                pass
+        if self._writer.done():
+            await self._writer.result().wait_closed()
+
+    async def handle_connect(self) -> None:
+        """Called when the connection is ready"""
+        pass
+
+    async def fileno(self) -> int:
+        socket = await self._socket()
+        assert socket is not None
+        return socket.fileno()
+
 
 class TrafficTester(object):
     """
@@ -570,7 +671,7 @@ class TrafficTester(object):
         self.client_specs: list[tuple[HostPortTuple, Optional[HostPortTuple]]] = []
         self.clients: list[EchoClient] = []
 
-    def add(self, item: AsyncioChat) -> None:
+    def add(self, item: object) -> None:
         """Register a single item."""
         if hasattr(item, "get_test_names"):
             for name in item.get_test_names():
