@@ -29,7 +29,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import abc
 import asyncio
 import asyncio.trsock
 import logging
@@ -38,10 +37,8 @@ import socket
 import struct
 import time
 
-from abc import abstractmethod
 from typeguard import check_type
-from typing import Optional, Coroutine
-from typing_extensions import override, final
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
