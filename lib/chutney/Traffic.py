@@ -314,12 +314,13 @@ class EchoServer(object):
                 break
             await self._writer.drain()
             self._writer.write(data)
-        self.close()
-        await self.wait_closed()
+        self._writer.close()
+        await self._writer.wait_closed()
 
-    def close(self) -> None:
+    def abort(self) -> None:
         """Start closing"""
         self._run_task.cancel()
+        self._writer.transport.abort()
         self._writer.close()
 
     async def wait_closed(self) -> None:
@@ -471,10 +472,12 @@ class EchoClient(object):
         s = writer.get_extra_info("socket")
         return check_type(s, asyncio.trsock.TransportSocket)
 
-    def close(self) -> None:
+    def abort(self) -> None:
         self._run_task.cancel()
         if self._writer.done():
-            self._writer.result().close()
+            writer = self._writer.result()
+            writer.transport.abort()
+            writer.close()
 
     async def wait_closed(self) -> None:
         try:
@@ -582,9 +585,9 @@ class TrafficTester(object):
         return self.tests.failure_count() == 0
 
     async def _run_with_timeout(self) -> bool:
-        # Inner async version of `run`. To ensure we correctly enforce the timeout,
-        # there should only be a single `await` in this function, for
-        # `asyncio.wait_for`, which takes a timeout.
+        # Inner async version of `run`. To ensure we correctly enforce the
+        # timeout, any `await`s here should have a timeout or otherwise
+        # ~guarantee that they won't take long.
 
         # In case self._run doesn't complete, we should always return failure.
         # e.g. if instead we checked `self.tests.failure_count()` ourselves
@@ -601,6 +604,27 @@ class TrafficTester(object):
             % (self.tests.all_done(), self.tests.failure_count())
         )
         logger.info("Status:\n%s" % self.tests.teststatus)
+
+        # Ensure all sockets are closed before returning.
+        # We especially want to ensure that the listening socket is closed so that
+        # we can retry without getting EADDRINUSE.
+        #
+        # shadow currently erroneously doesn't consider the listening port free
+        # again until all child sockets are closed too, so we ensure those are
+        # all closed too.
+        # <https://github.com/shadow/shadow/issues/3563>
+        #
+        # TODO: Unfortunately we still get ADDRINUSE when retrying under shadow.
+        for r in self.responders:
+            r.abort()
+            await r.wait_closed()
+        for c in self.clients:
+            c.abort()
+            await c.wait_closed()
+        if self.listener is not None:
+            self.listener.close()
+            await self.listener.wait_closed()
+
         return res
 
     def run(self) -> bool:
