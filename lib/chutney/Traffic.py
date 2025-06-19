@@ -40,7 +40,7 @@ import time
 
 from abc import abstractmethod
 from typeguard import check_type
-from typing import Callable, Optional, Coroutine
+from typing import Optional, Coroutine
 from typing_extensions import override, final
 
 logger = logging.getLogger(__name__)
@@ -420,9 +420,20 @@ class AsyncioChat(object):
         return socket.fileno()
 
 
-class Sink(AsyncioChat):
-    "A data sink, reading from its peer and verifying the data."
+class CloseSourceProducer(AsynChatProducer):
+    """Helper: when this producer is returned, a source is successful."""
 
+    def __init__(self, source: EchoClient):
+        self.source = source
+
+    @override
+    def more(self) -> bytes:
+        self.source.note("Flushed")
+        self.source.sent_ok()
+        return b""
+
+
+class EchoServer(AsyncioChat):
     def __init__(
         self,
         tt: TrafficTester,
@@ -434,45 +445,13 @@ class Sink(AsyncioChat):
 
         AsyncioChat.__init__(self, _reader_writer())
         self.tt = tt
-        self.data_checker = DataChecker(tt.data_source.copy())
-        self.testname = uniq("recv-data")
-
-    def get_test_names(self) -> list[str]:
-        return [self.testname]
 
     @override
-    async def collect_incoming_data(self, inp: bytes) -> None:
-        # shortcut read when we don't ever expect any data
-
-        logger.debug("successfully received (bytes=%d)" % len(inp))
-        self.data_checker.consume(inp)
-        if self.data_checker.succeeded:
-            logger.debug("successful verification")
-            self.close()
-            self.tt.success(self.testname)
-        elif self.data_checker.failed:
-            logger.debug("receive comparison failed")
-            self.tt.failure(self.testname)
-            self.close()
+    async def collect_incoming_data(self, data: bytes) -> None:
+        self.push(data)
 
 
-class CloseSourceProducer(AsynChatProducer):
-    """Helper: when this producer is returned, a source is successful."""
-
-    def __init__(self, source: Source):
-        self.source = source
-
-    @override
-    def more(self) -> bytes:
-        self.source.note("Flushed")
-        self.source.sent_ok()
-        return b""
-
-
-class Source(AsyncioChat):
-    """A data source, connecting to a TCP server, optionally over a
-    SOCKS proxy, sending data."""
-
+class EchoClient(AsyncioChat):
     NOT_CONNECTED = 0
     CONNECTING = 1
     CONNECTING_THROUGH_PROXY = 2
@@ -497,9 +476,14 @@ class Source(AsyncioChat):
         self.tt = tt
         self.testname = uniq("send-data")
         self.state = self.CONNECTING
+        self.data_checker = DataChecker(tt.data_source.copy())
+        self.testname_check = uniq("check")
+
+    def enote(self, s: str) -> None:
+        self.tt.tests.note(self.testname_check, s)
 
     def get_test_names(self) -> list[str]:
-        return [self.testname]
+        return [self.testname, self.testname_check]
 
     def sent_ok(self) -> None:
         self.tt.success(self.testname)
@@ -520,78 +504,27 @@ class Source(AsyncioChat):
 
     @override
     async def collect_incoming_data(self, data: bytes) -> None:
-        logger.debug(f"received {len(data)} bytes")
         self.inbuf += data
         if self.state == self.CONNECTING_THROUGH_PROXY:
-            if len(self.inbuf) >= 8:
-                if self.inbuf[:2] == b"\x00\x5a":
-                    self.note("proxy handshake successful")
-                    self.state = self.CONNECTED
-                    logger.debug("successfully connected (fd=%d)" % await self.fileno())
-                    self.inbuf = self.inbuf[8:]
-                    self.push_output()
-                else:
-                    logger.debug(
-                        "proxy handshake failed (0x%x)! (fd=%d)"
-                        % (self.inbuf[1], await self.fileno())
-                    )
-                    self.state = self.NOT_CONNECTED
-                    self.close()
-
-    def push_output(self) -> None:
-        self.note("pushed output")
-        self.push_with_producer(self.data_source)
-        self.push_with_producer(CloseSourceProducer(self))
-
-
-class EchoServer(AsyncioChat):
-    def __init__(
-        self,
-        tt: TrafficTester,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-    ):
-        async def _reader_writer() -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-            return (reader, writer)
-
-        AsyncioChat.__init__(self, _reader_writer())
-        self.tt = tt
-
-    @override
-    async def collect_incoming_data(self, data: bytes) -> None:
-        self.push(data)
-
-
-class EchoClient(Source):
-    def __init__(
-        self,
-        tt: TrafficTester,
-        server: HostPortTuple,
-        proxy: Optional[HostPortTuple] = None,
-    ):
-        Source.__init__(self, tt, server, proxy)
-        self.data_checker = DataChecker(tt.data_source.copy())
-        self.testname_check = uniq("check")
-
-    def enote(self, s: str) -> None:
-        self.tt.tests.note(self.testname_check, s)
-
-    @override
-    def get_test_names(self) -> list[str]:
-        return [self.testname, self.testname_check]
-
-    @override
-    async def collect_incoming_data(self, data: bytes) -> None:
-        if self.state == self.CONNECTING_THROUGH_PROXY:
-            await Source.collect_incoming_data(self, data)
-            if self.state == self.CONNECTING_THROUGH_PROXY:
+            if len(self.inbuf) < 8:
                 return
-            data = self.inbuf
-            self.inbuf = b""
-
+            if self.inbuf[:2] != b"\x00\x5a":
+                logger.debug(
+                    "proxy handshake failed (0x%x)! (fd=%d)"
+                    % (self.inbuf[1], await self.fileno())
+                )
+                self.state = self.NOT_CONNECTED
+                self.close()
+                return
+            self.note("proxy handshake successful")
+            self.state = self.CONNECTED
+            logger.debug("successfully connected (fd=%d)" % await self.fileno())
+            self.inbuf = self.inbuf[8:]
+            self.push_output()
+        data = self.inbuf
+        self.inbuf = b""
         self.data_checker.consume(data)
         self.enote("consumed some")
-
         if self.data_checker.succeeded:
             self.enote("successful verification")
             logger.debug("successful verification")
@@ -601,6 +534,11 @@ class EchoClient(Source):
             logger.debug("receive comparison failed")
             self.tt.failure(self.testname_check)
             self.close()
+
+    def push_output(self) -> None:
+        self.note("pushed output")
+        self.push_with_producer(self.data_source)
+        self.push_with_producer(CloseSourceProducer(self))
 
 
 class TrafficTester(object):
@@ -618,22 +556,7 @@ class TrafficTester(object):
         data: bytes = b"",
         timeout: float = 3.0,
         repetitions: int = 1,
-        # TODO make this an enum?
-        chat_type: str = "Echo",
     ):
-        self.client_class: Callable[
-            [TrafficTester, HostPortTuple, Optional[HostPortTuple]], Source
-        ]
-        self.responder_class: Callable[
-            [TrafficTester, asyncio.StreamReader, asyncio.StreamWriter], AsyncioChat
-        ]
-        if chat_type == "Echo":
-            self.client_class = EchoClient
-            self.responder_class = EchoServer
-        else:
-            self.client_class = Source
-            self.responder_class = Sink
-
         self.endpoint = endpoint
         # Don't create the listener until we start running.
         self.listener: Optional[Listener] = None
@@ -645,7 +568,7 @@ class TrafficTester(object):
         # In `add_client` we just store the specifications for the clients.
         # We actually create them after we start running.
         self.client_specs: list[tuple[HostPortTuple, Optional[HostPortTuple]]] = []
-        self.clients: list[Source] = []
+        self.clients: list[EchoClient] = []
 
     def add(self, item: AsyncioChat) -> None:
         """Register a single item."""
@@ -661,7 +584,7 @@ class TrafficTester(object):
     def add_responder(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        sink = self.responder_class(self, reader, writer)
+        sink = EchoServer(self, reader, writer)
         self.responders.append(sink)
         self.add(sink)
 
@@ -682,7 +605,7 @@ class TrafficTester(object):
 
         # start clients
         for cs in self.client_specs:
-            source = self.client_class(self, cs[0], cs[1])
+            source = EchoClient(self, cs[0], cs[1])
             self.clients.append(source)
             self.add(source)
 
