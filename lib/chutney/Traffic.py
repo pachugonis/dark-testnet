@@ -31,6 +31,7 @@ from __future__ import unicode_literals
 
 import abc
 import asyncio
+import asyncio.trsock
 import logging
 import sys
 import socket
@@ -38,7 +39,8 @@ import struct
 import time
 
 from abc import abstractmethod
-from typing import Callable, Optional, cast, Coroutine
+from typeguard import check_type
+from typing import Callable, Optional, Coroutine
 from typing_extensions import override, final
 
 logger = logging.getLogger(__name__)
@@ -172,8 +174,15 @@ class Listener(object):
             raise
         await server.serve_forever()
 
-    @property
-    async def socket(self) -> socket.socket:
+    async def handle_accepted(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        peer = writer.get_extra_info("peername")
+        newsock = writer.get_extra_info("socket")
+        logger.debug("new client from %s (fd=%d)" % (peer, newsock.fileno()))
+        self.tt.add_responder(reader, writer)
+
+    async def _socket(self) -> socket.socket:
         server = await self._server
         sockets = server.sockets
         assert len(sockets) == 1, f"Unexpectedly got {len(sockets)} sockets"
@@ -197,16 +206,8 @@ class Listener(object):
             server = self._server.result()
             await server.wait_closed()
 
-    async def handle_accepted(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        peer = writer.get_extra_info("peername")
-        newsock = writer.get_extra_info("socket")
-        logger.debug("new client from %s (fd=%d)" % (peer, newsock.fileno()))
-        self.tt.add_responder(reader, writer)
-
     async def fileno(self) -> int:
-        socket = await self.socket
+        socket = await self._socket()
         return socket.fileno()
 
 
@@ -371,15 +372,10 @@ class AsyncioChat(object):
         self.push_with_producer(DataSource(data))
 
     @final
-    @property
-    async def socket(self) -> socket.socket:
+    async def _socket(self) -> asyncio.trsock.TransportSocket:
         writer = await self._writer
         s = writer.get_extra_info("socket")
-        # The documentation claims we should get a socket.socket here, but we
-        # actually only get an internal type that *acts* like one.
-        # Sanity-check that we got something socket-like, and return it.
-        assert hasattr(s, 'fileno')
-        return cast(socket.socket, s)
+        return check_type(s, asyncio.trsock.TransportSocket)
 
     @final
     def close(self) -> None:
@@ -419,7 +415,7 @@ class AsyncioChat(object):
 
     @final
     async def fileno(self) -> int:
-        socket = await self.socket
+        socket = await self._socket()
         assert socket is not None
         return socket.fileno()
 
