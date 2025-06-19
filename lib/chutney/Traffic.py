@@ -143,16 +143,16 @@ class TestSuite(object):
         await asyncio.wait(self.tests.values())
 
 
-class AsyncioDispatcher(object):
-    "asyncio-based adapter for asyncore.dispatcher"
+class Listener(object):
+    "A TCP listener, binding, listening and accepting new connections."
 
-    def __init__(self, endpoint: HostPortTuple) -> None:
+    def __init__(self, tt: TrafficTester, endpoint: HostPortTuple):
+        self.tt = tt
         self._endpoint = endpoint
         loop = asyncio.get_running_loop()
         self._server: asyncio.Future[asyncio.Server] = loop.create_future()
         self._task: asyncio.Task[None] = asyncio.create_task(self._run())
 
-    @final
     async def _run(self) -> None:
         async def _accept_cb(
             reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -172,7 +172,6 @@ class AsyncioDispatcher(object):
             raise
         await server.serve_forever()
 
-    @final
     @property
     async def socket(self) -> Optional[socket.socket]:
         server = await self._server
@@ -182,55 +181,24 @@ class AsyncioDispatcher(object):
         assert len(sockets) == 1, f"Unexpectedly got {len(sockets)} sockets"
         return sockets[0]
 
-    @final
     def close(self) -> None:
         """Start closing"""
         # Clean up, and ensure we don't create the server if we haven't already.
         self._task.cancel()
-        if not self._server.done():
-            # Since we already cancelled the task that would have populated
-            # this, and the executor isn't multi-threaded, there's no race
-            # potential of the server getting populated before cancellation.
-            return
-        server = self._server.result()
-        server.close()
+        if self._server.done():
+            server = self._server.result()
+            server.close()
 
-    @final
     async def wait_closed(self) -> None:
         """Wait for close to complete"""
         try:
             await self._task
         except asyncio.CancelledError:
             pass
-        if not self._server.done():
-            # No server to wait for.
-            return
-        server = self._server.result()
-        await server.wait_closed()
+        if self._server.done():
+            server = self._server.result()
+            await server.wait_closed()
 
-    def writable(self) -> bool:
-        return True
-
-    @abstractmethod
-    async def handle_accepted(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        """Handle an accepted connection."""
-        ...
-
-
-class Listener(AsyncioDispatcher):
-    "A TCP listener, binding, listening and accepting new connections."
-
-    def __init__(self, tt: TrafficTester, endpoint: HostPortTuple):
-        AsyncioDispatcher.__init__(self, endpoint)
-        self.tt = tt
-
-    @override
-    def writable(self) -> bool:
-        return False
-
-    @override
     async def handle_accepted(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
