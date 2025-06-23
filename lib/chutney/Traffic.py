@@ -340,6 +340,7 @@ class EchoClient(object):
     def __init__(
         self,
         tt: TrafficTester,
+        name: str,
         server: HostPortTuple,
         proxy: Optional[HostPortTuple] = None,
     ):
@@ -348,13 +349,14 @@ class EchoClient(object):
         self._reader: asyncio.Future[asyncio.StreamReader] = loop.create_future()
         self._writer: asyncio.Future[asyncio.StreamWriter] = loop.create_future()
 
+        self.name = (name,)
         self.data_source = tt.data_source.copy()
         self.proxy = proxy
         self.server = server
         self.tt = tt
-        self.testname = uniq("send-data")
+        self.testname = uniq(f"{name} send-data")
         self.data_checker = DataChecker(tt.data_source.copy())
-        self.testname_check = uniq("check")
+        self.testname_check = uniq(f"{name} check")
         self._run_task: asyncio.Task[None] = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
@@ -523,7 +525,7 @@ class TrafficTester(object):
 
         # In `add_client` we just store the specifications for the clients.
         # We actually create them after we start running.
-        self.client_specs: list[tuple[HostPortTuple, Optional[HostPortTuple]]] = []
+        self.client_specs: list[tuple[str, HostPortTuple, Optional[HostPortTuple]]] = []
         self.clients: list[EchoClient] = []
 
     def add_tests(self, test_names: Iterable[str]) -> None:
@@ -532,9 +534,9 @@ class TrafficTester(object):
             self.tests.add(name)
 
     def add_client(
-        self, server: HostPortTuple, proxy: Optional[HostPortTuple] = None
+        self, name: str, server: HostPortTuple, proxy: Optional[HostPortTuple] = None
     ) -> None:
-        self.client_specs.append((server, proxy))
+        self.client_specs.append((name, server, proxy))
 
     def add_responder(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -563,7 +565,7 @@ class TrafficTester(object):
 
         # start clients
         for cs in self.client_specs:
-            source = EchoClient(self, cs[0], cs[1])
+            source = EchoClient(self, cs[0], cs[1], cs[2])
             self.clients.append(source)
             self.add_tests(source.get_test_names())
 
@@ -640,7 +642,7 @@ def main() -> int:
 
     tt = TrafficTester(bind_to, DATA)
     # Don't use a proxy for self-testing, so that we avoid tor entirely
-    tt.add_client(bind_to)
+    tt.add_client("client", bind_to)
     success = tt.run()
 
     if success:

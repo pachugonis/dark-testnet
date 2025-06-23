@@ -200,7 +200,7 @@ def _configure_exits(
             )
             for _ in range(connection_count):
                 proxy = ("localhost", op.socksport.unwrap())
-                tt.add_client(bind_to, proxy)
+                tt.add_client(f"exit via {op.nick}", bind_to, proxy)
     return exit_path_node_count
 
 
@@ -255,7 +255,7 @@ def _configure_hs(
             )
             for _ in range(connection_count):
                 proxy = ("localhost", client.socksport.unwrap())
-                tt.add_client(hs_bind_to, proxy)
+                tt.add_client(f"{hs.nick} via {client.nick}", hs_bind_to, proxy)
 
     return hs_path_node_count
 
