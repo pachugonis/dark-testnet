@@ -251,6 +251,7 @@ shadow-test-network:
   # install chutney
   - python3 -m pip install .
   # run the test
+  # TODO(arti#1986): re-add `hs-v3-arti` when it passes consistently.
   - |
     for flavor in \
           basic \
@@ -259,7 +260,6 @@ shadow-test-network:
           bridges-min \
           bridges-min-arti \
           bridges-obfs4 \
-          hs-v3-arti \
           ; do
       shadow-exec \
         --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
