@@ -273,7 +273,7 @@ shadow-test-network:
         # Tell the "verify" test to connect to hidden services with *every*
         # client. We want this to e.g. validate cross-compatibility between tor
         # and arti clients and servers.
-        CHUTNEY_HS_MULTI_CLIENT=1
+        export CHUTNEY_HS_MULTI_CLIENT=1
         export PATH=\"$PATH\"
         export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
         tools/test-network.sh \
