@@ -38,7 +38,7 @@ import struct
 import time
 
 from typeguard import check_type
-from typing import Optional
+from typing import Optional, Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -526,11 +526,10 @@ class TrafficTester(object):
         self.client_specs: list[tuple[HostPortTuple, Optional[HostPortTuple]]] = []
         self.clients: list[EchoClient] = []
 
-    def add(self, item: object) -> None:
-        """Register a single item."""
-        if hasattr(item, "get_test_names"):
-            for name in item.get_test_names():
-                self.tests.add(name)
+    def add_tests(self, test_names: Iterable[str]) -> None:
+        """Register tests"""
+        for name in test_names:
+            self.tests.add(name)
 
     def add_client(
         self, server: HostPortTuple, proxy: Optional[HostPortTuple] = None
@@ -542,7 +541,6 @@ class TrafficTester(object):
     ) -> None:
         sink = EchoServer(self, reader, writer)
         self.responders.append(sink)
-        self.add(sink)
 
     def success(self, name: str) -> None:
         """Declare that a single test has passed."""
@@ -567,7 +565,7 @@ class TrafficTester(object):
         for cs in self.client_specs:
             source = EchoClient(self, cs[0], cs[1])
             self.clients.append(source)
-            self.add(source)
+            self.add_tests(source.get_test_names())
 
         # periodically log status in the background
         async def _dump_status() -> None:
