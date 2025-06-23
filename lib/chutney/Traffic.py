@@ -431,6 +431,7 @@ class EchoClient(object):
                 return
             elif self.data_checker.failed:
                 logger.debug("receive comparison failed")
+                self.enote("receive comparison failed")
                 self.tt.failure(self.testname_check)
                 return
 
@@ -621,13 +622,27 @@ class TrafficTester(object):
         # TODO: Unfortunately we still get ADDRINUSE when retrying under shadow.
         for r in self.responders:
             r.abort()
-            await r.wait_closed()
+            try:
+                await r.wait_closed()
+            except Exception as e:
+                logger.info("Failure: Waiting for responder, got exception: %s", e)
+                res = False
         for c in self.clients:
             c.abort()
-            await c.wait_closed()
+            try:
+                await c.wait_closed()
+            except Exception as e:
+                logger.info(
+                    "Failure: Waiting for client %s, got exception: %s", c.name, e
+                )
+                res = False
         if self.listener is not None:
             self.listener.close()
-            await self.listener.wait_closed()
+            try:
+                await self.listener.wait_closed()
+            except Exception as e:
+                logger.info("Failure: Waiting for listener, got exception: %s", e)
+                res = False
 
         return res
 
