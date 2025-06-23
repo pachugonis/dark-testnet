@@ -35,6 +35,7 @@ import logging
 import sys
 import socket
 import struct
+import textwrap
 import time
 
 from typeguard import check_type
@@ -156,12 +157,13 @@ class TestSuite(object):
         return self.not_done == 0
 
     def status(self) -> str:
-        tests = {}
+        lines = []
         for test, fut in self.tests.items():
             fut_str = f"{fut.result()}" if fut.done() else "not done"
-            tests[test] = {"res": fut_str, "note": self.teststatus.get(test)}
-        return "%s: %d/%d/%d" % (
-            tests,
+            lines.append(f"{test}: {fut_str} ({self.teststatus.get(test)})")
+
+        return "%s\nnot-done:%d successes:%d failures:%d" % (
+            "\n".join(lines),
             self.not_done,
             self.successes,
             self.failures,
@@ -577,9 +579,9 @@ class TrafficTester(object):
                 DUMP_TEST_STATUS_INTERVAL = 0.5
                 await asyncio.sleep(DUMP_TEST_STATUS_INTERVAL)
                 logger.debug(
-                    "After %.1fs: Test status: %s",
+                    "After %.1fs: Test status:\n%s",
                     time.time() - start,
-                    self.tests.status(),
+                    textwrap.indent(self.tests.status(), "  "),
                 )
 
         status_task = asyncio.create_task(_dump_status())
@@ -608,7 +610,7 @@ class TrafficTester(object):
             "Done with run(); all_done == %s and failure_count == %s"
             % (self.tests.all_done(), self.tests.failure_count())
         )
-        logger.info("Status:\n%s" % self.tests.status())
+        logger.info("Status:\n%s" % textwrap.indent(self.tests.status(), "  "))
 
         # Ensure all sockets are closed before returning.
         # We especially want to ensure that the listening socket is closed so that
