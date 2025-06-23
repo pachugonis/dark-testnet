@@ -156,8 +156,12 @@ class TestSuite(object):
         return self.not_done == 0
 
     def status(self) -> str:
+        tests = {}
+        for test, fut in self.tests.items():
+            fut_str = f"{fut.result()}" if fut.done() else "not done"
+            tests[test] = {"res": fut_str, "note": self.teststatus.get(test)}
         return "%s: %d/%d/%d" % (
-            self.tests,
+            tests,
             self.not_done,
             self.successes,
             self.failures,
@@ -603,7 +607,7 @@ class TrafficTester(object):
             "Done with run(); all_done == %s and failure_count == %s"
             % (self.tests.all_done(), self.tests.failure_count())
         )
-        logger.info("Status:\n%s" % self.tests.teststatus)
+        logger.info("Status:\n%s" % self.tests.status())
 
         # Ensure all sockets are closed before returning.
         # We especially want to ensure that the listening socket is closed so that
