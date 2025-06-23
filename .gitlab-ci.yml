@@ -262,6 +262,7 @@ shadow-test-network:
           hs-v3-arti \
           ; do
       shadow-exec \
+        --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
         -- \
       bash -c \
       "
