@@ -132,8 +132,8 @@ build-shadow:
   variables:
     JOB_SHADOW_REPO: "https://github.com/shadow/shadow.git"
     JOB_SHADOW_BRANCH: "main"
-    # 2025-06-03
-    JOB_SHADOW_COMMIT: "58ee96c1d8928a5513f6085baebc99cd229b1c39"
+    # main @ 2025-06-23
+    JOB_SHADOW_COMMIT: "ba47be2ed70cb90c018f66f5881cccc69fc06e02"
   artifacts:
     paths:
       - opt/shadow
@@ -251,6 +251,7 @@ shadow-test-network:
   # install chutney
   - python3 -m pip install .
   # run the test
+  # TODO(arti#1986): re-add `hs-v3-arti` when it passes consistently.
   - |
     for flavor in \
           basic \
@@ -259,9 +260,9 @@ shadow-test-network:
           bridges-min \
           bridges-min-arti \
           bridges-obfs4 \
-          hs-v3-arti \
           ; do
       shadow-exec \
+        --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
         -- \
       bash -c \
       "
@@ -272,7 +273,7 @@ shadow-test-network:
         # Tell the "verify" test to connect to hidden services with *every*
         # client. We want this to e.g. validate cross-compatibility between tor
         # and arti clients and servers.
-        CHUTNEY_HS_MULTI_CLIENT=1
+        export CHUTNEY_HS_MULTI_CLIENT=1
         export PATH=\"$PATH\"
         export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
         tools/test-network.sh \

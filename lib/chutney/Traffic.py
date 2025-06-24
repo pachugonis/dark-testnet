@@ -29,17 +29,17 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import abc
+import asyncio
+import asyncio.trsock
 import logging
 import sys
 import socket
 import struct
+import textwrap
 import time
 
-import asyncore
-import asynchat
-
-from typing import Any, Callable, Optional, cast
+from typeguard import check_type
+from typing import Optional, Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -89,12 +89,30 @@ def socks_cmd(addr_port: HostPortTuple) -> bytes:
     return struct.pack("!BBH", ver, cmd, port) + addr + user + dnsname_enc
 
 
+class SocksError(Exception):
+    def __init__(self, code: int):
+        self._code = code
+
+    def __str__(self) -> str:
+        return f"Server returned code {self._code}"
+
+
+async def _do_socks_client_handshake(
+    reader: asyncio.StreamReader, writer: asyncio.StreamWriter, server: HostPortTuple
+) -> None:
+    await writer.drain()
+    writer.write(socks_cmd(server))
+    handshake_response = await reader.readexactly(8)
+    if not handshake_response.startswith(b"\x00\x5a"):
+        raise SocksError(handshake_response[1])
+
+
 class TestSuite(object):
     """Keep a tab on how many tests are pending, how many have failed
     and how many have succeeded."""
 
     def __init__(self) -> None:
-        self.tests: dict[str, str] = {}
+        self.tests: dict[str, asyncio.Future[str]] = {}
         self.not_done = 0
         self.successes = 0
         self.failures = 0
@@ -108,29 +126,29 @@ class TestSuite(object):
         if name not in self.tests:
             logger.debug("Registering %s" % name)
             self.not_done += 1
-            self.tests[name] = "not done"
+            self.tests[name] = asyncio.get_running_loop().create_future()
         else:
             logger.warning("... already registered!")
 
     def success(self, name: str) -> None:
         logger.info("Success for %s" % name)
-        if self.tests[name] == "not done":
-            logger.debug("Succeeded %s" % name)
-            self.tests[name] = "success"
-            self.not_done -= 1
-            self.successes += 1
-        else:
-            logger.warning("... status was %s" % self.tests.get(name))
+        self.tests[name].set_result("success")
+        logger.debug("Succeeded %s" % name)
+        self.not_done -= 1
+        self.successes += 1
 
     def failure(self, name: str) -> None:
         logger.info("Failure for %s" % name)
-        if self.tests[name] == "not done":
-            logger.debug("Failed %s" % name)
-            self.tests[name] = "failure"
-            self.not_done -= 1
-            self.failures += 1
-        else:
-            logger.warning("... status was %s" % self.tests.get(name))
+        self.tests[name].set_result("failure")
+        self.not_done -= 1
+        self.failures += 1
+
+    def wont_complete(self, name: str, note: str) -> None:
+        """Declare that a test won't complete, if it hasn't already"""
+        if self.tests[name].done():
+            return
+        self.failure(name)
+        self.note(name, note)
 
     def failure_count(self) -> int:
         return self.failures
@@ -139,61 +157,89 @@ class TestSuite(object):
         return self.not_done == 0
 
     def status(self) -> str:
-        return "%s: %d/%d/%d" % (
-            self.tests,
+        lines = []
+        for test, fut in self.tests.items():
+            fut_str = f"{fut.result()}" if fut.done() else "not done"
+            lines.append(f"{test}: {fut_str} ({self.teststatus.get(test)})")
+
+        return "%s\nnot-done:%d successes:%d failures:%d" % (
+            "\n".join(lines),
             self.not_done,
             self.successes,
             self.failures,
         )
 
+    async def wait_done(self) -> None:
+        await asyncio.wait(self.tests.values())
 
-class Listener(asyncore.dispatcher):
+
+class Listener(object):
     "A TCP listener, binding, listening and accepting new connections."
 
     def __init__(self, tt: TrafficTester, endpoint: HostPortTuple):
-        asyncore.dispatcher.__init__(self, map=tt.socket_map)
-        self.create_socket(addr_to_family(endpoint[0]), socket.SOCK_STREAM)
-        self.set_reuse_addr()
-        self.bind(endpoint)
-        self.listen(0)
         self.tt = tt
+        self._endpoint = endpoint
+        loop = asyncio.get_running_loop()
+        self._server: asyncio.Future[asyncio.Server] = loop.create_future()
+        self._task: asyncio.Task[None] = asyncio.create_task(self._run())
 
-    def writable(self) -> bool:
-        return False
+    async def _run(self) -> None:
+        async def _accept_cb(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            await self.handle_accepted(reader, writer)
 
-    def handle_accept(self) -> None:
-        # deprecated in python 3.2
-        pair = self.accept()
-        if pair is not None:
-            newsock, endpoint = pair
-            logger.debug(
-                "new client from %s:%s (fd=%d)"
-                % (endpoint[0], endpoint[1], newsock.fileno())
+        try:
+            server = await asyncio.start_server(
+                _accept_cb,
+                host=self._endpoint[0],
+                port=self._endpoint[1],
+                family=addr_to_family(self._endpoint[0]),
             )
-            self.tt.add_responder(newsock)
+            self._server.set_result(server)
+        except Exception as e:
+            self._server.set_exception(e)
+            raise
+        await server.serve_forever()
 
-    def fileno(self) -> int:
-        assert self.socket is not None
-        return self.socket.fileno()
+    async def handle_accepted(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        peer = writer.get_extra_info("peername")
+        newsock = writer.get_extra_info("socket")
+        logger.debug("new client from %s (fd=%d)" % (peer, newsock.fileno()))
+        self.tt.add_responder(reader, writer)
+
+    async def _socket(self) -> socket.socket:
+        server = await self._server
+        sockets = server.sockets
+        assert len(sockets) == 1, f"Unexpectedly got {len(sockets)} sockets"
+        return sockets[0]
+
+    def close(self) -> None:
+        """Start closing"""
+        # Clean up, and ensure we don't create the server if we haven't already.
+        self._task.cancel()
+        if self._server.done():
+            server = self._server.result()
+            server.close()
+
+    async def wait_closed(self) -> None:
+        """Wait for close to complete"""
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        if self._server.done():
+            server = self._server.result()
+            await server.wait_closed()
+
+    async def fileno(self) -> int:
+        socket = await self._socket()
+        return socket.fileno()
 
 
-class AsynChatProducer(abc.ABC):
-    """A Producer as defined in the AsynChat documentation."""
-
-    @abc.abstractmethod
-    def more(self) -> bytes: ...
-
-    """Produce some bytes.
-
-    From <https://docs.python.org/3.11/library/asynchat.html>:
-    "A producer need have only one method, more(), which should return data to
-    be transmitted on the channel. The producer indicates exhaustion (i.e. that
-    it contains no more data) by having its more() method return the empty bytes
-    object."
-    """
-
-
-class DataSource(AsynChatProducer):
+class DataSource(object):
     """A data source generates some number of bytes of data, and then
     returns None.
 
@@ -253,157 +299,105 @@ class DataChecker(object):
                     return
 
 
-class Sink(asynchat.async_chat):
-    "A data sink, reading from its peer and verifying the data."
-
-    def __init__(self, sock: socket.socket, tt: TrafficTester):
-        asynchat.async_chat.__init__(self, sock, map=tt.socket_map)
-        self.set_terminator(None)
-        self.tt = tt
-        self.data_checker = DataChecker(tt.data_source.copy())
-        self.testname = uniq("recv-data")
-
-    def get_test_names(self) -> list[str]:
-        return [self.testname]
-
-    def collect_incoming_data(self, inp: bytes) -> None:
-        # shortcut read when we don't ever expect any data
-
-        logger.debug("successfully received (bytes=%d)" % len(inp))
-        self.data_checker.consume(inp)
-        if self.data_checker.succeeded:
-            logger.debug("successful verification")
-            self.close()
-            self.tt.success(self.testname)
-        elif self.data_checker.failed:
-            logger.debug("receive comparison failed")
-            self.tt.failure(self.testname)
-            self.close()
-
-    def fileno(self) -> int:
-        assert self.socket is not None
-        return self.socket.fileno()
-
-
-class CloseSourceProducer(AsynChatProducer):
-    """Helper: when this producer is returned, a source is successful."""
-
-    def __init__(self, source: Source):
-        self.source = source
-
-    def more(self) -> bytes:
-        self.source.note("Flushed")
-        self.source.sent_ok()
-        return b""
-
-
-class Source(asynchat.async_chat):
-    """A data source, connecting to a TCP server, optionally over a
-    SOCKS proxy, sending data."""
-
-    NOT_CONNECTED = 0
-    CONNECTING = 1
-    CONNECTING_THROUGH_PROXY = 2
-    CONNECTED = 5
-
+class EchoServer(object):
     def __init__(
         self,
         tt: TrafficTester,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ):
+        self.tt = tt
+        self._reader = reader
+        self._writer = writer
+        self._run_task = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        while True:
+            # 64K; this is the default in asynchat.
+            _BUFSIZE = 64 * 1024
+            data = await self._reader.read(_BUFSIZE)
+            if not data:
+                break
+            await self._writer.drain()
+            self._writer.write(data)
+        self._writer.close()
+        await self._writer.wait_closed()
+
+    def abort(self) -> None:
+        """Start closing"""
+        self._run_task.cancel()
+        self._writer.transport.abort()
+        self._writer.close()
+
+    async def wait_closed(self) -> None:
+        """Wait for close to complete"""
+        try:
+            await self._run_task
+        except asyncio.CancelledError:
+            pass
+        await self._writer.wait_closed()
+
+
+class EchoClient(object):
+    def __init__(
+        self,
+        tt: TrafficTester,
+        name: str,
         server: HostPortTuple,
         proxy: Optional[HostPortTuple] = None,
     ):
-        asynchat.async_chat.__init__(self, map=tt.socket_map)
+        # We'll get the reader and writer themselves asynchronously.
+        loop = asyncio.get_running_loop()
+        self._reader: asyncio.Future[asyncio.StreamReader] = loop.create_future()
+        self._writer: asyncio.Future[asyncio.StreamWriter] = loop.create_future()
+
+        self.name = (name,)
         self.data_source = tt.data_source.copy()
-        self.inbuf = b""
         self.proxy = proxy
         self.server = server
         self.tt = tt
-        self.testname = uniq("send-data")
-
-        self.set_terminator(None)
-        dest = self.proxy or self.server
-        self.create_socket(addr_to_family(dest[0]), socket.SOCK_STREAM)
-        logger.debug("socket %d connecting to %r..." % (self.fileno(), dest))
-        self.state = self.CONNECTING
-        self.connect(dest)
-
-    def get_test_names(self) -> list[str]:
-        return [self.testname]
-
-    def sent_ok(self) -> None:
-        self.tt.success(self.testname)
-
-    def note(self, s: str) -> None:
-        self.tt.tests.note(self.testname, s)
-
-    def handle_connect(self) -> None:
-        if self.proxy:
-            self.state = self.CONNECTING_THROUGH_PROXY
-            self.note("connected, sending socks handshake")
-            self.push(socks_cmd(self.server))
-        else:
-            self.state = self.CONNECTED
-            self.push_output()
-
-    def collect_incoming_data(self, data: bytes) -> None:
-        self.inbuf += data
-        if self.state == self.CONNECTING_THROUGH_PROXY:
-            if len(self.inbuf) >= 8:
-                if self.inbuf[:2] == b"\x00\x5a":
-                    self.note("proxy handshake successful")
-                    self.state = self.CONNECTED
-                    logger.debug("successfully connected (fd=%d)" % self.fileno())
-                    self.inbuf = self.inbuf[8:]
-                    self.push_output()
-                else:
-                    logger.debug(
-                        "proxy handshake failed (0x%x)! (fd=%d)"
-                        % (self.inbuf[1], self.fileno())
-                    )
-                    self.state = self.NOT_CONNECTED
-                    self.close()
-
-    def _push_with_producer_interface(self, producer: AsynChatProducer) -> None:
-        # In at least some versions of Python,
-        # async_chat.push_with_producer is incorrectly annotated to require the
-        # `simple_producer` type.
-        # It *should* accept anything that implements the producer interface.
-        # We get around this with an unchecked cast.
-        self.push_with_producer(cast(asynchat.simple_producer, producer))
-
-    def push_output(self) -> None:
-        self.note("pushed output")
-        self._push_with_producer_interface(self.data_source)
-
-        self._push_with_producer_interface(CloseSourceProducer(self))
-
-    def fileno(self) -> int:
-        assert self.socket is not None
-        return self.socket.fileno()
-
-
-class EchoServer(asynchat.async_chat):
-    def __init__(self, sock: socket.socket, tt: TrafficTester):
-        asynchat.async_chat.__init__(self, sock, map=tt.socket_map)
-        self.set_terminator(None)
-        self.tt = tt
-        self.am_closing = False
-
-    def collect_incoming_data(self, data: bytes) -> None:
-        self.push(data)
-
-
-class EchoClient(Source):
-    def __init__(
-        self,
-        tt: TrafficTester,
-        server: HostPortTuple,
-        proxy: Optional[HostPortTuple] = None,
-    ):
-        Source.__init__(self, tt, server, proxy)
+        self.testname = uniq(f"{name} send-data")
         self.data_checker = DataChecker(tt.data_source.copy())
-        self.testname_check = uniq("check")
-        self.am_closing = False
+        self.testname_check = uniq(f"{name} check")
+        self._run_task: asyncio.Task[None] = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        try:
+            dest = self.proxy or self.server
+            logger.debug("connecting to %r...", dest)
+            try:
+                reader, writer = await asyncio.open_connection(
+                    host=dest[0], port=dest[1]
+                )
+                self._reader.set_result(reader)
+                self._writer.set_result(writer)
+            except Exception as e:
+                self._reader.set_exception(e)
+                self._writer.set_exception(e)
+                raise
+            if self.proxy:
+                self.note("connected, sending socks handshake")
+                await _do_socks_client_handshake(reader, writer, self.server)
+                self.note("proxy handshake successful")
+                logger.debug("successfully connected (fd=%d)" % await self.fileno())
+
+            # Start asynchronously handling the reader and writer.
+            validate_incoming_task = asyncio.create_task(self._validate_incoming())
+            write_outgoing_task = asyncio.create_task(self._write_outgoing())
+
+            # Wait for both to complete or one to throw an exception
+            await asyncio.wait(
+                [validate_incoming_task, write_outgoing_task],
+                return_when=asyncio.FIRST_EXCEPTION,
+            )
+            # Close the socket, flushing any pending writes.
+            writer.close()
+            await writer.wait_closed()
+
+        except Exception as e:
+            for t in self.get_test_names():
+                self.tt.wont_complete(t, f"Got exception: {e}")
+            raise
 
     def enote(self, s: str) -> None:
         self.tt.tests.note(self.testname_check, s)
@@ -411,26 +405,101 @@ class EchoClient(Source):
     def get_test_names(self) -> list[str]:
         return [self.testname, self.testname_check]
 
-    def collect_incoming_data(self, data: bytes) -> None:
-        if self.state == self.CONNECTING_THROUGH_PROXY:
-            Source.collect_incoming_data(self, data)
-            if self.state == self.CONNECTING_THROUGH_PROXY:
+    def sent_ok(self) -> None:
+        self.tt.success(self.testname)
+
+    def note(self, s: str) -> None:
+        logger.debug(f"adding note: {s}")
+        self.tt.tests.note(self.testname, s)
+
+    async def _validate_incoming(self) -> None:
+        reader = await self._reader
+        while True:
+            # 64K; this is the default in asynchat.
+            _BUFSIZE = 64 * 1024
+            data = await reader.read(_BUFSIZE)
+            if not data:
+                # We would have already stopped reading earlier if we'd gotten
+                # all the data we expected.
+                self.enote("Unexpected EOF")
+                self.tt.failure(self.testname_check)
                 return
-            data = self.inbuf
-            self.inbuf = b""
+            self.data_checker.consume(data)
+            self.enote("consumed some")
+            if self.data_checker.succeeded:
+                self.enote("successful verification")
+                logger.debug("successful verification")
+                self.tt.success(self.testname_check)
+                return
+            elif self.data_checker.failed:
+                logger.debug("receive comparison failed")
+                self.enote("receive comparison failed")
+                self.tt.failure(self.testname_check)
+                return
 
-        self.data_checker.consume(data)
-        self.enote("consumed some")
+    async def _write_outgoing(self) -> None:
+        writer = await self._writer
+        while True:
+            data = self.data_source.more()
+            if not data:
+                self.note("Flushed")
+                self.sent_ok()
+                # Do *not* shut down the write-end here
+                # (e.g. via `writer.write_eof`). When connected via tor, doing
+                # so results in the circuit getting closed, potentially before
+                # we're done reading.
+                # See
+                # <https://gitlab.torproject.org/tpo/core/torspec/-/issues/138>.
 
-        if self.data_checker.succeeded:
-            self.enote("successful verification")
-            logger.debug("successful verification")
-            self.close()
-            self.tt.success(self.testname_check)
-        elif self.data_checker.failed:
-            logger.debug("receive comparison failed")
-            self.tt.failure(self.testname_check)
-            self.close()
+                # There is no straight-forward "flush all the buffered data" API
+                # other than closing the socket. `StreamWriter.drain` only
+                # ensures that data is flushed until some low watermark is
+                # reached. So we set that watermark to 0 and *then* call
+                # `drain`.
+                #
+                # * discussion:
+                #   <https://discuss.python.org/t/completely-flushing-a-streamwriter/9621>
+                # * drain:
+                #   <https://docs.python.org/3/library/asyncio-stream.html#asyncio.StreamWriter.drain>
+                # * set_write_buffer_limits:
+                #   <https://docs.python.org/3/library/asyncio-protocol.html#asyncio.WriteTransport.set_write_buffer_limits>
+                #
+                # This *might* not be necessary. I suspect the framework
+                # actually feeds buffered data to the kernel as quickly as the
+                # kernel will take it, and waiting on `drain` is just to apply
+                # back-pressure. Still, without some documented promise of that
+                # behavior, let's force the issue.
+                writer.transport.set_write_buffer_limits(0, 0)
+                await writer.drain()
+
+                break
+            await writer.drain()
+            writer.write(data)
+
+    async def _socket(self) -> asyncio.trsock.TransportSocket:
+        writer = await self._writer
+        s = writer.get_extra_info("socket")
+        return check_type(s, asyncio.trsock.TransportSocket)
+
+    def abort(self) -> None:
+        self._run_task.cancel()
+        if self._writer.done():
+            writer = self._writer.result()
+            writer.transport.abort()
+            writer.close()
+
+    async def wait_closed(self) -> None:
+        try:
+            await self._run_task
+        except asyncio.CancelledError:
+            pass
+        if self._writer.done():
+            await self._writer.result().wait_closed()
+
+    async def fileno(self) -> int:
+        socket = await self._socket()
+        assert socket is not None
+        return socket.fileno()
 
 
 class TrafficTester(object):
@@ -448,49 +517,35 @@ class TrafficTester(object):
         data: bytes = b"",
         timeout: float = 3.0,
         repetitions: int = 1,
-        # TODO make this an enum?
-        chat_type: str = "Echo",
     ):
-        self.client_class: Callable[
-            [TrafficTester, HostPortTuple, Optional[HostPortTuple]], Source
-        ]
-        self.responder_class: Callable[
-            [socket.socket, TrafficTester], asynchat.async_chat
-        ]
-        if chat_type == "Echo":
-            self.client_class = EchoClient
-            self.responder_class = EchoServer
-        else:
-            self.client_class = Source
-            self.responder_class = Sink
-
-        self.socket_map: dict[Any, Any] = {}
-
-        self.listener = Listener(self, endpoint)
+        self.endpoint = endpoint
+        # Don't create the listener until we start running.
+        self.listener: Optional[Listener] = None
         self.timeout = timeout
         self.tests = TestSuite()
         self.data_source = DataSource(data, repetitions)
+        self.responders: list[EchoServer] = []
 
-        # sanity checks
-        logger.debug("listener fd=%d" % self.listener.fileno())
+        # In `add_client` we just store the specifications for the clients.
+        # We actually create them after we start running.
+        self.client_specs: list[tuple[str, HostPortTuple, Optional[HostPortTuple]]] = []
+        self.clients: list[EchoClient] = []
 
-    def add(self, item: asynchat.async_chat) -> None:
-        """Register a single item."""
-        # We used to hold on to these items for their fds, but now
-        # asyncore manages them for us.
-        if hasattr(item, "get_test_names"):
-            for name in item.get_test_names():
-                self.tests.add(name)
+    def add_tests(self, test_names: Iterable[str]) -> None:
+        """Register tests"""
+        for name in test_names:
+            self.tests.add(name)
 
     def add_client(
-        self, server: HostPortTuple, proxy: Optional[HostPortTuple] = None
+        self, name: str, server: HostPortTuple, proxy: Optional[HostPortTuple] = None
     ) -> None:
-        source = self.client_class(self, server, proxy)
-        self.add(source)
+        self.client_specs.append((name, server, proxy))
 
-    def add_responder(self, socket: socket.socket) -> None:
-        sink = self.responder_class(socket, self)
-        self.add(sink)
+    def add_responder(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        sink = EchoServer(self, reader, writer)
+        self.responders.append(sink)
 
     def success(self, name: str) -> None:
         """Declare that a single test has passed."""
@@ -500,30 +555,101 @@ class TrafficTester(object):
         """Declare that a single test has failed."""
         self.tests.failure(name)
 
-    def run(self) -> bool:
-        start = now = time.time()
-        end = time.time() + self.timeout
-        DUMP_TEST_STATUS_INTERVAL = 0.5
-        dump_at = start + DUMP_TEST_STATUS_INTERVAL
-        while now < end and not self.tests.all_done():
-            # run only one iteration at a time, with a nice short timeout, so we
-            # can actually detect completion and timeouts.
-            asyncore.loop(5.0, False, self.socket_map, 1)
-            now = time.time()
-            if now > dump_at:
-                logger.debug("Test status: %s" % self.tests.status())
-                dump_at += DUMP_TEST_STATUS_INTERVAL
+    def wont_complete(self, name: str, note: str) -> None:
+        """Declare that a test won't complete, if it hasn't already"""
+        self.tests.wont_complete(name, note)
 
+    async def _run(self) -> bool:
+        # This does the real work of running the tests.
+
+        # start listener
+        self.listener = Listener(self, self.endpoint)
+        logger.debug("listener fd=%d" % (await self.listener.fileno()))
+
+        # start clients
+        for cs in self.client_specs:
+            source = EchoClient(self, cs[0], cs[1], cs[2])
+            self.clients.append(source)
+            self.add_tests(source.get_test_names())
+
+        # periodically log status in the background
+        async def _dump_status() -> None:
+            start = time.time()
+            while True:
+                DUMP_TEST_STATUS_INTERVAL = 0.5
+                await asyncio.sleep(DUMP_TEST_STATUS_INTERVAL)
+                logger.debug(
+                    "After %.1fs: Test status:\n%s",
+                    time.time() - start,
+                    textwrap.indent(self.tests.status(), "  "),
+                )
+
+        status_task = asyncio.create_task(_dump_status())
+        await self.tests.wait_done()
+        status_task.cancel()
+
+        assert self.tests.all_done()
+        return self.tests.failure_count() == 0
+
+    async def _run_with_timeout(self) -> bool:
+        # Inner async version of `run`. To ensure we correctly enforce the
+        # timeout, any `await`s here should have a timeout or otherwise
+        # ~guarantee that they won't take long.
+
+        # In case self._run doesn't complete, we should always return failure.
+        # e.g. if instead we checked `self.tests.failure_count()` ourselves
+        # here, we might mistakenly report success if `self._run`` timed out
+        # before it had finished adding all of the tests.
+        res = False
+
+        try:
+            res = await asyncio.wait_for(self._run(), self.timeout)
+        except asyncio.TimeoutError:
+            logger.info("Timed out")
         logger.debug(
             "Done with run(); all_done == %s and failure_count == %s"
             % (self.tests.all_done(), self.tests.failure_count())
         )
+        logger.info("Status:\n%s" % textwrap.indent(self.tests.status(), "  "))
 
-        logger.info("Status:\n%s" % self.tests.teststatus)
+        # Ensure all sockets are closed before returning.
+        # We especially want to ensure that the listening socket is closed so that
+        # we can retry without getting EADDRINUSE.
+        #
+        # shadow currently erroneously doesn't consider the listening port free
+        # again until all child sockets are closed too, so we ensure those are
+        # all closed too.
+        # <https://github.com/shadow/shadow/issues/3563>
+        #
+        # TODO: Unfortunately we still get ADDRINUSE when retrying under shadow.
+        for r in self.responders:
+            r.abort()
+            try:
+                await r.wait_closed()
+            except Exception as e:
+                logger.info("Failure: Waiting for responder, got exception: %s", e)
+                res = False
+        for c in self.clients:
+            c.abort()
+            try:
+                await c.wait_closed()
+            except Exception as e:
+                logger.info(
+                    "Failure: Waiting for client %s, got exception: %s", c.name, e
+                )
+                res = False
+        if self.listener is not None:
+            self.listener.close()
+            try:
+                await self.listener.wait_closed()
+            except Exception as e:
+                logger.info("Failure: Waiting for listener, got exception: %s", e)
+                res = False
 
-        self.listener.close()
+        return res
 
-        return self.tests.all_done() and self.tests.failure_count() == 0
+    def run(self) -> bool:
+        return asyncio.run(self._run_with_timeout())
 
 
 def main() -> int:
@@ -533,7 +659,7 @@ def main() -> int:
 
     tt = TrafficTester(bind_to, DATA)
     # Don't use a proxy for self-testing, so that we avoid tor entirely
-    tt.add_client(bind_to)
+    tt.add_client("client", bind_to)
     success = tt.run()
 
     if success:

@@ -30,12 +30,6 @@ license = {file = "LICENSE"}
 dependencies = [
   'typeguard==4.3.0',
   'tomli-w~=1.2.0',
-
-  # drop-in replacements for the standard library's asyncore and asynchat,
-  # which were removed after python 3.11.
-  # See <https://gitlab.torproject.org/tpo/core/chutney/-/issues/40019>.
-  'pyasyncore==1.0.4;python_version>"3.11"',
-  'pyasynchat==1.0.4;python_version>"3.11"',
 ]
 
 [project.urls]
