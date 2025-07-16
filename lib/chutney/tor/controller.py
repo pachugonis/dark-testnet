@@ -293,6 +293,7 @@ class LocalNodeController(TorNet.NodeController):
                 "no_logfile",
                 "There is no logfile yet.",
             )
+            return
         status = DirInfoStatus(
             percent_or_code=DirInfoStatusCode.NO_RECORDS,
             keyword="no_message",
