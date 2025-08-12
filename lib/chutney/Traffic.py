@@ -450,8 +450,7 @@ class EchoClient(object):
         while True:
             data = self.data_source.more()
             if not data:
-                self.note("Flushed")
-                self.sent_ok()
+                self.note("Flushing")
                 # Do *not* shut down the write-end here
                 # (e.g. via `writer.write_eof`). When connected via tor, doing
                 # so results in the circuit getting closed, potentially before
@@ -479,6 +478,8 @@ class EchoClient(object):
                 # behavior, let's force the issue.
                 writer.transport.set_write_buffer_limits(0, 0)
                 await writer.drain()
+                self.note("Flushed")
+                self.sent_ok()
 
                 break
             await writer.drain()
