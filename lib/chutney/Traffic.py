@@ -483,6 +483,7 @@ class EchoClient(object):
                 break
             await writer.drain()
             writer.write(data)
+            self.note(f"wrote some. remaining:{self.data_source.bytes_remaining()}")
 
     async def _socket(self) -> asyncio.trsock.TransportSocket:
         writer = await self._writer
