@@ -263,6 +263,9 @@ class DataSource(object):
 
         return b""
 
+    def bytes_remaining(self) -> int:
+        return len(self.data) * self.repetitions
+
 
 class DataChecker(object):
     """A data checker verifies its input against bytes in a stream."""
@@ -297,6 +300,9 @@ class DataChecker(object):
                     else:
                         self.succeeded = True
                     return
+
+    def bytes_remaining(self) -> int:
+        return len(self.pending) + self.source.bytes_remaining()
 
 
 class EchoServer(object):
@@ -425,7 +431,9 @@ class EchoClient(object):
                 self.tt.failure(self.testname_check)
                 return
             self.data_checker.consume(data)
-            self.enote("consumed some")
+            self.enote(
+                f"consumed some. remaining:{self.data_checker.bytes_remaining()}"
+            )
             if self.data_checker.succeeded:
                 self.enote("successful verification")
                 logger.debug("successful verification")
@@ -442,8 +450,7 @@ class EchoClient(object):
         while True:
             data = self.data_source.more()
             if not data:
-                self.note("Flushed")
-                self.sent_ok()
+                self.note("Flushing")
                 # Do *not* shut down the write-end here
                 # (e.g. via `writer.write_eof`). When connected via tor, doing
                 # so results in the circuit getting closed, potentially before
@@ -471,10 +478,13 @@ class EchoClient(object):
                 # behavior, let's force the issue.
                 writer.transport.set_write_buffer_limits(0, 0)
                 await writer.drain()
+                self.note("Flushed")
+                self.sent_ok()
 
                 break
             await writer.drain()
             writer.write(data)
+            self.note(f"wrote some. remaining:{self.data_source.bytes_remaining()}")
 
     async def _socket(self) -> asyncio.trsock.TransportSocket:
         writer = await self._writer
