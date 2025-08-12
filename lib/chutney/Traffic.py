@@ -263,6 +263,9 @@ class DataSource(object):
 
         return b""
 
+    def bytes_remaining(self) -> int:
+        return len(self.data) * self.repetitions
+
 
 class DataChecker(object):
     """A data checker verifies its input against bytes in a stream."""
@@ -297,6 +300,9 @@ class DataChecker(object):
                     else:
                         self.succeeded = True
                     return
+
+    def bytes_remaining(self) -> int:
+        return len(self.pending) + self.source.bytes_remaining()
 
 
 class EchoServer(object):
@@ -425,7 +431,9 @@ class EchoClient(object):
                 self.tt.failure(self.testname_check)
                 return
             self.data_checker.consume(data)
-            self.enote("consumed some")
+            self.enote(
+                f"consumed some. remaining:{self.data_checker.bytes_remaining()}"
+            )
             if self.data_checker.succeeded:
                 self.enote("successful verification")
                 logger.debug("successful verification")
