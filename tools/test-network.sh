@@ -308,7 +308,7 @@ fi
 
 TOOLS_DIR=$(dirname "$0")
 
-# mandatory: $CHUTNEY_PATH is the path to the chutney launch script
+# mandatory: $CHUTNEY_PATH is the path to the chutney directory
 # if it's not set:
 #  - if $PWD looks like a chutney directory, set it to $PWD, or
 #  - set it based on $TOR_DIR, expecting chutney to be next to tor, or
@@ -316,18 +316,18 @@ TOOLS_DIR=$(dirname "$0")
 if [ ! -d "$CHUTNEY_PATH" ] || [ ! -x "$CHUTNEY_PATH/chutney" ] || \
     [ ! -f "$CHUTNEY_PATH/chutney" ]; then
     if [ -x "$PWD/chutney" ] && [ -f "$PWD/chutney" ]; then
-        $ECHO "$myname: \$CHUTNEY_PATH not valid, trying \$PWD"
+        $ECHO "$myname: \$CHUTNEY_PATH is not a valid chutney directory, trying \$PWD"
         export CHUTNEY_PATH="$PWD"
     elif [ -d "$TOOLS_DIR/.." ] && \
          [ -x "$TOOLS_DIR)/../chutney" ] && \
          [ -f "$TOOLS_DIR/../chutney" ]; then
-        $ECHO "$myname: \$CHUTNEY_PATH not valid, using this script's location"
+        $ECHO "$myname: \$CHUTNEY_PATH is not a valid chutney directory, using this script's location"
         export CHUTNEY_PATH="$TOOLS_DIR/.."
     elif [ -d "$TOR_DIR" ] && \
 	 [ -d "$TOR_DIR/../chutney" ] && \
          [ -x "$TOR_DIR/../chutney/chutney" ] && \
 	 [ -f "$TOR_DIR/../chutney/chutney" ]; then
-        $ECHO "$myname: \$CHUTNEY_PATH not valid, trying \$TOR_DIR/../chutney"
+        $ECHO "$myname: \$CHUTNEY_PATH is not a valid chutney directory, trying \$TOR_DIR/../chutney"
         export CHUTNEY_PATH="$TOR_DIR/../chutney"
     else
         # TODO: work out how to package and install chutney,
