@@ -52,7 +52,13 @@ from chutney.Util import (
 )
 from chutney.network_tests import NetworkTestFailure
 from collections.abc import Collection
-from importlib.abc import Traversable
+
+try:
+    # Added in Python 3.11
+    from importlib.resources.abc import Traversable
+except ImportError:
+    # Deprecated since Python 3.12
+    from importlib.abc import Traversable
 from typeguard import check_type
 
 import chutney.arti.config
