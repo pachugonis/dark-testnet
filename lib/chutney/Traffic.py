@@ -197,7 +197,7 @@ class Listener(object):
                 family=addr_to_family(self._endpoint[0]),
             )
             self._server.set_result(server)
-        except Exception as e:
+        except BaseException as e:
             self._server.set_exception(e)
             raise
         await server.serve_forever()
@@ -220,17 +220,13 @@ class Listener(object):
         """Start closing"""
         # Clean up, and ensure we don't create the server if we haven't already.
         self._task.cancel()
-        if self._server.done():
+        if self._server.done() and self._server.exception() is None:
             server = self._server.result()
             server.close()
 
     async def wait_closed(self) -> None:
-        """Wait for close to complete"""
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        if self._server.done():
+        """Wait for listening socket to be closed"""
+        if self._server.done() and self._server.exception() is None:
             server = self._server.result()
             await server.wait_closed()
 
@@ -337,10 +333,6 @@ class EchoServer(object):
 
     async def wait_closed(self) -> None:
         """Wait for close to complete"""
-        try:
-            await self._run_task
-        except asyncio.CancelledError:
-            pass
         await self._writer.wait_closed()
 
 
@@ -377,7 +369,7 @@ class EchoClient(object):
                 )
                 self._reader.set_result(reader)
                 self._writer.set_result(writer)
-            except Exception as e:
+            except BaseException as e:
                 self._reader.set_exception(e)
                 self._writer.set_exception(e)
                 raise
@@ -493,17 +485,13 @@ class EchoClient(object):
 
     def abort(self) -> None:
         self._run_task.cancel()
-        if self._writer.done():
+        if self._writer.done() and self._writer.exception() is None:
             writer = self._writer.result()
             writer.transport.abort()
             writer.close()
 
     async def wait_closed(self) -> None:
-        try:
-            await self._run_task
-        except asyncio.CancelledError:
-            pass
-        if self._writer.done():
+        if self._writer.done() and self._writer.exception is None:
             await self._writer.result().wait_closed()
 
     async def fileno(self) -> int:
@@ -634,27 +622,13 @@ class TrafficTester(object):
         # TODO: Unfortunately we still get ADDRINUSE when retrying under shadow.
         for r in self.responders:
             r.abort()
-            try:
-                await r.wait_closed()
-            except Exception as e:
-                logger.info("Failure: Waiting for responder, got exception: %s", e)
-                res = False
+            await r.wait_closed()
         for c in self.clients:
             c.abort()
-            try:
-                await c.wait_closed()
-            except Exception as e:
-                logger.info(
-                    "Failure: Waiting for client %s, got exception: %s", c.name, e
-                )
-                res = False
+            await c.wait_closed()
         if self.listener is not None:
             self.listener.close()
-            try:
-                await self.listener.wait_closed()
-            except Exception as e:
-                logger.info("Failure: Waiting for listener, got exception: %s", e)
-                res = False
+            await self.listener.wait_closed()
 
         return res
 
