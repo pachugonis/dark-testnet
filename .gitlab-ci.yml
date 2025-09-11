@@ -351,8 +351,8 @@ python-lint:
   variables:
     # Most recent as of 2024-10-24
     BLACK_VERSION: 24.10.0
-    # Most recent as of 2024-10-3
-    MYPY_VERSION: 1.11.2
+    # Most recent as of 2025-09-11
+    MYPY_VERSION: 1.17.1
     # Most recent as of 2024-10-28
     FLAKE8_VERSION: 7.1.1
   script:
