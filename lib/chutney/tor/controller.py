@@ -451,9 +451,7 @@ class LocalNodeController(TorNet.NodeController):
 
     def combineDirInfoStatuses(
         self,
-        dir_status_list: list[
-            Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]
-        ],
+        dir_status_list: list[tuple[DirInfoStatusCode, Collection[DirFormat]]],
         best: bool = True,
         ignore_missing: bool = False,
     ) -> Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]:
@@ -507,9 +505,7 @@ class LocalNodeController(TorNet.NodeController):
 
     def summariseCacheDirInfoStatus(
         self,
-        dir_status: dict[
-            DirFormat, Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]
-        ],
+        dir_status: dict[DirFormat, tuple[DirInfoStatusCode, Collection[DirFormat]]],
         to_dir_server: int,
         to_bridge_client: int,
     ) -> Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]:
@@ -637,7 +633,7 @@ class LocalNodeController(TorNet.NodeController):
 
     def getNodeDirInfoStatusList(
         self,
-    ) -> Optional[dict[str, Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]]]:
+    ) -> Optional[dict[str, tuple[DirInfoStatusCode, Collection[DirFormat]]]]:
         """Look through the directories on each node, and work out if
         this node is in that directory.
 
@@ -660,35 +656,31 @@ class LocalNodeController(TorNet.NodeController):
             # Clients don't appear in any consensus
             return None
         dir_status_summaries: dict[
-            str, Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]
+            str, tuple[DirInfoStatusCode, Collection[DirFormat]]
         ] = dict()
         for node in self._network._nodes:
             if node._config.launch_phase > TorNet.CUR_LAUNCH_PHASE:
                 continue
             dir_statuses: dict[
                 DirFormat,
-                Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]],
+                tuple[DirInfoStatusCode, Collection[DirFormat]],
             ] = dict()
             for dir_format in self._node.expected_in_dir_formats(node):
                 status = node._controller.check_node_in_dirinfo(dir_format, self._node)
                 if status == DirInfoStatusCode.NOT_YET_IMPLEMENTED:
                     continue
                 dir_statuses[dir_format] = (status, {dir_format})
-            dir_status_summaries[node.nick] = (
-                self.summariseCacheDirInfoStatus(
-                    dir_statuses, node._config.relay, node._config.bridgeclient
-                )
-                if len(dir_statuses)
-                else None
+            summary = self.summariseCacheDirInfoStatus(
+                dir_statuses, node._config.relay, node._config.bridgeclient
             )
+            if summary is not None:
+                dir_status_summaries[node.nick] = summary
         assert len(dir_status_summaries)
         return dir_status_summaries
 
     def summariseNodeDirInfoStatus(
         self,
-        dir_status: dict[
-            str, Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]]
-        ],
+        dir_status: dict[str, tuple[DirInfoStatusCode, Collection[DirFormat]]],
     ) -> Optional[
         dict[
             Union[DirInfoStatusCode, str],
