@@ -239,16 +239,25 @@ class LocalArtiNodeController(TorNet.NodeController):
         cur = con.cursor()
         # Get path to most recent microdesc consensus file.
         # TODO: verify that we're within the valid and fresh times?
-        res = cur.execute(
-            """
-            SELECT filename
-            FROM Consensuses
-                JOIN ExtDocs ON Consensuses.digest=ExtDocs.digest
-            WHERE Consensuses.flavor="microdesc"
-            ORDER BY Consensuses.valid_until DESC
-            LIMIT 1
-            """
-        )
+        try:
+            res = cur.execute(
+                """
+                SELECT filename
+                FROM Consensuses
+                    JOIN ExtDocs ON Consensuses.digest=ExtDocs.digest
+                WHERE Consensuses.flavor="microdesc"
+                ORDER BY Consensuses.valid_until DESC
+                LIMIT 1
+                """
+            )
+        except sqlite3.OperationalError as oe:
+            # TODO: use sqlite_errorcode when we require python >= 3.11
+            # https://docs.python.org/3/library/sqlite3.html#sqlite3.Error.sqlite_errorcode
+            if str(oe).startswith("no such table"):
+                # Table hasn't been created yet
+                logging.debug("Looks like no such table Consensuses yet")
+                return None
+            raise
         filename = res.fetchone()
         con.close()
         if filename is None:
@@ -293,12 +302,22 @@ class LocalArtiNodeController(TorNet.NodeController):
             )
             if dir_pattern is None:
                 return DirInfoStatusCode.NOT_YET_IMPLEMENTED
-            for row in cur.execute(
-                """
-                SELECT contents
-                FROM Microdescs
-                """
-            ):
+            try:
+                res = cur.execute(
+                    """
+                    SELECT contents
+                    FROM Microdescs
+                    """
+                )
+            except sqlite3.OperationalError as oe:
+                # TODO: use sqlite_errorcode when we require python >= 3.11
+                # https://docs.python.org/3/library/sqlite3.html#sqlite3.Error.sqlite_errorcode
+                if str(oe).startswith("no such table"):
+                    # Table hasn't been created yet
+                    logging.debug("Looks like no such table Microdescs yet")
+                    return DirInfoStatusCode.MISSING_FILE
+                raise
+            for row in res:
                 for line in row[0].splitlines():
                     if re.search(dir_pattern, line):
                         return DirInfoStatusCode.SUCCESS
