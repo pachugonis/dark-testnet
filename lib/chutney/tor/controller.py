@@ -485,7 +485,7 @@ class LocalNodeController(TorNet.NodeController):
             if new_status_code == old_status_code:
                 # We want to know all the flavours that have an
                 # equal status, not just the latest one
-                combined_flav = old_flav.union(new_flav)
+                combined_flav = set(old_flav).union(new_flav)
                 dir_status = (old_status_code, combined_flav)
             elif old_status_code == DirInfoStatusCode.MISSING_FILE and ignore_missing:
                 # use the new status, which can't be MISSING_FILE_CODE,
