@@ -586,12 +586,12 @@ class LocalNodeController(TorNet.NodeController):
             # Bridge clients fetch bridge descriptors directly from bridges
             # Bridge clients fetch relay descriptors after fetching the consensus
             desc_all: Optional[tuple[DirInfoStatusCode, Collection[DirFormat]]] = (
-                dir_status[DirFormat.DESC_ALTS]
+                dir_status.get(DirFormat.DESC_ALTS)
             )
         elif relay_to_bridge_client:
             # Bridge clients usually fetch microdesc consensuses and
             # microdescs, but some fetch ns consensuses and full descriptors
-            s = dir_status[DirFormat.MD_ALTS]
+            s = dir_status.get(DirFormat.MD_ALTS)
             if s is None:
                 raise chutney.errors.ChutneyInternalError(
                     "Unexpectedly missing md_alts"
@@ -600,11 +600,11 @@ class LocalNodeController(TorNet.NodeController):
             if md_status_code == DirInfoStatusCode.MISSING_FILE:
                 # If there are no md files, we're using descs for relays and
                 # bridges
-                desc_all = dir_status[DirFormat.DESC_ALTS]
+                desc_all = dir_status.get(DirFormat.DESC_ALTS)
             else:
                 # If there are md files, we're using mds for relays, and descs
                 # for bridges, but we're looking for a relay right now
-                desc_all = dir_status[DirFormat.MD_ALTS]
+                desc_all = dir_status.get(DirFormat.MD_ALTS)
         elif to_dir_server:
             desc_all = self.combineDirInfoStatuses(
                 values_for_keys(dir_status, [DirFormat.DESC_ALTS, DirFormat.MD_ALTS]),
