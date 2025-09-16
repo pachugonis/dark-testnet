@@ -176,8 +176,8 @@ build-arti:
   variables:
     JOB_ARTI_REPO: "https://gitlab.torproject.org/tpo/core/arti.git"
     # This can be a tag or commit-hash.
-    # main @ 2025-06-11.
-    JOB_ARTI_REV: "0a677a9b42558f23ceb1d46e6ee1d4251bd8acd7"
+    # main @ 2025-09-16.
+    JOB_ARTI_REV: "e67444c5d417d3a527ba282eee8c18d9e1e32c2d"
     # comma-separated list of features to build with
     JOB_ARTI_FEATURES: onion-service-service
     JOB_ARTI_PROFILE: "quicktest"
