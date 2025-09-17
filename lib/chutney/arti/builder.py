@@ -16,6 +16,7 @@ import chutney.arti.config as arti_config
 
 from chutney.errors import (
     ChutneyError,
+    ChutneyUnimplementedError,
     ChutneyInternalError,
 )
 from chutney.Util import (
@@ -86,6 +87,10 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             }
         )
         if self._node.is_hs:
+            if self._node._config.hs_restricted_discovery:
+                raise ChutneyUnimplementedError(
+                    "restricted-discovery hidden services unimplemented"
+                )
             ip = (
                 self._node._config.ip.as_optional()
                 or self._node._config.ipv6_addr.as_optional()

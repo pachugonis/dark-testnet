@@ -647,6 +647,8 @@ class NodeConfig:
     hs_directory: str = "hidden_service"
     # if creating a hidden service, whether to configure it as single-hop.
     hs_singlehop: bool = False
+    # if creating a hidden service, whether to enable restricted discovery.
+    hs_restricted_discovery: bool = False
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
