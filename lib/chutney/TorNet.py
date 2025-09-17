@@ -649,6 +649,11 @@ class NodeConfig:
     hs_singlehop: bool = False
     # if creating a hidden service, whether to enable restricted discovery.
     hs_restricted_discovery: bool = False
+    # generate restricted-discovery client keys and register them with
+    # hidden services having these tags.
+    hs_client_restricted_discovery_server_tags: set[str] = dataclasses.field(
+        default_factory=set
+    )
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
