@@ -218,4 +218,29 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def get_hs_client_pubkey(self, hs_address: str) -> str:
         # TODO: use `arti hsc key get`, as per
         # <https://gitlab.torproject.org/tpo/core/arti/-/blob/main/doc/hsc.md?ref_type=heads#generating-a-service-discovery-key>.
-        raise ChutneyUnimplementedError("Generation of hidden service restricted discovery client keys")
+        sp = subprocess.run(
+            [
+                self._node._config.arti,
+                # Only available as a flag, not in config file.
+                "--disable-fs-permission-checks",
+                f"--config={str(self._node.torrc_path)}",
+                "--log-level=warn",
+                "hsc",
+                "key",
+                "get",
+                "--batch",
+                "--output=-",
+            ],
+            input=hs_address,
+            capture_output=True,
+            text=True,
+        )
+        if sp.returncode != 0:
+            logger.warning(
+                f"Couldn't get client pubkey.\n\tstdout:{sp.stdout}\n\tstderr:{sp.stderr}"
+            )
+            logger.warning("hint: was arti compiled with feature 'hsc'?")
+            raise ChutneyError("Couldn't generate hs client pubkey")
+        res = sp.stdout.strip()
+        logger.debug("%s hs client key for %s: %s", self._node.nick, hs_address, res)
+        return res
