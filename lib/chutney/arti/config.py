@@ -55,22 +55,41 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                 for auth in net.authorities
                 if auth.alt_dir_auth
             ],
-            "authorities": [
-                {
-                    "name": auth.nick,
-                    "v3ident": auth.v3id,
-                    "dirports": (
-                        [f"{auth.ipv4}:{auth.dirport}"]
-                        + (
-                            [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
-                            if auth.ipv6.is_some()
-                            else []
-                        )
-                    ),
-                }
-                for auth in net.authorities
-                if auth.alt_dir_auth
-            ],
+            "authorities": {
+                "v3idents": [
+                    auth.v3id for auth in net.authorities if auth.alt_dir_auth
+                ],
+                "uploads": [
+                    [f"{auth.ipv4}:{auth.dirport}"]
+                    + (
+                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        if auth.ipv6.is_some()
+                        else []
+                    )
+                    for auth in net.authorities
+                    if auth.alt_dir_auth
+                ],
+                "downloads": [
+                    [f"{auth.ipv4}:{auth.dirport}"]
+                    + (
+                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        if auth.ipv6.is_some()
+                        else []
+                    )
+                    for auth in net.authorities
+                    if auth.alt_dir_auth
+                ],
+                "votes": [
+                    [f"{auth.ipv4}:{auth.dirport}"]
+                    + (
+                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        if auth.ipv6.is_some()
+                        else []
+                    )
+                    for auth in net.authorities
+                    if auth.alt_dir_auth
+                ],
+            },
         },
         "bridges": {
             "bridges": [
