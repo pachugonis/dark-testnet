@@ -213,3 +213,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             )
             return Option(None)
         return Option(sp.stdout.strip())
+
+    @override
+    def get_hs_client_pubkey(self, hs_address: str) -> str:
+        # TODO: use `arti hsc key get`, as per
+        # <https://gitlab.torproject.org/tpo/core/arti/-/blob/main/doc/hsc.md?ref_type=heads#generating-a-service-discovery-key>.
+        raise ChutneyUnimplementedError("Generation of hidden service restricted discovery client keys")

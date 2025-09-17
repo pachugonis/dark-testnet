@@ -14,7 +14,7 @@ from typing_extensions import override
 import chutney
 import chutney.TorNet as TorNet
 
-from chutney.errors import ChutneyError, ChutneyInternalError
+from chutney.errors import ChutneyError, ChutneyInternalError, ChutneyUnimplementedError
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     launch_process,
@@ -522,3 +522,16 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 f"Unexpectedly empty hostname in {hs_hostname_file}"
             )
         return Option(hostname)
+
+    @override
+    def get_hs_client_pubkey(self, hs_address: str) -> str:
+        # Our docs for expected output:
+        # https://2019.www.torproject.org/docs/tor-manual-dev.html.en#_client_authorization
+        #
+        # We don't seem to have our own instructions for actually generating such a key, or the
+        # public-key descriptor.
+        # This looks fairly promising, though:
+        # <https://tor.stackexchange.com/questions/19221/how-to-setup-client-authorization-for-v3-onion-services>
+        raise ChutneyUnimplementedError(
+            "Generation of hidden service restricted discovery client keys"
+        )

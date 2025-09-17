@@ -504,6 +504,15 @@ class NodeBuilder(ABC):
         """
         ...
 
+    @abstractmethod
+    def get_hs_client_pubkey(self, hs_address: str) -> str:
+        """Get the hidden service "restricted discovery" key for the `hs_address`
+
+        Generates the key, if it doesn't already exist. The returned string
+        is of the form `descriptor:x25519:<base32-encoded-public-key>`.
+        """
+        ...
+
 
 class NodeController(ABC):
     """Abstract base class.  A NodeController is responsible for running a
