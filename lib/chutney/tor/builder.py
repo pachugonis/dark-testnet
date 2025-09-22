@@ -272,9 +272,8 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 raise ChutneyError(
                     f"tor exited unexpectedly with returncode={p.returncode}"
                 )
-            hostname = self.get_hs_hostname()
-            if hostname.is_some():
-                logger.debug("Generated hostname %s", hostname.unwrap())
+            if self._hs_hostname_path().exists():
+                logger.debug("Generated hostname %s", self.get_hs_hostname().unwrap())
                 # Done. Terminate and wait for process to exit.
                 p.terminate()
                 rv = p.wait()
@@ -488,15 +487,15 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             )
         return res
 
+    def _hs_hostname_path(self) -> Path:
+        """The path to the hostname file, if this node has a hidden service"""
+        return self._node.dir.joinpath(self._node._config.hs_directory, "hostname")
+
     @override
     def get_hs_hostname(self) -> Option[str]:
         if not self._node._config.hs:
             return Option(None)
-        # a file containing a single line with the hs' .onion address, generated
-        # on first run.
-        hs_hostname_file = self._node.dir.joinpath(
-            self._node._config.hs_directory, "hostname"
-        )
+        hs_hostname_file = self._hs_hostname_path()
         try:
             hostname_file_contents = hs_hostname_file.read_text()
         except FileNotFoundError:
