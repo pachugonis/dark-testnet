@@ -4,6 +4,7 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 
 from pathlib import Path
 from typeguard import check_type
@@ -239,9 +240,54 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                     TorNet.get_familykey_path(fid), Path(self._node.dir, "keys")
                 )
 
+    def _generate_hs_state(self) -> None:
+        # Force generation of the hidden service key and address.
+        p = launch_process(
+            [
+                str(self._node._config.tor),
+                "-f",
+                # Read config from stdin; we don't need or want most of the
+                # generated torrc. e.g. we don't want this output in the
+                # logfiles.
+                "-",
+                # Don't try to connect to the network
+                "-DisableNetwork",
+                "1",
+                # Do generate our hidden service state
+                "-HiddenServiceDir",
+                str(self._node.dir.joinpath(self._node._config.hs_directory)),
+                # Dummy ports; tor won't try to bind to them since the
+                # network is disabled.
+                "-HiddenServicePort",
+                "1 1",
+            ],
+            stdin=subprocess.DEVNULL,
+        )
+        while True:
+            if p.poll() is not None:
+                # Process exited unexpectedly.
+                logger.error(
+                    "tor exited: %s", p.stdout.read() if p.stdout else "<None>"
+                )
+                raise ChutneyError(
+                    f"tor exited unexpectedly with returncode={p.returncode}"
+                )
+            hostname = self.get_hs_hostname()
+            if hostname.is_some():
+                logger.debug("Generated hostname %s", hostname.unwrap())
+                # Done. Terminate and wait for process to exit.
+                p.terminate()
+                rv = p.wait()
+                logger.debug("tor exited with returncode %d, after terminating", rv)
+                break
+            logger.debug(f"waiting for tor {p.pid} to generate hidden service state")
+            time.sleep(0.01)
+
     @override
     def config(self, net: TorNet.Network) -> None:
         self._createTorrcFile()
+        if self._node._config.hs:
+            self._generate_hs_state()
 
     @override
     def postConfig(self, net: TorNet.Network) -> None:
