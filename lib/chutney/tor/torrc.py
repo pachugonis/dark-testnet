@@ -120,7 +120,7 @@ def format(n: TorNet.Node) -> str:
     if n._config.hs:
         res += textwrap.dedent(
             f"""
-            HiddenServiceDir {n.dir}/hidden_service
+            HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}
 
             # Redirect requests to the port used by chutney verify
             HiddenServicePort {n.hs_virtport.unwrap()} 127.0.0.1:{n.hs_targetport.unwrap()}
