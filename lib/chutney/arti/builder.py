@@ -182,6 +182,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "hss",
                 f"--nickname={_HS_NICKNAME}",
                 "onion-address",
+                "--generate=if-needed",
             ],
             capture_output=True,
             text=True,
