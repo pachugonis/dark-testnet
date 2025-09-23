@@ -16,7 +16,6 @@ import chutney.arti.config as arti_config
 
 from chutney.errors import (
     ChutneyError,
-    ChutneyUnimplementedError,
     ChutneyInternalError,
 )
 from chutney.Util import (
@@ -39,6 +38,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
 
     def _info_log_path(self) -> Path:
         return self._node.dir.joinpath("info.log")
+
+    def _hs_client_key_dir(self) -> Path:
+        return self._node.dir.joinpath("client-keys")
 
     def _gen_config(self, net: TorNet.Network) -> dict[str, object]:
         if self._node._config.exit:
@@ -87,28 +89,29 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             }
         )
         if self._node.is_hs:
-            if self._node._config.hs_restricted_discovery:
-                raise ChutneyUnimplementedError(
-                    "restricted-discovery hidden services unimplemented"
-                )
             ip = (
                 self._node._config.ip.as_optional()
                 or self._node._config.ipv6_addr.as_optional()
             )
             if not ip:
                 raise ChutneyError("No usable local address")
-            get_new_section(config, "onion_services").update(
-                {
-                    _HS_NICKNAME: {
-                        "proxy_ports": [
-                            [
-                                self._node.hs_virtport.unwrap(),
-                                f"{ip}:{self._node.hs_targetport.unwrap()}",
-                            ]
-                        ]
-                    }
+            svc: dict[str, object] = {}
+            svc["proxy_ports"] = [
+                [
+                    self._node.hs_virtport.unwrap(),
+                    f"{ip}:{self._node.hs_targetport.unwrap()}",
+                ]
+            ]
+            if self._node._config.hs_restricted_discovery:
+                svc["restricted_discovery"] = {
+                    "enabled": True,
+                    # We use a key dir here rather than static keys, so that we
+                    # don't need to rewrite the config when adding individual
+                    # keys.
+                    "key_dirs": [{"path": str(self._hs_client_key_dir())}],
                 }
-            )
+            onion_services = get_new_section(config, "onion_services")
+            onion_services[_HS_NICKNAME] = svc
 
         # the storage section *does* exist in the base config, and we
         # intentionally overwrite it.
@@ -148,6 +151,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def preConfig(self, net: TorNet.Network) -> None:
         mkdir_p(self._node.dir)
         self._generate_early_config(net)
+        if self._node._config.hs_restricted_discovery:
+            client_key_dir = self._hs_client_key_dir()
+            client_key_dir.mkdir(mode=0o700)
 
     @override
     def get_fingerprint(self) -> Option[str]:
@@ -247,6 +253,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
 
     @override
     def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
-        raise ChutneyUnimplementedError(
-            "Registration of hidden service restricted discovery client keys"
-        )
+        path = self._hs_client_key_dir().joinpath(client_id + ".auth")
+        if path.exists():
+            logger.warning(f"Overwriting existing client key at {path}")
+        path.write_text(client_pubkey)
