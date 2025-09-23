@@ -244,3 +244,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         res = sp.stdout.strip()
         logger.debug("%s hs client key for %s: %s", self._node.nick, hs_address, res)
         return res
+
+    @override
+    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
+        raise ChutneyUnimplementedError(
+            "Registration of hidden service restricted discovery client keys"
+        )

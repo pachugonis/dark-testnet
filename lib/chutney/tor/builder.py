@@ -535,3 +535,9 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         raise ChutneyUnimplementedError(
             "Generation of hidden service restricted discovery client keys"
         )
+
+    @override
+    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
+        raise ChutneyUnimplementedError(
+            "Registration of hidden service restricted discovery client keys"
+        )

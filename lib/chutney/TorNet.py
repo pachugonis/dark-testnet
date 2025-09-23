@@ -513,6 +513,15 @@ class NodeBuilder(ABC):
         """
         ...
 
+    @abstractmethod
+    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
+        """Set the hidden service "restricted discovery" pubkey for `client_id`
+
+        `client_pubkey` should be of the form
+        `descriptor:x25519:<base32-encoded-public-key>`.
+        """
+        ...
+
 
 class NodeController(ABC):
     """Abstract base class.  A NodeController is responsible for running a
