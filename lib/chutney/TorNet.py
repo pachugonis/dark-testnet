@@ -450,8 +450,11 @@ class NodeBuilder(ABC):
 
     @abstractmethod
     def preConfig(self, net: Network) -> None:
-        """Called on all nodes before any nodes configure: generates keys and
-        hidden service directories as needed.
+        """Called on all nodes of the current config phase before any nodes configure.
+
+        Intended to generate configuration that doesn't depend on other nodes,
+        particularly anything that *will* be needed in the configuration step of
+        other nodes, such as public keys.
         """
         ...
 
@@ -1142,8 +1145,10 @@ class Network(object):
         # XXX don't change node names or types or count if anything is
         # XXX running!
 
-        for n in self._nodes:
+        for n in cur_phase_nodes:
             n._builder.preConfig(network)
+
+        for n in self._nodes:
             auth_line = n._builder.getAltAuthLines(self.hasbridgeauth)
             if auth_line is not None:
                 altauthlines.append(auth_line)
