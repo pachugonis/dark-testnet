@@ -264,6 +264,8 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             ],
             stdin=subprocess.DEVNULL,
         )
+        start_time = time.time()
+        last_warn_time = start_time
         while True:
             if p.poll() is not None:
                 # Process exited unexpectedly.
@@ -281,6 +283,14 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 logger.debug("tor exited with returncode %d, after terminating", rv)
                 break
             logger.debug(f"waiting for tor {p.pid} to generate hidden service state")
+            now = time.time()
+            if (now - last_warn_time) > 5:
+                total_seconds = round(now - start_time, 1)
+                logger.warning(
+                    f"{self._node.nick} has been waiting {total_seconds} seconds for"
+                    f" tor process {p.pid} to generate {self._hs_hostname_path()}"
+                )
+                last_warn_time = now
             time.sleep(0.01)
 
     @override
