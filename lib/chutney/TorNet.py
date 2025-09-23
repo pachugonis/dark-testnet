@@ -1125,6 +1125,53 @@ class Network(object):
         if missing_any:
             raise ChutneyError("Missing requirements to run this network")
 
+    def _exchange_restricted_discovery_keys(self) -> None:
+        """Generate restricted discovery client keys and register the public keys
+        with the corresponding hidden services.
+        """
+        nodes_by_tag: dict[str, list[Node]] = {}
+        for n in self._nodes:
+            if not n._config.tag:
+                continue
+            nodes_by_tag.setdefault(n._config.tag, []).append(n)
+
+        for hs_client in (
+            n
+            for n in self._nodes
+            if n._config.config_phase == CUR_CONFIG_PHASE
+            and n._config.hs_client_restricted_discovery_server_tags
+        ):
+            for (
+                server_tag
+            ) in hs_client._config.hs_client_restricted_discovery_server_tags:
+                servers = nodes_by_tag.get(server_tag)
+                if not servers:
+                    raise ChutneyError(
+                        f"{n.nick}: No nodes found with tag {server_tag}"
+                    )
+                for server in servers:
+                    if not server.is_hs:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick}; not a hs"
+                        )
+                    if not server._config.hs_restricted_discovery:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick};"
+                            " restricted discovery disabled"
+                        )
+                    if server._config.config_phase > CUR_CONFIG_PHASE:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick},"
+                            " which isn't configured yet"
+                        )
+                    hs_hostname = server.hs_hostname.unwrap()
+                    hs_client_pubkey = hs_client._builder.get_hs_client_pubkey(
+                        hs_hostname
+                    )
+                    server._builder.set_hs_client_pubkey(
+                        hs_client.nick, hs_client_pubkey
+                    )
+
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
         started.
@@ -1189,6 +1236,8 @@ class Network(object):
 
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
+
+        self._exchange_restricted_discovery_keys()
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
