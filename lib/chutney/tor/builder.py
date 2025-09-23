@@ -234,6 +234,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             self._genRouterKey()
         if self._node._config.hs:
             self._makeHiddenServiceDir()
+            self._generate_hs_state()
         if net.family_ids:
             for fid in self._node._config.families:
                 shutil.copy(
@@ -285,8 +286,6 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     @override
     def config(self, net: TorNet.Network) -> None:
         self._createTorrcFile()
-        if self._node._config.hs:
-            self._generate_hs_state()
 
     @override
     def postConfig(self, net: TorNet.Network) -> None:

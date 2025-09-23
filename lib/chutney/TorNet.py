@@ -375,7 +375,13 @@ class Node(object):
 
     @property
     def hs_hostname(self) -> Option[str]:
-        """Generated hostname for this hidden service"""
+        """Generated hostname for this hidden service.
+
+        Should be available (non-None) if the node is configured as a hidden
+        service (`Node.is_hs`), after the Node's builder's `preConfig` has been
+        called (which the chutney `Network` does as part of this node's
+        `config_phase`).
+        """
         return self._builder.get_hs_hostname()
 
     ######
@@ -493,8 +499,8 @@ class NodeBuilder(ABC):
     def get_hs_hostname(self) -> Option[str]:
         """Return the hidden service hostname, if any.
 
-        Returns `Option(None)` if there is no hidden service for this node,
-        or if the hostname isn't available yet.
+        Should be available (non-None) if the node is configured as a hidden
+        service (`Node.is_hs`), after `preConfig` has been called.
         """
         ...
 
