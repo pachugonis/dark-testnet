@@ -4,6 +4,7 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 
 from pathlib import Path
 from typeguard import check_type
@@ -233,11 +234,64 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             self._genRouterKey()
         if self._node._config.hs:
             self._makeHiddenServiceDir()
+            self._generate_hs_state()
         if net.family_ids:
             for fid in self._node._config.families:
                 shutil.copy(
                     TorNet.get_familykey_path(fid), Path(self._node.dir, "keys")
                 )
+
+    def _generate_hs_state(self) -> None:
+        # Force generation of the hidden service key and address.
+        p = launch_process(
+            [
+                str(self._node._config.tor),
+                "-f",
+                # Read config from stdin; we don't need or want most of the
+                # generated torrc. e.g. we don't want this output in the
+                # logfiles.
+                "-",
+                # Don't try to connect to the network
+                "-DisableNetwork",
+                "1",
+                # Do generate our hidden service state
+                "-HiddenServiceDir",
+                str(self._node.dir.joinpath(self._node._config.hs_directory)),
+                # Dummy ports; tor won't try to bind to them since the
+                # network is disabled.
+                "-HiddenServicePort",
+                "1 1",
+            ],
+            stdin=subprocess.DEVNULL,
+        )
+        start_time = time.time()
+        last_warn_time = start_time
+        while True:
+            if p.poll() is not None:
+                # Process exited unexpectedly.
+                logger.error(
+                    "tor exited: %s", p.stdout.read() if p.stdout else "<None>"
+                )
+                raise ChutneyError(
+                    f"tor exited unexpectedly with returncode={p.returncode}"
+                )
+            if self._hs_hostname_path().exists():
+                logger.debug("Generated hostname %s", self.get_hs_hostname().unwrap())
+                # Done. Terminate and wait for process to exit.
+                p.terminate()
+                rv = p.wait()
+                logger.debug("tor exited with returncode %d, after terminating", rv)
+                break
+            logger.debug(f"waiting for tor {p.pid} to generate hidden service state")
+            now = time.time()
+            if (now - last_warn_time) > 5:
+                total_seconds = round(now - start_time, 1)
+                logger.warning(
+                    f"{self._node.nick} has been waiting {total_seconds} seconds for"
+                    f" tor process {p.pid} to generate {self._hs_hostname_path()}"
+                )
+                last_warn_time = now
+            time.sleep(0.01)
 
     @override
     def config(self, net: TorNet.Network) -> None:
@@ -442,15 +496,15 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             )
         return res
 
+    def _hs_hostname_path(self) -> Path:
+        """The path to the hostname file, if this node has a hidden service"""
+        return self._node.dir.joinpath(self._node._config.hs_directory, "hostname")
+
     @override
     def get_hs_hostname(self) -> Option[str]:
         if not self._node._config.hs:
             return Option(None)
-        # a file containing a single line with the hs' .onion address, generated
-        # on first run.
-        hs_hostname_file = self._node.dir.joinpath(
-            self._node._config.hs_directory, "hostname"
-        )
+        hs_hostname_file = self._hs_hostname_path()
         try:
             hostname_file_contents = hs_hostname_file.read_text()
         except FileNotFoundError:

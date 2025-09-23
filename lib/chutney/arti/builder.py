@@ -39,7 +39,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def _info_log_path(self) -> Path:
         return self._node.dir.joinpath("info.log")
 
-    def _gen_config_str(self, net: TorNet.Network) -> str:
+    def _gen_config(self, net: TorNet.Network) -> dict[str, object]:
         if self._node._config.exit:
             raise ChutneyInternalError("Arti exit unimplemented")
         if self._node._config.authority:
@@ -117,15 +117,32 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         bridges = check_type(config.setdefault("bridges", {}), dict)
         bridges["enabled"] = bool(self._node._config.bridgeclient)
 
-        return tomli_w.dumps(config)
+        return config
 
     @override
     def checkConfig(self, net: TorNet.Network) -> None:
-        self._gen_config_str(net)
+        # Just check that it doesn't fail to generate.
+        self._gen_config(net)
+
+    def _early_config_path(self) -> Path:
+        return self._node.dir.joinpath("early_config.toml")
+
+    def _generate_early_config(self, net: TorNet.Network) -> None:
+        early_config: dict[str, object] = self._gen_config(net)
+        early_config_str: str = tomli_w.dumps(early_config)
+        with self._early_config_path().open("w") as f:
+            f.write(
+                "# Early version of config that doesn't depend on other node configs.\n"
+            )
+            f.write(
+                "# Used e.g. when running arti during configuration to generate keys.\n"
+            )
+            f.write(early_config_str)
 
     @override
     def preConfig(self, net: TorNet.Network) -> None:
-        pass
+        mkdir_p(self._node.dir)
+        self._generate_early_config(net)
 
     @override
     def get_fingerprint(self) -> Option[str]:
@@ -137,10 +154,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
 
     @override
     def config(self, net: TorNet.Network) -> None:
-        config_str = self._gen_config_str(net)
-        mkdir_p(self._node.dir)
-        with self._node.torrc_path.open("w") as f:
-            f.write(config_str)
+        self._node.torrc_path.write_text(tomli_w.dumps(self._gen_config(net)))
 
     @override
     def postConfig(self, net: TorNet.Network) -> None:
@@ -178,10 +192,11 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 # stdout along with the actual output we want.
                 # <https://gitlab.torproject.org/tpo/core/arti/-/issues/2024>
                 "--log-level=",
-                f"--config={str(self._node.torrc_path)}",
+                f"--config={str(self._early_config_path())}",
                 "hss",
                 f"--nickname={_HS_NICKNAME}",
                 "onion-address",
+                "--generate=if-needed",
             ],
             capture_output=True,
             text=True,
