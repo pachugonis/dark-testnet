@@ -189,7 +189,7 @@ build-arti:
     # around for longer.
     expire_in: 1 day
   cache:
-    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
+    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE-$JOB_ARTI_FEATURES
       paths:
       - opt/arti
   tags:
