@@ -5,7 +5,7 @@ import textwrap
 
 from typing import Iterable
 
-from chutney.errors import ChutneyError, ChutneyUnimplementedError
+from chutney.errors import ChutneyError
 from chutney.tor.util import get_tor_version
 from chutney.Util import find_executable_on_path
 
@@ -118,10 +118,6 @@ def format(n: TorNet.Node) -> str:
         if n._config.ipv6_addr.is_some():
             res += f"OrPort {n._config.ipv6_addr.unwrap()}:{n.orport}\n"
     if n._config.hs:
-        if n._config.hs_restricted_discovery:
-            raise ChutneyUnimplementedError(
-                "restricted-discovery hidden services unimplemented"
-            )
         res += textwrap.dedent(
             f"""
             HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}
@@ -389,6 +385,9 @@ def format(n: TorNet.Node) -> str:
             res += (
                 f"ClientTransportPlugin {n._config.pt_transport} exec {pt_executable}\n"
             )
+
+    if n._config.hs_client_restricted_discovery_server_tags:
+        res += f"ClientOnionAuthDir {n.dir.joinpath(n._config.client_onion_auth_dir)}"
 
     res += n._config.extra_raw_torrc + "\n"
 

@@ -675,6 +675,10 @@ class NodeConfig:
     hs_client_restricted_discovery_server_tags: set[str] = dataclasses.field(
         default_factory=set
     )
+    # subdirectory of data dir in which to store restricted discovery
+    # client keys. aka ClientOnionAuthDir in torrc.
+    # Unused in arti, which stores these keys opaquely.
+    client_onion_auth_dir: Path = Path("client-onion-auth-dir")
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)

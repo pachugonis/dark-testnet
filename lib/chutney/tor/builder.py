@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 import logging
 import re
 import shutil
 import subprocess
 import time
 
+from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives import serialization as crypto_serialization
 from pathlib import Path
 from typeguard import check_type
 from typing import List, Optional, Union
@@ -14,7 +17,7 @@ from typing_extensions import override
 import chutney
 import chutney.TorNet as TorNet
 
-from chutney.errors import ChutneyError, ChutneyInternalError, ChutneyUnimplementedError
+from chutney.errors import ChutneyError, ChutneyInternalError
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     launch_process,
@@ -240,6 +243,8 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 shutil.copy(
                     TorNet.get_familykey_path(fid), Path(self._node.dir, "keys")
                 )
+        if self._node._config.hs_client_restricted_discovery_server_tags:
+            mkdir_p(self._client_onion_auth_dir())
 
     def _generate_hs_state(self) -> None:
         # Force generation of the hidden service key and address.
@@ -523,21 +528,53 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             )
         return Option(hostname)
 
+    def _client_onion_auth_dir(self) -> Path:
+        return self._node.dir.joinpath(self._node._config.client_onion_auth_dir)
+
     @override
     def get_hs_client_pubkey(self, hs_address: str) -> str:
         # Our docs for expected output:
         # https://2019.www.torproject.org/docs/tor-manual-dev.html.en#_client_authorization
-        #
-        # We don't seem to have our own instructions for actually generating such a key, or the
-        # public-key descriptor.
-        # This looks fairly promising, though:
-        # <https://tor.stackexchange.com/questions/19221/how-to-setup-client-authorization-for-v3-onion-services>
-        raise ChutneyUnimplementedError(
-            "Generation of hidden service restricted discovery client keys"
+        priv_key_path = self._client_onion_auth_dir().joinpath(
+            hs_address + ".auth_private"
         )
+        if not priv_key_path.exists():
+            private_key = x25519.X25519PrivateKey.generate()
+            private_key_bytes = private_key.private_bytes(
+                crypto_serialization.Encoding.Raw,
+                crypto_serialization.PrivateFormat.Raw,
+                crypto_serialization.NoEncryption(),
+            )
+            private_key32 = base64.b32encode(private_key_bytes).decode("ascii")
+            # As per <https://spec.torproject.org/intro/conventions.html#binascii>
+            private_key32 = private_key32.strip("=")
+            priv_key_path.write_text(
+                hs_address.removesuffix(".onion")
+                + ":descriptor:x25519:"
+                + private_key32
+            )
+        private_key_descriptor = priv_key_path.read_text()
+        private_key_descriptor_parts = private_key_descriptor.split(":")
+        assert private_key_descriptor_parts[1] == "descriptor"
+        assert private_key_descriptor_parts[2] == "x25519"
+        # `b32decode` insists on the padding suffix, which we removed when saving
+        # the private key. So add it back.
+        private_key32 = private_key_descriptor_parts[3] + "===="
+        private_key_bytes = base64.b32decode(private_key32)
+        private_key = x25519.X25519PrivateKey.from_private_bytes(private_key_bytes)
+        public_key = private_key.public_key()
+        public_key_bytes = public_key.public_bytes(
+            crypto_serialization.Encoding.Raw,
+            crypto_serialization.PublicFormat.Raw,
+        )
+        public_key32 = base64.b32encode(public_key_bytes).decode("ascii")
+        # As per <https://spec.torproject.org/intro/conventions.html#binascii>
+        public_key32 = public_key32.strip("=")
+        return "descriptor:x25519:" + public_key32
 
     @override
     def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
-        raise ChutneyUnimplementedError(
-            "Registration of hidden service restricted discovery client keys"
+        path = self._node.dir.joinpath(
+            self._node._config.hs_directory, "authorized_clients", client_id + ".auth"
         )
+        path.write_text(client_pubkey)
