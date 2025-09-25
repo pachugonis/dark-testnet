@@ -39,6 +39,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def _info_log_path(self) -> Path:
         return self._node.dir.joinpath("info.log")
 
+    def _hs_client_key_dir(self) -> Path:
+        return self._node.dir.joinpath("client-keys")
+
     def _gen_config(self, net: TorNet.Network) -> dict[str, object]:
         if self._node._config.exit:
             raise ChutneyInternalError("Arti exit unimplemented")
@@ -92,18 +95,23 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             )
             if not ip:
                 raise ChutneyError("No usable local address")
-            get_new_section(config, "onion_services").update(
-                {
-                    _HS_NICKNAME: {
-                        "proxy_ports": [
-                            [
-                                self._node.hs_virtport.unwrap(),
-                                f"{ip}:{self._node.hs_targetport.unwrap()}",
-                            ]
-                        ]
-                    }
+            svc: dict[str, object] = {}
+            svc["proxy_ports"] = [
+                [
+                    self._node.hs_virtport.unwrap(),
+                    f"{ip}:{self._node.hs_targetport.unwrap()}",
+                ]
+            ]
+            if self._node._config.hs_restricted_discovery:
+                svc["restricted_discovery"] = {
+                    "enabled": True,
+                    # We use a key dir here rather than static keys, so that we
+                    # don't need to rewrite the config when adding individual
+                    # keys.
+                    "key_dirs": [{"path": str(self._hs_client_key_dir())}],
                 }
-            )
+            onion_services = get_new_section(config, "onion_services")
+            onion_services[_HS_NICKNAME] = svc
 
         # the storage section *does* exist in the base config, and we
         # intentionally overwrite it.
@@ -143,6 +151,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def preConfig(self, net: TorNet.Network) -> None:
         mkdir_p(self._node.dir)
         self._generate_early_config(net)
+        if self._node._config.hs_restricted_discovery:
+            client_key_dir = self._hs_client_key_dir()
+            client_key_dir.mkdir(mode=0o700)
 
     @override
     def get_fingerprint(self) -> Option[str]:
@@ -208,3 +219,41 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             )
             return Option(None)
         return Option(sp.stdout.strip())
+
+    @override
+    def get_hs_client_pubkey(self, hs_address: str) -> str:
+        # TODO: use `arti hsc key get`, as per
+        # <https://gitlab.torproject.org/tpo/core/arti/-/blob/main/doc/hsc.md?ref_type=heads#generating-a-service-discovery-key>.
+        sp = subprocess.run(
+            [
+                self._node._config.arti,
+                # Only available as a flag, not in config file.
+                "--disable-fs-permission-checks",
+                f"--config={str(self._node.torrc_path)}",
+                "--log-level=warn",
+                "hsc",
+                "key",
+                "get",
+                "--batch",
+                "--output=-",
+            ],
+            input=hs_address,
+            capture_output=True,
+            text=True,
+        )
+        if sp.returncode != 0:
+            logger.warning(
+                f"Couldn't get client pubkey.\n\tstdout:{sp.stdout}\n\tstderr:{sp.stderr}"
+            )
+            logger.warning("hint: was arti compiled with feature 'hsc'?")
+            raise ChutneyError("Couldn't generate hs client pubkey")
+        res = sp.stdout.strip()
+        logger.debug("%s hs client key for %s: %s", self._node.nick, hs_address, res)
+        return res
+
+    @override
+    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
+        path = self._hs_client_key_dir().joinpath(client_id + ".auth")
+        if path.exists():
+            logger.warning(f"Overwriting existing client key at {path}")
+        path.write_text(client_pubkey)

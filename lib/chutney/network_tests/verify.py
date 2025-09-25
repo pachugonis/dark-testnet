@@ -222,16 +222,24 @@ def _configure_hs(
     hs_multi_client: bool,
 ) -> int:
     CLIENT_HS_PATH_NODES = 8
-    hs_path_node_count = len(hs_list) * CLIENT_HS_PATH_NODES * connection_count
-    # Each client in hs_client_list connects to each hs
-    if hs_multi_client:
-        hs_client_list = client_list
-        hs_path_node_count *= len(client_list)
-    else:
-        # only use the first client in the list
-        hs_client_list = client_list[:1]
+    hs_path_node_count = 0
     # Setup the connections from each client in hs_client_list to each hs
     for hs in hs_list:
+        hs_client_list = client_list
+        if hs._config.hs_restricted_discovery:
+            hs_client_list = [
+                c
+                for c in hs_client_list
+                if hs._config.tag
+                in c._config.hs_client_restricted_discovery_server_tags
+            ]
+        if not hs_multi_client:
+            # only use the first client in the list
+            hs_client_list = hs_client_list[:1]
+        hs_path_node_count += (
+            len(hs_client_list) * CLIENT_HS_PATH_NODES * connection_count
+        )
+
         hs_bind_to = (hs.hs_hostname.unwrap(), hs.hs_virtport.unwrap())
         # We currently require that all hidden services use the same port as `LISTEN_PORT`.
         # Otherwise we would need to extend the `TrafficTester` to bind to multiple ports,

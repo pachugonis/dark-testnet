@@ -1,0 +1,32 @@
+# Network with restricted discovery enabled for clients and servers
+
+ConfigureNodes(
+        Node(tag="a", authority=1, relay=1).getN(4)
+        # We need 5+ authorities/relays/exits to ensure we can build HS connections
+        + Node(tag="r", relay=1, exit=1).getN(5)
+
+        # servers
+        + Node(tag="ha",
+               hs=1,
+               launch_phase=2,
+               backend=NodeBackend.ARTI,
+               hs_restricted_discovery=True).getN(1)
+        + Node(tag="ht",
+               hs=1,
+               launch_phase=2,
+               backend=NodeBackend.TOR,
+               hs_restricted_discovery=True).getN(1)
+
+        # clients
+        + Node(tag="ca",
+               client=1,
+               launch_phase=2,
+               backend=NodeBackend.ARTI,
+               hs_client_restricted_discovery_server_tags=set(["ht", "ha"])).getN(1)
+        + Node(tag="ct",
+               client=1,
+               launch_phase=2,
+               backend=NodeBackend.TOR,
+               hs_client_restricted_discovery_server_tags=set(["ht", "ha"])).getN(1)
+)
+

@@ -450,8 +450,11 @@ class NodeBuilder(ABC):
 
     @abstractmethod
     def preConfig(self, net: Network) -> None:
-        """Called on all nodes before any nodes configure: generates keys and
-        hidden service directories as needed.
+        """Called on all nodes of the current config phase before any nodes configure.
+
+        Intended to generate configuration that doesn't depend on other nodes,
+        particularly anything that *will* be needed in the configuration step of
+        other nodes, such as public keys.
         """
         ...
 
@@ -501,6 +504,24 @@ class NodeBuilder(ABC):
 
         Should be available (non-None) if the node is configured as a hidden
         service (`Node.is_hs`), after `preConfig` has been called.
+        """
+        ...
+
+    @abstractmethod
+    def get_hs_client_pubkey(self, hs_address: str) -> str:
+        """Get the hidden service "restricted discovery" key for the `hs_address`
+
+        Generates the key, if it doesn't already exist. The returned string
+        is of the form `descriptor:x25519:<base32-encoded-public-key>`.
+        """
+        ...
+
+    @abstractmethod
+    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
+        """Set the hidden service "restricted discovery" pubkey for `client_id`
+
+        `client_pubkey` should be of the form
+        `descriptor:x25519:<base32-encoded-public-key>`.
         """
         ...
 
@@ -647,6 +668,17 @@ class NodeConfig:
     hs_directory: str = "hidden_service"
     # if creating a hidden service, whether to configure it as single-hop.
     hs_singlehop: bool = False
+    # if creating a hidden service, whether to enable restricted discovery.
+    hs_restricted_discovery: bool = False
+    # generate restricted-discovery client keys and register them with
+    # hidden services having these tags.
+    hs_client_restricted_discovery_server_tags: set[str] = dataclasses.field(
+        default_factory=set
+    )
+    # subdirectory of data dir in which to store restricted discovery
+    # client keys. aka ClientOnionAuthDir in torrc.
+    # Unused in arti, which stores these keys opaquely.
+    client_onion_auth_dir: Path = Path("client-onion-auth-dir")
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
@@ -1097,6 +1129,53 @@ class Network(object):
         if missing_any:
             raise ChutneyError("Missing requirements to run this network")
 
+    def _exchange_restricted_discovery_keys(self) -> None:
+        """Generate restricted discovery client keys and register the public keys
+        with the corresponding hidden services.
+        """
+        nodes_by_tag: dict[str, list[Node]] = {}
+        for n in self._nodes:
+            if not n._config.tag:
+                continue
+            nodes_by_tag.setdefault(n._config.tag, []).append(n)
+
+        for hs_client in (
+            n
+            for n in self._nodes
+            if n._config.config_phase == CUR_CONFIG_PHASE
+            and n._config.hs_client_restricted_discovery_server_tags
+        ):
+            for (
+                server_tag
+            ) in hs_client._config.hs_client_restricted_discovery_server_tags:
+                servers = nodes_by_tag.get(server_tag)
+                if not servers:
+                    raise ChutneyError(
+                        f"{n.nick}: No nodes found with tag {server_tag}"
+                    )
+                for server in servers:
+                    if not server.is_hs:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick}; not a hs"
+                        )
+                    if not server._config.hs_restricted_discovery:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick};"
+                            " restricted discovery disabled"
+                        )
+                    if server._config.config_phase > CUR_CONFIG_PHASE:
+                        raise ChutneyError(
+                            f"{n.nick} can't authorize with {server.nick},"
+                            " which isn't configured yet"
+                        )
+                    hs_hostname = server.hs_hostname.unwrap()
+                    hs_client_pubkey = hs_client._builder.get_hs_client_pubkey(
+                        hs_hostname
+                    )
+                    server._builder.set_hs_client_pubkey(
+                        hs_client.nick, hs_client_pubkey
+                    )
+
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
         started.
@@ -1117,8 +1196,10 @@ class Network(object):
         # XXX don't change node names or types or count if anything is
         # XXX running!
 
-        for n in self._nodes:
+        for n in cur_phase_nodes:
             n._builder.preConfig(network)
+
+        for n in self._nodes:
             auth_line = n._builder.getAltAuthLines(self.hasbridgeauth)
             if auth_line is not None:
                 altauthlines.append(auth_line)
@@ -1159,6 +1240,8 @@ class Network(object):
 
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
+
+        self._exchange_restricted_discovery_keys()
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""

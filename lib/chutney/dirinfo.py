@@ -10,6 +10,7 @@ from chutney.Util import Option
 
 
 class DirInfoStatusCode(enum.Enum):
+    ONIONDESC_FAILED_TO_PUBLISH = -600
     INTERNAL_ERROR = -500
     # No dir file
     MISSING_FILE = -400

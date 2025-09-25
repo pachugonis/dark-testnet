@@ -214,6 +214,19 @@ class LocalArtiNodeController(TorNet.NodeController):
                         keyword=TorNet.HSV3_KEYWORD,
                         message=m.group(0),
                     )
+                    continue
+                m = re.search(
+                    r"Restricted discovery is enabled,"
+                    r" but no authorized clients are configured",
+                    line,
+                )
+                if m:
+                    self._most_recent_oniondesc_status = DirInfoStatus(
+                        percent_or_code=DirInfoStatusCode.ONIONDESC_FAILED_TO_PUBLISH,
+                        keyword=TorNet.HSV3_KEYWORD,
+                        message="Restricted discovery enabled, but no auth'd clients configured",
+                    )
+                    continue
 
     @override
     def isBootstrapped(self) -> bool:

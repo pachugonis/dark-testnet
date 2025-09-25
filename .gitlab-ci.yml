@@ -179,7 +179,7 @@ build-arti:
     # main @ 2025-09-16.
     JOB_ARTI_REV: "e67444c5d417d3a527ba282eee8c18d9e1e32c2d"
     # comma-separated list of features to build with
-    JOB_ARTI_FEATURES: onion-service-service
+    JOB_ARTI_FEATURES: onion-service-service,hsc,restricted-discovery
     JOB_ARTI_PROFILE: "quicktest"
     JOB_RUST_TOOLCHAIN: "1.87.0"
   artifacts:
@@ -189,7 +189,7 @@ build-arti:
     # around for longer.
     expire_in: 1 day
   cache:
-    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE
+    - key: V1-bookworm-$CI_JOB_NAME-$JOB_ARTI_REV-$JOB_RUST_TOOLCHAIN-$JOB_ARTI_PROFILE-$JOB_ARTI_FEATURES
       paths:
       - opt/arti
   tags:

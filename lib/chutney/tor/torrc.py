@@ -386,6 +386,9 @@ def format(n: TorNet.Node) -> str:
                 f"ClientTransportPlugin {n._config.pt_transport} exec {pt_executable}\n"
             )
 
+    if n._config.hs_client_restricted_discovery_server_tags:
+        res += f"ClientOnionAuthDir {n.dir.joinpath(n._config.client_onion_auth_dir)}"
+
     res += n._config.extra_raw_torrc + "\n"
 
     return res
