@@ -19,6 +19,7 @@ from chutney.errors import (
     ChutneyInternalError,
 )
 from chutney.Util import (
+    addr_and_port_str,
     mkdir_p,
     Option,
 )
@@ -89,17 +90,14 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             }
         )
         if self._node.is_hs:
-            ip = (
-                self._node._config.ip.as_optional()
-                or self._node._config.ipv6_addr.as_optional()
-            )
+            ip = self._node.ip.as_optional() or self._node.ipv6_addr.as_optional()
             if not ip:
                 raise ChutneyError("No usable local address")
             svc: dict[str, object] = {}
             svc["proxy_ports"] = [
                 [
                     self._node.hs_virtport.unwrap(),
-                    f"{ip}:{self._node.hs_targetport.unwrap()}",
+                    addr_and_port_str(ip, self._node.hs_targetport.unwrap()),
                 ]
             ]
             if self._node._config.hs_restricted_discovery:

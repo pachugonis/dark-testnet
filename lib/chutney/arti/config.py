@@ -3,6 +3,7 @@ from __future__ import annotations
 import chutney.TorNet as TorNet
 
 from chutney.errors import ChutneyError
+from chutney.Util import addr_and_port_str
 
 
 def tor_config(net: TorNet.Network) -> dict[str, object]:
@@ -44,9 +45,9 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                     "rsa_identity": auth.fingerprint.replace(" ", ""),
                     "ed_identity": auth.fingerprint_ed25519,
                     "orports": (
-                        [f"{auth.ipv4}:{auth.orport}"]
+                        [addr_and_port_str(auth.ipv4, auth.orport)]
                         + (
-                            [f"{auth.ipv6.unwrap()}:{auth.orport}"]
+                            [addr_and_port_str(auth.ipv6.unwrap(), auth.orport)]
                             if auth.ipv6.is_some()
                             else []
                         )
@@ -60,9 +61,9 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                     auth.v3id for auth in net.authorities if auth.alt_dir_auth
                 ],
                 "uploads": [
-                    [f"{auth.ipv4}:{auth.dirport}"]
+                    [addr_and_port_str(auth.ipv4, auth.dirport)]
                     + (
-                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        [addr_and_port_str(auth.ipv6.unwrap(), auth.dirport)]
                         if auth.ipv6.is_some()
                         else []
                     )
@@ -70,9 +71,9 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                     if auth.alt_dir_auth
                 ],
                 "downloads": [
-                    [f"{auth.ipv4}:{auth.dirport}"]
+                    [addr_and_port_str(auth.ipv4, auth.dirport)]
                     + (
-                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        [addr_and_port_str(auth.ipv6.unwrap(), auth.dirport)]
                         if auth.ipv6.is_some()
                         else []
                     )
@@ -80,9 +81,9 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
                     if auth.alt_dir_auth
                 ],
                 "votes": [
-                    [f"{auth.ipv4}:{auth.dirport}"]
+                    [addr_and_port_str(auth.ipv4, auth.dirport)]
                     + (
-                        [f"{auth.ipv6.unwrap()}:{auth.dirport}"]
+                        [addr_and_port_str(auth.ipv6.unwrap(), auth.dirport)]
                         if auth.ipv6.is_some()
                         else []
                     )

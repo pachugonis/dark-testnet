@@ -7,7 +7,7 @@ from typing import Iterable
 
 from chutney.errors import ChutneyError
 from chutney.tor.util import get_tor_version
-from chutney.Util import find_executable_on_path
+from chutney.Util import find_executable_on_path, addr_and_port_str
 
 
 def _family_member_fps(node: TorNet.Node) -> Iterable[str]:
@@ -101,22 +101,22 @@ def format(n: TorNet.Node) -> str:
         res += "RunAsDaemon 0\n"
     else:
         res += "RunAsDaemon 1\n"
-    if n._config.ip.is_some():
+    if n.ip.is_some():
         if n._config.hs or n._config.relay:
-            res += f"Address {n._config.ip.unwrap()}\n"
+            res += f"Address {n.ip.unwrap()}\n"
     else:
         if n._config.client or n._config.hs:
             res += "ClientUseIPv4 0\n"
     if n._config.relay:
-        ip = n._config.ip.unwrap_or_raise(
+        ip = n.ip.unwrap_or_raise(
             lambda: ChutneyError("'relay' set with no ipv4 address")
         )
         # Note that explicitly specifying the ipv4 address instead of just the
         # port means that this will only bind to this *ipv4* address.
         # We potentially enable ipv6 separately below.
-        res += f"OrPort {ip}:{n.orport}\n"
-        if n._config.ipv6_addr.is_some():
-            res += f"OrPort {n._config.ipv6_addr.unwrap()}:{n.orport}\n"
+        res += f"OrPort {addr_and_port_str(ip, n.orport)}\n"
+        if n.ipv6_addr.is_some():
+            res += f"OrPort {addr_and_port_str(n.ipv6_addr.unwrap(), n.orport)}\n"
     if n._config.hs:
         res += textwrap.dedent(
             f"""
@@ -182,9 +182,9 @@ def format(n: TorNet.Node) -> str:
         if auth.alt_dir_auth:
             flags.append(f"v3ident={auth.v3id}")
         if auth.ipv6.is_some():
-            flags.append(f"ipv6={auth.ipv6.unwrap()}:{auth.orport}")
+            flags.append(f"ipv6={addr_and_port_str(auth.ipv6.unwrap(), auth.orport)}")
         res += f"{directive} {auth.nick} {' '.join(flags)}"
-        res += f" {auth.ipv4}:{auth.dirport} {auth.fingerprint}\n"
+        res += f" {addr_and_port_str(auth.ipv4, auth.dirport)} {auth.fingerprint}\n"
     if n._config.relay:
         res += textwrap.dedent(
             f"""
@@ -247,7 +247,7 @@ def format(n: TorNet.Node) -> str:
             ExitPolicy reject *:*
             """
         )
-    if n._config.exit and n._config.ipv6_addr.is_some():
+    if n._config.exit and n.ipv6_addr.is_some():
         if not n._config.relay:
             raise ChutneyError(f"'exit' set without 'relay' in node {n.nick}")
         res += textwrap.dedent(
@@ -281,7 +281,7 @@ def format(n: TorNet.Node) -> str:
             ContactInfo auth{n.nodenum}@test.test
             """
         )
-        if n._config.ipv6_addr.is_some() and not n._config.disableipv6:
+        if n.ipv6_addr.is_some() and not n._config.disableipv6:
             res += textwrap.dedent(
                 """
                 # And has IPv6 connectivity
@@ -340,9 +340,7 @@ def format(n: TorNet.Node) -> str:
             """
         )
     if n._config.pt_bridge:
-        ipv4 = n._config.ip.unwrap_or_raise(
-            ChutneyError("ipv4 is mandatory for bridges")
-        )
+        ip = n.ip.unwrap_or_raise(ChutneyError("ip is mandatory for bridges"))
         pt_executable = find_executable_on_path(n._config.pt_executable)
         if pt_executable is None:
             raise ChutneyError(
@@ -353,7 +351,7 @@ def format(n: TorNet.Node) -> str:
             f"""
             ServerTransportPlugin {n._config.pt_transport} exec {pt_executable}
             ExtOrPort {n.extorport}
-            ServerTransportListenAddr obfs4 {ipv4}:{n.ptport}
+            ServerTransportListenAddr obfs4 {addr_and_port_str(ip, n.ptport)}
             """
         )
     if n._config.bridgeclient:

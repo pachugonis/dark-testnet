@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 from collections.abc import Iterable, Collection
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, List
 from typing_extensions import ParamSpec
@@ -46,6 +47,19 @@ def memoized(fn: Callable[P, T]) -> Callable[P, T]:
         return result
 
     return memoized_fn
+
+
+def addr_and_port_str(ip_addr: Union[IPv4Address, IPv6Address], port: int) -> str:
+    """Format an ip address and port pair.
+
+    Concretely, this surrounds ipv6 addresses with brackets, which is a common
+    convention for separating an ipv6 address from a port number.
+    """
+
+    if ip_addr.version == 4:
+        return f"{ip_addr}:{port}"
+    if ip_addr.version == 6:
+        return f"[{ip_addr}]:{port}"
 
 
 class Option(Generic[T]):
