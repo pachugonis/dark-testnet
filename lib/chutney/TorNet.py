@@ -88,6 +88,17 @@ class NodeBackend(Enum):
     # arti (running locally)
     ARTI = 2
 
+class AddressAssignmentStrategy(Enum):
+    """How to assign addresses"""
+
+    # Use exactly the addresses `ip` and `ipv6_addr`.
+    # This is the legacy behavior.
+    STATIC = 1
+    # Use `ip` and `ipv6_addr` as base addresses, and add the node number.
+    # This is primarily for future support of running nodes on different
+    # (virtual, shadow) hosts, in different network namespaces, etc.
+    OFFSET = 2
+
 
 
 def get_absolute_chutney_path() -> Path:
@@ -258,7 +269,16 @@ class Node(object):
 
     @property
     def ip(self) -> Option[IPv4Address]:
-        return self._config.ip.map(IPv4Address)
+        if self._config.ip.is_none():
+            return Option(None)
+        base = IPv4Address(self._config.ip.unwrap())
+        strategy = self._config.address_assignment_strategy
+        if strategy == AddressAssignmentStrategy.STATIC:
+            return Option(base)
+        elif strategy == AddressAssignmentStrategy.OFFSET:
+            return Option(IPv4Address(int(base) + self.nodenum))
+        else:
+            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
@@ -271,7 +291,14 @@ class Node(object):
         # backwards compatibility.
         if base_str.startswith("[") and base_str.endswith("]"):
             base_str = base_str[1:-1]
-        return Option(IPv6Address(base_str))
+        base = IPv6Address(base_str)
+        strategy = self._config.address_assignment_strategy
+        if strategy == AddressAssignmentStrategy.STATIC:
+            return Option(base)
+        elif strategy == AddressAssignmentStrategy.OFFSET:
+            return Option(IPv6Address(int(base) + self.nodenum))
+        else:
+            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
 
     @property
     def orport(self) -> int:
@@ -706,6 +733,9 @@ class NodeConfig:
     arti: str = os.environ.get("CHUTNEY_ARTI", "arti")
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
+    # strategy for deriving concrete network addresses from the configuration
+    # `ip` and `ipv6_addr`
+    address_assignment_strategy: AddressAssignmentStrategy = AddressAssignmentStrategy.STATIC
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
