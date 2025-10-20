@@ -461,6 +461,8 @@ class Node(object):
         # json output that is consumed by other tools.
         return dict(
             nick=self.nick,
+            ip=self.ip.map(str).as_optional(),
+            ipv6_addr=self.ipv6_addr.map(str).as_optional(),
             auth_passphrase=self.auth_passphrase,
             dir=str(self.dir.absolute()),
             fingerprint=self.fingerprint.as_optional(),
