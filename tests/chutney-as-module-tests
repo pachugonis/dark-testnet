@@ -33,13 +33,8 @@ class Tests(unittest.TestCase):
     def test_basic(self) -> None:
         base = NodeConfig(controlling_pid=os.getpid())
         self.network.addNodes(basic_net_configs(base))
-
         self.network.configure()
-        self.network.start()
-
-        # This has a tendency to timeout with the default of 60s.
-        self.network.wait_for_bootstrap(300)
-
+        self.network.bootstrap()
         verify.run_test(self.network)
 
 if __name__ == '__main__':
