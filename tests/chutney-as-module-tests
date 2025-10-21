@@ -14,6 +14,13 @@ from chutney import TorNet
 from chutney.TorNet import NodeConfig
 from chutney.network_tests import verify
 
+def basic_net_configs(base: NodeConfig) -> list[NodeConfig]:
+    """Return list of node configs for a ~minimal network"""
+    Authority = dataclasses.replace(base, tag="a", authority=True, relay=True)
+    ExitRelay = dataclasses.replace(base, tag="r", relay=True, exit=True)
+    Client = dataclasses.replace(base, tag="c", client=True)
+    return Authority.getN(4) + ExitRelay.getN(1) + Client.getN(1)
+
 class Tests(unittest.TestCase):
     @override
     def setUp(self) -> None:
@@ -25,10 +32,7 @@ class Tests(unittest.TestCase):
 
     def test_basic(self) -> None:
         base = NodeConfig(controlling_pid=os.getpid())
-        Authority = dataclasses.replace(base, tag="a", authority=True, relay=True)
-        ExitRelay = dataclasses.replace(base, tag="r", relay=True, exit=True)
-        Client = dataclasses.replace(base, tag="c", client=True)
-        self.network.addNodes(Authority.getN(4) + ExitRelay.getN(1) + Client.getN(1))
+        self.network.addNodes(basic_net_configs(base))
 
         self.network.configure()
         self.network.start()
