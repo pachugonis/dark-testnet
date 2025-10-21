@@ -15,12 +15,14 @@ from chutney import TorNet
 from chutney.TorNet import NodeConfig, AddressAssignmentStrategy
 from chutney.network_tests import verify
 
+
 def basic_net_configs(base: NodeConfig) -> list[NodeConfig]:
     """Return list of node configs for a ~minimal network"""
     Authority = dataclasses.replace(base, tag="a", authority=True, relay=True)
     ExitRelay = dataclasses.replace(base, tag="r", relay=True, exit=True)
     Client = dataclasses.replace(base, tag="c", client=True)
     return Authority.getN(4) + ExitRelay.getN(1) + Client.getN(1)
+
 
 class Tests(unittest.TestCase):
     @override
@@ -42,8 +44,8 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSETTED,
-            controlling_pid=os.getpid()
-            )
+            controlling_pid=os.getpid(),
+        )
         self.network.addNodes(basic_net_configs(base))
 
         # Verify that nodes got different addresses
@@ -51,7 +53,7 @@ class Tests(unittest.TestCase):
         for node in self.network.nodes:
             ip = node.ip.as_optional()
             self.assertIsNotNone(ip)
-            assert ip is not None # for mypy
+            assert ip is not None  # for mypy
             self.assertNotIn(ip, addresses)
             addresses.add(ip)
 
@@ -60,5 +62,6 @@ class Tests(unittest.TestCase):
         self.network.bootstrap()
         verify.run_test(self.network)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
