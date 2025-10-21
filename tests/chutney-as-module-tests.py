@@ -8,7 +8,7 @@ import dataclasses
 import os
 import unittest
 
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address
 from typing_extensions import override
 
 from chutney import TorNet
