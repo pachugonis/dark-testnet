@@ -253,12 +253,19 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 str(self._node._config.tor),
                 "-f",
                 # Read config from stdin; we don't need or want most of the
-                # generated torrc. e.g. we don't want this output in the
-                # logfiles.
+                # generated torrc, and this function may be called before we've
+                # generated it.
                 "-",
                 # Don't try to connect to the network
                 "-DisableNetwork",
                 "1",
+                # Do use our DataDirectory. It shouldn't do much with it
+                # with the network disabled, but otherwise tor will
+                # try to set up a data directory in default locations
+                # under HOME or system-wide.
+                # <https://gitlab.torproject.org/tpo/core/chutney/-/issues/40042>
+                "-DataDirectory",
+                str(self._node.dir),
                 # Do generate our hidden service state
                 "-HiddenServiceDir",
                 str(self._node.dir.joinpath(self._node._config.hs_directory)),
