@@ -88,6 +88,7 @@ class NodeBackend(Enum):
     # arti (running locally)
     ARTI = 2
 
+
 class AddressAssignmentStrategy(Enum):
     """How to assign addresses"""
 
@@ -98,7 +99,6 @@ class AddressAssignmentStrategy(Enum):
     # This is primarily for future support of running nodes on different
     # (virtual, shadow) hosts, in different network namespaces, etc.
     OFFSET = 2
-
 
 
 def get_absolute_chutney_path() -> Path:
@@ -737,7 +737,9 @@ class NodeConfig:
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
     # `ip` and `ipv6_addr`
-    address_assignment_strategy: AddressAssignmentStrategy = AddressAssignmentStrategy.STATIC
+    address_assignment_strategy: AddressAssignmentStrategy = (
+        AddressAssignmentStrategy.STATIC
+    )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
