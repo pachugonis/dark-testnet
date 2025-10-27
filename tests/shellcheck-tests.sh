@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 set -o errexit
 set -o nounset
+set -o pipefail
 
 # SC1117 was disabled after 0.5, because it was too pedantic
 EXCLUSIONS="--exclude=SC1117"
