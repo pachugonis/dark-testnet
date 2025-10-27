@@ -18,8 +18,9 @@ from __future__ import unicode_literals
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import List, Optional, Any, Iterable
+from typing import List, Optional, Any, Iterable, Union
 
 import copy
 import dataclasses
@@ -86,6 +87,18 @@ class NodeBackend(Enum):
     TOR = 1
     # arti (running locally)
     ARTI = 2
+
+
+class AddressAssignmentStrategy(Enum):
+    """How to assign addresses"""
+
+    # Use exactly the addresses `ip` and `ipv6_addr`.
+    # This is the legacy behavior.
+    STATIC = 1
+    # Use `ip` and `ipv6_addr` as base addresses, and add the node number.
+    # This is primarily for future support of running nodes on different
+    # (virtual, shadow) hosts, in different network namespaces, etc.
+    OFFSET = 2
 
 
 def get_absolute_chutney_path() -> Path:
@@ -255,6 +268,39 @@ class Node(object):
         return self._builder.get_fingerprint_ed25519()
 
     @property
+    def ip(self) -> Option[IPv4Address]:
+        if self._config.ip.is_none():
+            return Option(None)
+        base = IPv4Address(self._config.ip.unwrap())
+        strategy = self._config.address_assignment_strategy
+        if strategy == AddressAssignmentStrategy.STATIC:
+            return Option(base)
+        elif strategy == AddressAssignmentStrategy.OFFSET:
+            return Option(IPv4Address(int(base) + self.nodenum))
+        else:
+            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
+
+    @property
+    def ipv6_addr(self) -> Option[IPv6Address]:
+        if self._config.ipv6_addr.is_none():
+            return Option(None)
+        base_str = self._config.ipv6_addr.unwrap()
+        # The IPv6Address constructor doesn't recognize addresses enclosed in
+        # brackets (e.g. `[::1]`), and indeed they aren't really part of the
+        # address. We used to expect them though, so for now strip them out for
+        # backwards compatibility.
+        if base_str.startswith("[") and base_str.endswith("]"):
+            base_str = base_str[1:-1]
+        base = IPv6Address(base_str)
+        strategy = self._config.address_assignment_strategy
+        if strategy == AddressAssignmentStrategy.STATIC:
+            return Option(base)
+        elif strategy == AddressAssignmentStrategy.OFFSET:
+            return Option(IPv6Address(int(base) + self.nodenum))
+        else:
+            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
+
+    @property
     def orport(self) -> int:
         """OrPort that this node exposes"""
         return self._network.orport_base + self.nodenum
@@ -415,6 +461,8 @@ class Node(object):
         # json output that is consumed by other tools.
         return dict(
             nick=self.nick,
+            ip=self.ip.map(str).as_optional(),
+            ipv6_addr=self.ipv6_addr.map(str).as_optional(),
             auth_passphrase=self.auth_passphrase,
             dir=str(self.dir.absolute()),
             fingerprint=self.fingerprint.as_optional(),
@@ -687,6 +735,11 @@ class NodeConfig:
     arti: str = os.environ.get("CHUTNEY_ARTI", "arti")
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
+    # strategy for deriving concrete network addresses from the configuration
+    # `ip` and `ipv6_addr`
+    address_assignment_strategy: AddressAssignmentStrategy = (
+        AddressAssignmentStrategy.STATIC
+    )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
@@ -859,7 +912,7 @@ class NodeConfig:
 
 @dataclasses.dataclass
 class BridgeLine:
-    ipaddr: str
+    ipaddr: Union[IPv4Address, IPv6Address]
     port: int
     fingerprint: str
     pt_transport: Option[str] = Option(None)
@@ -869,8 +922,8 @@ class BridgeLine:
 @dataclasses.dataclass
 class AuthorityLine:
     nick: str
-    ipv4: str
-    ipv6: Option[str]
+    ipv4: IPv4Address
+    ipv6: Option[IPv6Address]
     orport: int
     dirport: int
     v3id: str

@@ -357,7 +357,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         idfile = Path(datadir, "keys", "authority_identity_key")
         skfile = Path(datadir, "keys", "authority_signing_key")
         certfile = Path(datadir, "keys", "authority_certificate")
-        addr = f"{self._node._config.ip.unwrap()}:{self._node.dirport.unwrap()}"
+        addr = f"{self._node.ip.unwrap()}:{self._node.dirport.unwrap()}"
         passphrase = self._node.auth_passphrase
         if all(f.exists() for f in [idfile, skfile, certfile]):
             return
@@ -449,8 +449,8 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
         return TorNet.AuthorityLine(
             nick=self._node.nick,
-            ipv4=self._node._config.ip.unwrap(),
-            ipv6=self._node._config.ipv6_addr,
+            ipv4=self._node.ip.unwrap(),
+            ipv6=self._node.ipv6_addr,
             orport=self._node.orport,
             dirport=self._node.dirport.unwrap(),
             v3id=v3id,
@@ -489,17 +489,17 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
         res = [
             TorNet.BridgeLine(
-                ipaddr=self._node._config.ip.unwrap(),
+                ipaddr=self._node.ip.unwrap(),
                 port=port,
                 fingerprint=self._node.fingerprint.unwrap(),
                 pt_transport=pt_transport,
                 pt_extra=pt_extra,
             ),
         ]
-        if self._node._config.ipv6_addr.is_some():
+        if self._node.ipv6_addr.is_some():
             res.append(
                 TorNet.BridgeLine(
-                    ipaddr=self._node._config.ipv6_addr.unwrap(),
+                    ipaddr=self._node.ipv6_addr.unwrap(),
                     port=port,
                     fingerprint=self._node.fingerprint.unwrap(),
                     pt_transport=pt_transport,
