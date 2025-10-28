@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
 set -o errexit
 set -o nounset
+set -o pipefail
 
 # Output is prefixed with the name of the script
 myname=$(basename "$0")
