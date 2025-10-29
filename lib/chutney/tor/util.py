@@ -33,7 +33,7 @@ def run_tor(
             cmdline,
             stdout=chutney.launcher.PIPE,
             stderr=chutney.launcher.STDOUT,
-            universal_newlines=True,
+            text=True,
         )
     except FileNotFoundError as e:
         raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(

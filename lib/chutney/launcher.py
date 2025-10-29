@@ -55,7 +55,7 @@ class Launcher:
                 stdin=stdin,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                universal_newlines=True,
+                text=True,
                 bufsize=-1,
             )
         except FileNotFoundError as e:
@@ -206,9 +206,8 @@ class Launcher:
                 errno_str = errno.errorcode[errno_int]
                 raise chutney.errors.ChutneyError(f"exec failed with {errno_str}")
 
-    # XXX return-type should be `CompletedProcess[bytes]` when `text` or
-    # (equivalently `universal_newlines`) is `False`. Either handle this
-    # correctly, or stop supporting (non)-`text`.
+    # XXX return-type should be `CompletedProcess[bytes]` when `text`
+    # is `False`. Either handle this correctly, or stop supporting (non)-`text`.
     def run(
         self,
         args: CMD,
@@ -223,7 +222,7 @@ class Launcher:
         # shell: bool = False,
         # cwd: StrOrBytesPath | None = None,
         # env: _ENV | None = None,
-        universal_newlines: Optional[bool] = None,
+        # universal_newlines: Optional[bool] = None,
         # startupinfo: Any = None,
         # creationflags: int = 0,
         # restore_signals: bool = True,
@@ -248,7 +247,6 @@ class Launcher:
             stdin=stdin,
             stdout=stdout,
             stderr=stderr,
-            universal_newlines=universal_newlines,
             capture_output=capture_output,
             check=check,
             input=input,
