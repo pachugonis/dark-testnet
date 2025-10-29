@@ -7,7 +7,7 @@ import sys
 import chutney.errors
 
 from pathlib import Path
-from typing import Any, IO, Union, List, Optional
+from typing import IO, Union, List, Optional, Literal
 from typing_extensions import TypeAlias
 
 # XXX We'll want to wrap these to constrain their functionality
@@ -25,8 +25,7 @@ DEVNULL: int = subprocess.DEVNULL
 
 # Based on typeshed's _CMD, but more restrictive
 CMD: TypeAlias = list[str]
-# Based on typeshed's _FILE, but doesn't include None.
-FILE: TypeAlias = Union[int, IO[Any]]
+TEXT_FILE: TypeAlias = Union[int, IO[str]]
 
 _logger = logging.getLogger(__name__)
 
@@ -206,17 +205,15 @@ class Launcher:
                 errno_str = errno.errorcode[errno_int]
                 raise chutney.errors.ChutneyError(f"exec failed with {errno_str}")
 
-    # XXX return-type should be `CompletedProcess[bytes]` when `text`
-    # is `False`. Either handle this correctly, or stop supporting (non)-`text`.
     def run(
         self,
         args: CMD,
         *,
         # bufsize: int = -1,
         # executable: StrOrBytesPath | None = None,
-        stdin: Optional[FILE] = None,
-        stdout: Optional[FILE] = None,
-        stderr: Optional[FILE] = None,
+        stdin: Optional[TEXT_FILE] = None,
+        stdout: Optional[TEXT_FILE] = None,
+        stderr: Optional[TEXT_FILE] = None,
         # preexec_fn: Callable[[], Any] | None = None,
         # close_fds: bool = True,
         # shell: bool = False,
@@ -233,7 +230,7 @@ class Launcher:
         # encoding: str | None = None,
         # errors: str | None = None,
         input: Optional[str] = None,
-        text: Optional[bool] = None,
+        text: Literal[True],
         # timeout: float | None = None,
         # user: str | int | None = None,
         # group: str | int | None = None,
@@ -242,6 +239,22 @@ class Launcher:
         # pipesize: int = -1,
         # process_group: int | None = None,
     ) -> CompletedProcess[str]:
+        """Run a process to completion and return the result.
+
+        Analogous to `subprocess.run`, but doesn't support all of its options.
+
+        Currently only supports text-mode. Since `subprocess.run`'s default is
+        binary mode, to avoid confusion we currently *require* the `text`
+        parameter, and require it to be `True`.
+        """
+        # We currently only support text-mode.
+        # * Overloading type signatures to support both text and binary mode
+        #   would create a lot of noise, especially with subclassing.
+        # * All of our current uses either want text mode or don't care.
+        # * Tools we may want to use for remote execution, such as the `fabric`
+        #   package, only support text mode.
+        assert text is True
+
         return subprocess.run(
             args,
             stdin=stdin,
