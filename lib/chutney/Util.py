@@ -7,20 +7,15 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import errno
 import logging
 import os
 import stat
-import subprocess
-import sys
 
 from collections.abc import Iterable, Collection
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, List
+from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union
 from typing_extensions import ParamSpec
-
-import chutney.errors
 
 logger = logging.getLogger(__name__)
 
@@ -323,39 +318,6 @@ def find_executable_on_path(
     return None
 
 
-def launch_process(
-    cmdline: List[str], tor_name: str = "tor", stdin: Optional[int] = None
-) -> subprocess.Popen[str]:
-    """Launch the command line cmdline, which must start with the path or
-    name of a binary. Use tor_name as the canonical name of the binary in
-    logs. Pass stdin to the Popen constructor.
-
-    Returns the Popen object for the launched process.
-    """
-    if tor_name == "tor":
-        if not logger.isEnabledFor(logging.DEBUG):
-            cmdline.append("--hush")
-    elif tor_name == "tor-gencert":
-        if logger.isEnabledFor(logging.DEBUG):
-            cmdline.append("-v")
-    else:
-        raise ValueError("Unknown tor_name: '{}'".format(tor_name))
-    try:
-        p = subprocess.Popen(
-            cmdline,
-            stdin=stdin,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            bufsize=-1,
-        )
-    except FileNotFoundError as e:
-        raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(
-            tor_name, cmdline
-        ) from e
-    return p
-
-
 def mkdir_p(*d: Union[str, Path], mode: int = 448) -> None:
     """Create directory 'd' and all of its parents as needed.  Unlike
     os.makedirs, does not give an error if d already exists.
@@ -373,168 +335,3 @@ def mkdir_p(*d: Union[str, Path], mode: int = 448) -> None:
 
 def values_for_keys(d: dict[K, V], keys: Collection[K]) -> list[V]:
     return [kv[1] for kv in d.items() if kv[0] in keys]
-
-
-def closerange(start: int, end: int) -> None:
-    """
-    Closes all file descriptors between start and end, inclusive.
-
-    Works around that on systems with kernels that don't provide the close_range syscall,
-    os.closerange iterates the full list of integers in the range, which can be quite slow,
-    especially under shadow.
-    """
-    for fd_s in os.listdir("/proc/self/fd"):
-        fd = int(fd_s)
-        if fd in range(start, end + 1):
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-    # TODO: consider using os.closerange instead on systems that use the syscall.
-    # However even if we check that the kernel version has it, we'd have to be
-    # also be sure that the python runtime and/or libc actually use it.
-    #
-    # Alternatively we could just identify the smallest and largest actual open
-    # fd and clamp the range we actually pass to os.closerange; that'd be fewer
-    # syscalls in the common case but in theory could still blow up if there's
-    # somehow one high-int-value fd open.
-
-
-def launch_detached(
-    cmd: Path,
-    args: list[str],
-    stdout_path: Path,
-    stderr_path: Path,
-    pid_path: Path,
-    tor_name: str = "arti",
-) -> None:
-    """
-    Launch a ~daemonized process.
-
-    arti doesn't provide an alternative to tor's RunAsDaemon, and isn't planned
-    to since the modern way is for daemonization to be done by an intermediate
-    tool like systemd or daemonize.
-
-    daemon(7) documents the full requirements for "proper" daemonization, but
-    for our purposes, the main things we care about and actually do in this function are:
-
-    * Replace stdout and stderr.
-    * Detach from chutney's session (`setsid`), so that the process doesn't
-      receive signals via chutney's terminal, outlives chutney's (terminal) session, etc.
-    * Reparent to init by double-forking, so that the child doesn't become a zombie after
-      death.
-
-    Alternatives:
-
-    * Use an external tool like `daemonize(1)`, but this adds a system dependency.
-    * Use `subprocess.Popen` with `start_new_session`, but this doesn't support double-forking.
-      Possibly we could live with that, but then since chutney supports running
-      in multiple command-line invocations (`chutney start`; `chutney
-      wait_for_bootstrap`; etc) we'd have to be a little careful to handle both
-      cases where we are or aren't the parent. e.g. when checking if the process
-      is still alive we'd need to try reaping it (with WNOHANG) before trying to
-      signal it. That's not so bad, but there might be other surprising corner
-      cases.
-    """
-    # We use this to signal back if exec failed.
-    # TODO: Consider communicating via the sd_notify(3) protocol instead (e.g.
-    # ERRNO=x), particularly if and when arti itself supports it.
-    # <https://gitlab.torproject.org/tpo/core/arti/-/issues/1979>
-    (execfail_r, execfail_w) = os.pipe()
-
-    # Open all the files in this process, where errors will be reported most
-    # loudly and obviously.
-    with (
-        stdout_path.open("wb") as stdout_file,
-        stderr_path.open("wb") as stderr_file,
-        pid_path.open("w") as pid_file,
-    ):
-        # flush these to ensure we don't inherit buffered data in the child
-        # processes.
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-        child1 = os.fork()
-        if child1 == 0:
-            # running in child1
-
-            # we don't need stdin.
-            sys.stdin.close()
-
-            # Reassign specified files to stdout and stderr.
-            # We do this here instead of in child2 so that a failure will be
-            # directly detectable in the chutney process by this process
-            # failing.
-            os.dup2(stdout_file.fileno(), 1, inheritable=True)
-            os.dup2(stderr_file.fileno(), 2, inheritable=True)
-
-            # Use fd=3 for execfail_w. Set to close on exec.
-            if execfail_w != 3:
-                os.dup2(execfail_w, 3, inheritable=False)
-                execfail_w = 3
-            else:
-                # The dup2 call above fails with EINVAL if we pass the same descriptor twice.
-                # We can just skip the call; the original descriptor returned from os.pipe
-                # is already non-inheritable.
-                pass
-
-            # New session. This detaches the process from chutney's terminal, so that it
-            # doesn't receive signals from it, etc.
-            os.setsid()
-
-            # Fork again so that we can orphan child2, reparenting it to init.
-            child2 = os.fork()
-            if child2 != 0:
-                # (still) running in child1; parent of child2. record pid of child2 and exit.
-                pid_file.write(str(child2))
-                pid_file.close()
-                # exit. don't use sys.exit to avoid cleaning up any system
-                # resources inherited from the chutney process.
-                os._exit(0)
-
-            # running in child2.
-
-            # Close all files after the ones we're explicitly passing.
-            closerange(execfail_w + 1, 2**31 - 1)
-
-            # replace ourselves with the specified process.
-            try:
-                os.execv(cmd, [str(cmd)] + args)
-            except OSError as e:
-                # exec failed. Write the errno as text into our pipe, using a
-                # file object wrapper to (paranoid-ly) handle looping if somehow
-                # needed.
-                execfail_w_file = os.fdopen(execfail_w, mode="ta")
-                execfail_w_file.write(str(e.errno))
-                execfail_w_file.close()
-                # exit. don't use sys.exit to avoid cleaning up any system
-                # resources inherited from the chutney process.
-                os._exit(1)
-
-    # verify that child1 completed successfully
-    (_, status) = os.waitpid(child1, 0)
-    exitcode = os.waitstatus_to_exitcode(status)
-    if exitcode != 0:
-        raise chutney.errors.ChutneyError(f"Got exitcode {exitcode} launching {cmd}")
-
-    # verify that exec in child2 succeeded.
-
-    # close our copy of the execfail_w descriptor, so that no writers remain
-    # after child1 has exited and child2 has either exited or successfully
-    # exec'd.
-    os.close(execfail_w)
-    # read to end-of-file. if exec succeeds, the write-end will close and we'll
-    # get nothing here. if the exec fails, we'll get a string-encoding of the
-    # errno int.
-    execfail_r_file = os.fdopen(execfail_r, mode="tr")
-    exec_errno_str = execfail_r_file.read()
-    execfail_r_file.close()
-    if exec_errno_str:
-        errno_int = int(exec_errno_str)
-        if errno_int == errno.ENOENT:
-            raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(
-                tor_name, [str(cmd)] + args
-            )
-        else:
-            errno_str = errno.errorcode[errno_int]
-            raise chutney.errors.ChutneyError(f"exec failed with {errno_str}")

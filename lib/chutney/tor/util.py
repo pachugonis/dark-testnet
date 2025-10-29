@@ -1,18 +1,22 @@
 import logging
 import re
-import subprocess
 import textwrap
 
 from typing import List
 
 import chutney
 import chutney.errors
+import chutney.launcher
 import chutney.Util
 
 logger = logging.getLogger(__name__)
 
 
-def run_tor(cmdline: List[str], tolerate_error: bool = False) -> str:
+def run_tor(
+    launcher: chutney.launcher.Launcher,
+    cmdline: List[str],
+    tolerate_error: bool = False,
+) -> str:
     """Run the tor command line cmdline, which must start with the path or
     name of a tor binary.
 
@@ -25,10 +29,10 @@ def run_tor(cmdline: List[str], tolerate_error: bool = False) -> str:
     if not logger.isEnabledFor(logging.DEBUG):
         cmdline.append("--hush")
     try:
-        res = subprocess.run(
+        res = launcher.run(
             cmdline,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stdout=chutney.launcher.PIPE,
+            stderr=chutney.launcher.STDOUT,
             universal_newlines=True,
         )
     except FileNotFoundError as e:
@@ -47,7 +51,7 @@ def run_tor(cmdline: List[str], tolerate_error: bool = False) -> str:
 
 
 @chutney.Util.memoized
-def get_tor_version(tor: str) -> str:
+def get_tor_version(launcher: chutney.launcher.Launcher, tor: str) -> str:
     """Return the version of the tor binary.
     Versions are cached for each unique tor path.
     """
@@ -55,7 +59,7 @@ def get_tor_version(tor: str) -> str:
         tor,
         "--version",
     ]
-    tor_version = run_tor(cmdline)
+    tor_version = run_tor(launcher, cmdline)
     # Keep only the first line of the output: since #32102 a bunch of more
     # lines have been added to --version and we only care about the first
     tor_version = tor_version.split("\n")[0]

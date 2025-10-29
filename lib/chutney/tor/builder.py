@@ -4,7 +4,6 @@ import base64
 import logging
 import re
 import shutil
-import subprocess
 import time
 
 from cryptography.hazmat.primitives.asymmetric import x25519
@@ -15,12 +14,12 @@ from typing import List, Optional, Union
 from typing_extensions import override
 
 import chutney
+import chutney.launcher
 import chutney.TorNet as TorNet
 
 from chutney.errors import ChutneyError, ChutneyInternalError
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
-    launch_process,
     mkdir_p,
     Option,
 )
@@ -32,7 +31,7 @@ torrc_option_warn_count = 0
 
 
 @chutney.Util.memoized
-def get_torrc_options(tor: str) -> list[str]:
+def get_torrc_options(launcher: chutney.launcher.Launcher, tor: str) -> list[str]:
     """Return the torrc options supported by the tor binary.
     Options are cached for each unique tor path.
     """
@@ -40,7 +39,7 @@ def get_torrc_options(tor: str) -> list[str]:
         tor,
         "--list-torrc-options",
     ]
-    opts = run_tor(cmdline)
+    opts = run_tor(launcher, cmdline)
     # check we received a list of options, and nothing else
     assert re.match(r"(^\w+$)+", opts, flags=re.MULTILINE)
     torrc_opts = opts.split()
@@ -49,20 +48,20 @@ def get_torrc_options(tor: str) -> list[str]:
 
 
 @chutney.Util.memoized
-def tor_exists(tor: str) -> bool:
+def tor_exists(launcher: chutney.launcher.Launcher, tor: str) -> bool:
     """Return true iff this tor binary exists."""
     try:
-        run_tor([tor, "--hush", "--version"])
+        run_tor(launcher, [tor, "--hush", "--version"])
         return True
     except chutney.errors.ChutneyMissingBinaryError:
         return False
 
 
 @chutney.Util.memoized
-def tor_gencert_exists(gencert: str) -> bool:
+def tor_gencert_exists(launcher: chutney.launcher.Launcher, gencert: str) -> bool:
     """Return true iff this tor-gencert binary exists."""
     try:
-        p = launch_process([gencert, "--help"])
+        p = launcher.launch_process([gencert, "--help"])
         p.wait()
         return True
     except chutney.errors.ChutneyMissingBinaryError:
@@ -70,7 +69,7 @@ def tor_gencert_exists(gencert: str) -> bool:
 
 
 @chutney.Util.memoized
-def get_tor_modules(tor: str) -> dict[str, bool]:
+def get_tor_modules(launcher: chutney.launcher.Launcher, tor: str) -> dict[str, bool]:
     """Check the list of compile-time modules advertised by the given
     'tor' binary, and return a map from module name to a boolean
     describing whether it is supported.
@@ -80,8 +79,8 @@ def get_tor_modules(tor: str) -> dict[str, bool]:
     """
     cmdline = [tor, "--list-modules", "--hush"]
     try:
-        mods = run_tor(cmdline)
-    except subprocess.CalledProcessError:
+        mods = run_tor(launcher, cmdline)
+    except chutney.launcher.CalledProcessError:
         # Tor doesn't support --list-modules; act as if it said nothing.
         mods = ""
 
@@ -95,11 +94,13 @@ def get_tor_modules(tor: str) -> dict[str, bool]:
     return supported
 
 
-def tor_has_module(tor: str, modname: str, default: bool = True) -> bool:
+def tor_has_module(
+    launcher: chutney.launcher.Launcher, tor: str, modname: str, default: bool = True
+) -> bool:
     """Return true iff the given tor binary supports a given compile-time
     module.  If the module is not listed, return 'default'.
     """
-    return get_tor_modules(tor).get(modname, default)
+    return get_tor_modules(launcher, tor).get(modname, default)
 
 
 def make_datadir_subdirectory(
@@ -113,14 +114,18 @@ def make_datadir_subdirectory(
     mkdir_p(datadir, subdir)
 
 
-def run_tor_gencert(cmdline: List[str], passphrase: str) -> str:
+def run_tor_gencert(
+    launcher: chutney.launcher.Launcher, cmdline: List[str], passphrase: str
+) -> str:
     """Run the tor-gencert command line cmdline, which must start with the
     path or name of a tor-gencert binary.
     Then send passphrase to the stdin of the process.
 
     Returns the combined stdout and stderr of the process.
     """
-    p = launch_process(cmdline, tor_name="tor-gencert", stdin=subprocess.PIPE)
+    p = launcher.launch_process(
+        cmdline, tor_name="tor-gencert", stdin=chutney.launcher.PIPE
+    )
     (stdouterr, empty_stderr) = p.communicate(passphrase + "\n")
     logger.debug(stdouterr)
     assert p.returncode == 0  # XXXX BAD!
@@ -158,6 +163,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     def __init__(self, node: TorNet.Node):
         TorNet.NodeBuilder.__init__(self)
         self._node = node
+        self._launcher = chutney.launcher.Launcher()
 
     def _createTorrcFile(self, checkOnly: bool = False) -> None:
         """Write the torrc file for this node, disabling any options
@@ -174,8 +180,8 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         # now filter the options we're about to write, commenting out
         # the options that the current tor binary doesn't support
         tor = self._node._config.tor
-        tor_version = get_tor_version(tor)
-        torrc_opts = get_torrc_options(tor)
+        tor_version = get_tor_version(self._launcher, tor)
+        torrc_opts = get_torrc_options(self._launcher, tor)
         # check if each option is supported before writing it
         # Unsupported option values may need special handling.
         with self._node.torrc_path.open("w") as f:
@@ -212,12 +218,13 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         # check, ensure that `tests/torrc-template-tests` and `tests/network-config-tests`
         # still actually validate the generated config files.
         run_tor(
+            self._launcher,
             [
                 str(self._node._config.tor),
                 "-f",
                 str(self._node.torrc_path),
                 "--verify-config",
-            ]
+            ],
         )
 
     def _getTorrcContents(self) -> str:
@@ -248,7 +255,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
     def _generate_hs_state(self) -> None:
         # Force generation of the hidden service key and address.
-        p = launch_process(
+        p = self._launcher.launch_process(
             [
                 str(self._node._config.tor),
                 "-f",
@@ -274,7 +281,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 "-HiddenServicePort",
                 "1 1",
             ],
-            stdin=subprocess.DEVNULL,
+            stdin=chutney.launcher.DEVNULL,
         )
         start_time = time.time()
         last_warn_time = start_time
@@ -316,15 +323,15 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
     @override
     def isSupported(self, net: TorNet.Network) -> bool:
-        if not tor_exists(self._node._config.tor):
+        if not tor_exists(self._launcher, self._node._config.tor):
             print("No binary found for %r" % self._node._config.tor)
             return False
 
         if self._node._config.authority:
-            if not tor_has_module(self._node._config.tor, "dirauth"):
+            if not tor_has_module(self._launcher, self._node._config.tor, "dirauth"):
                 print("No dirauth support in %r" % self._node._config.tor)
                 return False
-            if not tor_gencert_exists(self._node._config.tor_gencert):
+            if not tor_gencert_exists(self._launcher, self._node._config.tor_gencert):
                 print(
                     "No binary found for tor-gencert %r"
                     % self._node._config.tor_gencert
@@ -386,7 +393,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         logger.debug(
             "Identity key path '{}', command '{}'".format(idfile, " ".join(cmdline))
         )
-        run_tor_gencert(cmdline, passphrase)
+        run_tor_gencert(self._launcher, cmdline, passphrase)
 
     def _genRouterKey(self) -> None:
         """Generate an identity key for this router"""
@@ -403,7 +410,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             str(datadir),
             "--list-fingerprint",
         ]
-        run_tor(cmdline)
+        run_tor(self._launcher, cmdline)
 
     @override
     def get_fingerprint_ed25519(self) -> Option[str]:

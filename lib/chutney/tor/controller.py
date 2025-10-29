@@ -12,12 +12,12 @@ from typing import Optional, Union
 from typing_extensions import override
 
 import chutney.errors
+import chutney.launcher
 import chutney.TorNet as TorNet
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
-    launch_process,
     values_for_keys,
     Option,
 )
@@ -31,6 +31,7 @@ class LocalNodeController(TorNet.NodeController):
         TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
+        self._launcher = chutney.launcher.Launcher()
         self.most_recent_oniondesc_status: Optional[DirInfoStatus] = None
         self.most_recent_bootstrap_status: Optional[DirInfoStatus] = None
 
@@ -83,7 +84,7 @@ class LocalNodeController(TorNet.NodeController):
     def isLegacyTorVersion(self) -> bool:
         """Is the current Tor version 0.3.5 or earlier?"""
         tor = self._node._config.tor
-        tor_version = get_tor_version(tor)
+        tor_version = get_tor_version(self._launcher, tor)
         min_version = LocalNodeController.MIN_TOR_VERSION_FOR_TIMING_FIX
 
         # We could compare the version components, but this works for now
@@ -174,7 +175,7 @@ class LocalNodeController(TorNet.NodeController):
             "-f",
             str(self._node.torrc_path),
         ]
-        p = launch_process(cmdline)
+        p = self._launcher.launch_process(cmdline)
         if self.waitOnLaunch():
             # this requires that RunAsDaemon is set.
             (stdouterr, empty_stderr) = p.communicate()

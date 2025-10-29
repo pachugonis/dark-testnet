@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import chutney.launcher
 import chutney.TorNet as TorNet
 import textwrap
 
@@ -93,7 +94,9 @@ def format(n: TorNet.Node) -> str:
         UseMicrodescriptors {int(n._config.use_microdescriptors)}
         """
     )
-    tor_version = get_tor_version(n._config.tor)
+    # XXX get from builder. Or maybe push this up to caller and take tor_version as a param.
+    launcher = chutney.launcher.Launcher()
+    tor_version = get_tor_version(launcher, n._config.tor)
     if (
         "0.4.9.1-alpha-dev" in tor_version or "0.4.9.2-alpha-dev" in tor_version
     ) and n._config.pt_transport:
