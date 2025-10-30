@@ -49,7 +49,7 @@ class Launcher:
         else:
             raise ValueError("Unknown tor_name: '{}'".format(tor_name))
         try:
-            p = subprocess.Popen(
+            p = self.popen(
                 cmdline,
                 stdin=stdin,
                 stdout=subprocess.PIPE,
@@ -264,6 +264,50 @@ class Launcher:
             check=check,
             input=input,
             text=text,
+        )
+
+    def popen(
+        self,
+        args: CMD,
+        *,
+        bufsize: int = -1,
+        # executable: StrOrBytesPath | None = None,
+        stdin: Optional[TEXT_FILE] = None,
+        stdout: Optional[TEXT_FILE] = None,
+        stderr: Optional[TEXT_FILE] = None,
+        # preexec_fn: Callable[[], Any] | None = None,
+        # close_fds: bool = True,
+        # shell: bool = False,
+        # cwd: StrOrBytesPath | None = None,
+        # env: _ENV | None = None,
+        # universal_newlines: bool | None = None,
+        # startupinfo: Any | None = None,
+        # creationflags: int = 0,
+        # restore_signals: bool = True,
+        # start_new_session: bool = False,
+        # pass_fds: Collection[int] = (),
+        # text: bool | None = None,
+        text: Literal[True],
+        # encoding: str,
+        # errors: str | None = None,
+        # user: str | int | None = None,
+        # group: str | int | None = None,
+        # extra_groups: Iterable[str | int] | None = None,
+        # umask: int = -1,
+        # pipesize: int = -1,
+        # process_group: int | None = None
+    ) -> Popen[str]:
+        """Launch a process.
+
+        Analogous `subprocess.Popen`, but doesn't support all of its options.
+
+        Currently only supports text-mode. Since `subprocess.Popen`'s default is
+        binary mode, to avoid confusion we currently *require* the `text`
+        parameter, and require it to be `True`.
+        """
+        assert text is True
+        return subprocess.Popen(
+            args, bufsize=bufsize, stdin=stdin, stdout=stdout, stderr=stderr, text=text
         )
 
 
