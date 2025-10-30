@@ -1,3 +1,4 @@
+
 import enum
 import errno
 import logging
@@ -8,7 +9,7 @@ import sys
 import chutney.errors
 
 from pathlib import Path
-from typing import IO, Union, List, Optional, Literal
+from typing import IO, Union, Optional, Literal
 from typing_extensions import TypeAlias
 
 from chutney.known_bins import KnownBin
@@ -43,30 +44,6 @@ class Capture(enum.Enum):
 
 
 class Launcher:
-    def launch_process(
-        self, cmdline: List[str], *, known_bin: KnownBin, stdin: Optional[int] = None
-    ) -> Popen[str]:
-        """Launch the command line cmdline, which must start with the path or
-        name of a binary. Use tor_name as the canonical name of the binary in
-        logs. Pass stdin to the Popen constructor.
-
-        Returns the Popen object for the launched process.
-        """
-        try:
-            p = self.popen(
-                cmdline,
-                stdin=stdin,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=-1,
-            )
-        except FileNotFoundError as e:
-            raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
-                known_bin, cmdline
-            ) from e
-        return p
-
     def launch_detached(
         self,
         cmd: Path,
@@ -242,6 +219,7 @@ class Launcher:
         # umask: int = -1,
         # pipesize: int = -1,
         # process_group: int | None = None,
+        known_bin: Optional[KnownBin],
     ) -> CompletedProcess[str]:
         """Run a process to completion and return the result.
 
@@ -256,6 +234,9 @@ class Launcher:
         `stdout` or `stderr` is an error. Setting `capture_strategy` to `Capture.SEPARATE`
         captures stdout and stderr separately, similarly to `capture_output=True`.
         Setting it to `Capture.MERGED` merges stderr into stdout and captures stdout.
+
+        The `known_bin` parameter, if set, will be used to potentially add extra
+        arguments, and add extra debug info if the binary isn't found.
         """
         if capture_strategy is not None:
             # As in subprocess.run, if capture_output is set, then
@@ -283,6 +264,7 @@ class Launcher:
             stdout=stdout,
             stderr=stderr,
             text=text,
+            known_bin=known_bin,
         )
 
         (stdout_data, stderr_data) = p.communicate(input)
@@ -329,6 +311,7 @@ class Launcher:
         # umask: int = -1,
         # pipesize: int = -1,
         # process_group: int | None = None
+        known_bin: Optional[KnownBin],
     ) -> Popen[str]:
         """Launch a process.
 
@@ -337,11 +320,27 @@ class Launcher:
         Currently only supports text-mode. Since `subprocess.Popen`'s default is
         binary mode, to avoid confusion we currently *require* the `text`
         parameter, and require it to be `True`.
+
+        The `known_bin` parameter, if set, will be used to potentially add extra
+        arguments, and add extra debug info if the binary isn't found.
         """
         assert text is True
-        return subprocess.Popen(
-            args, bufsize=bufsize, stdin=stdin, stdout=stdout, stderr=stderr, text=text
-        )
+        try:
+            return subprocess.Popen(
+                args,
+                bufsize=bufsize,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                text=text,
+            )
+        except FileNotFoundError as e:
+            if known_bin is not None:
+                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+                    known_bin, args
+                ) from e
+            else:
+                raise chutney.errors.ChutneyMissingBinaryError(args[0], args, "")
 
 
 def _closerange(start: int, end: int) -> None:

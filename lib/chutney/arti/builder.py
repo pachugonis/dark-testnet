@@ -18,6 +18,7 @@ from chutney.errors import (
     ChutneyError,
     ChutneyInternalError,
 )
+from chutney.known_bins import ArtiBin
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
@@ -210,6 +211,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             ],
             capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
+            known_bin=ArtiBin(),
         )
         # TODO: recognize specific return codes?
         if sp.returncode != 0:
@@ -239,6 +241,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
             input=hs_address,
             capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
+            known_bin=ArtiBin(),
         )
         if sp.returncode != 0:
             logger.warning(

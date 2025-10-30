@@ -176,8 +176,12 @@ class LocalNodeController(TorNet.NodeController):
             "-f",
             str(self._node.torrc_path),
         ]
-        p = self._launcher.launch_process(
-            cmdline, known_bin=chutney.known_bins.TorBin()
+        p = self._launcher.popen(
+            cmdline,
+            stdout=chutney.launcher.PIPE,
+            stderr=chutney.launcher.STDOUT,
+            known_bin=chutney.known_bins.TorBin(),
+            text=True,
         )
         if self.waitOnLaunch():
             # this requires that RunAsDaemon is set.

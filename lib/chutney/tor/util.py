@@ -6,9 +6,10 @@ from typing import List
 
 import chutney
 import chutney.errors
-import chutney.known_bins
 import chutney.launcher
 import chutney.Util
+
+from chutney.known_bins import TorBin
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +28,12 @@ def run_tor(
 
     If `tolerate_error` is set, ignore the return code from the binary.
     """
-    if not logger.isEnabledFor(logging.DEBUG):
-        cmdline.append("--hush")
-    try:
-        res = launcher.run(
-            cmdline,
-            stdout=chutney.launcher.PIPE,
-            stderr=chutney.launcher.STDOUT,
-            text=True,
-        )
-    except FileNotFoundError as e:
-        raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
-            chutney.known_bins.TorBin(), cmdline
-        ) from e
+    res = launcher.run(
+        cmdline,
+        capture_strategy=chutney.launcher.Capture.MERGED,
+        text=True,
+        known_bin=TorBin(),
+    )
     stdouterr = res.stdout
     if res.returncode != 0 and not tolerate_error:
         raise chutney.errors.ChutneyError(

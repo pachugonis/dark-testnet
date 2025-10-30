@@ -62,10 +62,11 @@ def tor_exists(launcher: chutney.launcher.Launcher, tor: str) -> bool:
 def tor_gencert_exists(launcher: chutney.launcher.Launcher, gencert: str) -> bool:
     """Return true iff this tor-gencert binary exists."""
     try:
-        p = launcher.launch_process(
-            [gencert, "--help"], known_bin=chutney.known_bins.TorGenCertBin()
+        launcher.run(
+            [gencert, "--help"],
+            known_bin=chutney.known_bins.TorGenCertBin(),
+            text=True,
         )
-        p.wait()
         return True
     except chutney.errors.ChutneyMissingBinaryError:
         return False
@@ -126,16 +127,17 @@ def run_tor_gencert(
 
     Returns the combined stdout and stderr of the process.
     """
-    p = launcher.launch_process(
+    p = launcher.run(
         cmdline,
         known_bin=chutney.known_bins.TorGenCertBin(),
-        stdin=chutney.launcher.PIPE,
+        input=passphrase + "\n",
+        capture_strategy=chutney.launcher.Capture.MERGED,
+        text=True,
     )
-    (stdouterr, empty_stderr) = p.communicate(passphrase + "\n")
-    logger.debug(stdouterr)
+    logger.debug(p.stdout)
     assert p.returncode == 0  # XXXX BAD!
-    assert empty_stderr is None
-    return stdouterr
+    assert p.stderr is None
+    return p.stdout
 
 
 class LocalNodeBuilder(TorNet.NodeBuilder):
@@ -260,7 +262,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
     def _generate_hs_state(self) -> None:
         # Force generation of the hidden service key and address.
-        p = self._launcher.launch_process(
+        p = self._launcher.popen(
             [
                 str(self._node._config.tor),
                 "-f",
@@ -287,7 +289,10 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 "1 1",
             ],
             stdin=chutney.launcher.DEVNULL,
+            stdout=chutney.launcher.PIPE,
+            stderr=chutney.launcher.PIPE,
             known_bin=chutney.known_bins.TorBin(),
+            text=True,
         )
         start_time = time.time()
         last_warn_time = start_time
