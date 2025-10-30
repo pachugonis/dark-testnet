@@ -1,3 +1,4 @@
+import enum
 import errno
 import logging
 import os
@@ -30,6 +31,15 @@ CMD: TypeAlias = list[str]
 TEXT_FILE: TypeAlias = Union[int, IO[str]]
 
 _logger = logging.getLogger(__name__)
+
+
+class Capture(enum.Enum):
+    """How output of a process ought to be captured"""
+
+    # Keep stdout and stderr separate.
+    SEPARATE = enum.auto()
+    # Merge stderr into stdout.
+    MERGED = enum.auto()
 
 
 class Launcher:
@@ -219,7 +229,7 @@ class Launcher:
         # restore_signals: bool = True,
         # start_new_session: bool = False,
         # pass_fds: Collection[int] = ...,
-        capture_output: bool = False,
+        capture_strategy: Optional[Capture] = None,
         check: bool = False,
         # encoding: str | None = None,
         # errors: str | None = None,
@@ -240,14 +250,28 @@ class Launcher:
         Currently only supports text-mode. Since `subprocess.run`'s default is
         binary mode, to avoid confusion we currently *require* the `text`
         parameter, and require it to be `True`.
+
+        The `capture_output` parameter has been replaced with
+        `capture_strategy`.  If `capture_strategy` is set, then also setting
+        `stdout` or `stderr` is an error. Setting `capture_strategy` to `Capture.SEPARATE`
+        captures stdout and stderr separately, similarly to `capture_output=True`.
+        Setting it to `Capture.MERGED` merges stderr into stdout and captures stdout.
         """
-        if capture_output:
+        if capture_strategy is not None:
             # As in subprocess.run, if capture_output is set, then
             # it is an error to have also set stdout or stderr.
             assert stdout is None
             assert stderr is None
-            stdout = PIPE
-            stderr = PIPE
+            if capture_strategy is Capture.SEPARATE:
+                stdout = PIPE
+                stderr = PIPE
+            elif capture_strategy is Capture.MERGED:
+                stdout = PIPE
+                stderr = STDOUT
+            else:
+                raise chutney.errors.ChutneyInternalError(
+                    "Unhandled capture strategy " + capture_strategy
+                )
 
         if input is not None:
             assert stdin is None

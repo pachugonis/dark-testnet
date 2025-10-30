@@ -208,7 +208,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "onion-address",
                 "--generate=if-needed",
             ],
-            capture_output=True,
+            capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
         )
         # TODO: recognize specific return codes?
@@ -237,7 +237,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "--output=-",
             ],
             input=hs_address,
-            capture_output=True,
+            capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
         )
         if sp.returncode != 0:
