@@ -38,6 +38,7 @@ import time
 import tomli_w
 import json
 
+from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 from chutney.errors import (
     ChutneyError,
@@ -730,9 +731,9 @@ class NodeConfig:
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
-    tor: str = os.environ.get("CHUTNEY_TOR", "tor")
+    tor: str = os.environ.get(TorBin().config_envvar(), "tor")
     # path of the arti binary (for backend = NodeBackend.ARTI)
-    arti: str = os.environ.get("CHUTNEY_ARTI", "arti")
+    arti: str = os.environ.get(ArtiBin().config_envvar(), "arti")
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
@@ -806,7 +807,7 @@ class NodeConfig:
     @property
     def tor_gencert(self) -> str:
         """name or path of the tor-gencert binary (if present)"""
-        return os.getenv("CHUTNEY_TOR_GENCERT", self.tor + "-gencert")
+        return os.getenv(TorGenCertBin().config_envvar(), self.tor + "-gencert")
 
     # XXX Move template logic into template
     @property
@@ -1145,7 +1146,7 @@ class Network(object):
                 all_family_ids.update(n._config.families)
         for fid in all_family_ids:
             cmdline = [
-                os.environ.get("CHUTNEY_TOR", "tor"),
+                os.environ.get(TorBin().config_envvar(), "tor"),
                 "--keygen-family",
                 str(get_familykey_path(fid, ext=False)),
             ]

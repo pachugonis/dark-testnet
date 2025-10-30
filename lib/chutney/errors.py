@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List
+from chutney.known_bins import KnownBin
 
 
 class ChutneyError(Exception):
@@ -26,23 +27,22 @@ class ChutneyMissingBinaryError(ChutneyError):
         self._help = help
 
     @staticmethod
-    def for_missing_tor(tor_name: str, cmdline: List[str]) -> ChutneyMissingBinaryError:
+    def for_missing_known_bin(
+        bin: KnownBin, cmdline: List[str]
+    ) -> ChutneyMissingBinaryError:
         """Create an exception for a missing tor binary, with help for how to fix it."""
-        help_msg_fmt = (
-            "Set the '{0}' environment variable to the path of "
-            + "'{1}'. If using test-network.sh, set the 'TOR_DIR' "
-            + "environment variable to the directory containing '{1}'."
+        help_msg = (
+            f"Set the '{bin.config_envvar()}' environment variable"
+            + f" to the path of '{bin.name()}'."
         )
-        help_msg = ""
-        if tor_name == "tor":
-            help_msg = help_msg_fmt.format("CHUTNEY_TOR", tor_name)
-        elif tor_name == "tor-gencert":
-            help_msg = help_msg_fmt.format("CHUTNEY_TOR_GENCERT", tor_name)
-        elif tor_name == "arti":
-            help_msg = help_msg_fmt.format("CHUTNEY_ARTI", tor_name)
-        else:
-            raise ValueError("Unknown tor_name: '{}'".format(tor_name))
-        return ChutneyMissingBinaryError(tor_name, cmdline, help_msg)
+
+        test_network_sh_hint = bin.test_network_sh_hint()
+        if test_network_sh_hint is not None:
+            help_msg += (
+                " Alternatively, if using test-network.sh: " + test_network_sh_hint
+            )
+
+        return ChutneyMissingBinaryError(bin.name(), cmdline, help_msg)
 
     def __str__(self) -> str:
         return (

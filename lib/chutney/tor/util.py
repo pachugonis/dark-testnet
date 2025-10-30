@@ -6,6 +6,7 @@ from typing import List
 
 import chutney
 import chutney.errors
+import chutney.known_bins
 import chutney.launcher
 import chutney.Util
 
@@ -36,8 +37,8 @@ def run_tor(
             text=True,
         )
     except FileNotFoundError as e:
-        raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(
-            "tor", cmdline
+        raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+            chutney.known_bins.TorBin(), cmdline
         ) from e
     stdouterr = res.stdout
     if res.returncode != 0 and not tolerate_error:

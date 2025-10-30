@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import IO, Union, List, Optional, Literal
 from typing_extensions import TypeAlias
 
+from chutney.known_bins import KnownBin
+
 # XXX We'll want to wrap these to constrain their functionality
 # and abstract over non-local versions
 CalledProcessError = subprocess.CalledProcessError
@@ -32,7 +34,7 @@ _logger = logging.getLogger(__name__)
 
 class Launcher:
     def launch_process(
-        self, cmdline: List[str], tor_name: str = "tor", stdin: Optional[int] = None
+        self, cmdline: List[str], *, known_bin: KnownBin, stdin: Optional[int] = None
     ) -> Popen[str]:
         """Launch the command line cmdline, which must start with the path or
         name of a binary. Use tor_name as the canonical name of the binary in
@@ -40,14 +42,6 @@ class Launcher:
 
         Returns the Popen object for the launched process.
         """
-        if tor_name == "tor":
-            if not _logger.isEnabledFor(logging.DEBUG):
-                cmdline.append("--hush")
-        elif tor_name == "tor-gencert":
-            if _logger.isEnabledFor(logging.DEBUG):
-                cmdline.append("-v")
-        else:
-            raise ValueError("Unknown tor_name: '{}'".format(tor_name))
         try:
             p = self.popen(
                 cmdline,
@@ -58,8 +52,8 @@ class Launcher:
                 bufsize=-1,
             )
         except FileNotFoundError as e:
-            raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(
-                tor_name, cmdline
+            raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+                known_bin, cmdline
             ) from e
         return p
 
@@ -70,7 +64,7 @@ class Launcher:
         stdout_path: Path,
         stderr_path: Path,
         pid_path: Path,
-        tor_name: str = "arti",
+        known_bin: KnownBin,
     ) -> None:
         """
         Launch a ~daemonized process.
@@ -198,8 +192,8 @@ class Launcher:
         if exec_errno_str:
             errno_int = int(exec_errno_str)
             if errno_int == errno.ENOENT:
-                raise chutney.errors.ChutneyMissingBinaryError.for_missing_tor(
-                    tor_name, [str(cmd)] + args
+                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+                    known_bin, [str(cmd)] + args
                 )
             else:
                 errno_str = errno.errorcode[errno_int]

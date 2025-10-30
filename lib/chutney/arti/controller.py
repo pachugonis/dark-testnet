@@ -12,6 +12,7 @@ from typing_extensions import override
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 import chutney.errors
+import chutney.known_bins
 import chutney.launcher
 import chutney.TorNet as TorNet
 
@@ -122,7 +123,7 @@ class LocalArtiNodeController(TorNet.NodeController):
             # logging.
             stderr_path=self._node.dir.joinpath("arti.stderr"),
             pid_path=self._node.pidfile,
-            tor_name="arti",
+            known_bin=chutney.known_bins.ArtiBin(),
         )
 
     @override

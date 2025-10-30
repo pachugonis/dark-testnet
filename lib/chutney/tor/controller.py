@@ -12,6 +12,7 @@ from typing import Optional, Union
 from typing_extensions import override
 
 import chutney.errors
+import chutney.known_bins
 import chutney.launcher
 import chutney.TorNet as TorNet
 
@@ -175,7 +176,9 @@ class LocalNodeController(TorNet.NodeController):
             "-f",
             str(self._node.torrc_path),
         ]
-        p = self._launcher.launch_process(cmdline)
+        p = self._launcher.launch_process(
+            cmdline, known_bin=chutney.known_bins.TorBin()
+        )
         if self.waitOnLaunch():
             # this requires that RunAsDaemon is set.
             (stdouterr, empty_stderr) = p.communicate()

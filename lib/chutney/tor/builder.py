@@ -14,6 +14,7 @@ from typing import List, Optional, Union
 from typing_extensions import override
 
 import chutney
+import chutney.known_bins
 import chutney.launcher
 import chutney.TorNet as TorNet
 
@@ -61,7 +62,9 @@ def tor_exists(launcher: chutney.launcher.Launcher, tor: str) -> bool:
 def tor_gencert_exists(launcher: chutney.launcher.Launcher, gencert: str) -> bool:
     """Return true iff this tor-gencert binary exists."""
     try:
-        p = launcher.launch_process([gencert, "--help"])
+        p = launcher.launch_process(
+            [gencert, "--help"], known_bin=chutney.known_bins.TorGenCertBin()
+        )
         p.wait()
         return True
     except chutney.errors.ChutneyMissingBinaryError:
@@ -124,7 +127,9 @@ def run_tor_gencert(
     Returns the combined stdout and stderr of the process.
     """
     p = launcher.launch_process(
-        cmdline, tor_name="tor-gencert", stdin=chutney.launcher.PIPE
+        cmdline,
+        known_bin=chutney.known_bins.TorGenCertBin(),
+        stdin=chutney.launcher.PIPE,
     )
     (stdouterr, empty_stderr) = p.communicate(passphrase + "\n")
     logger.debug(stdouterr)
@@ -282,6 +287,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 "1 1",
             ],
             stdin=chutney.launcher.DEVNULL,
+            known_bin=chutney.known_bins.TorBin(),
         )
         start_time = time.time()
         last_warn_time = start_time
