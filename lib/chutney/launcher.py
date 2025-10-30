@@ -247,23 +247,38 @@ class Launcher:
         binary mode, to avoid confusion we currently *require* the `text`
         parameter, and require it to be `True`.
         """
-        # We currently only support text-mode.
-        # * Overloading type signatures to support both text and binary mode
-        #   would create a lot of noise, especially with subclassing.
-        # * All of our current uses either want text mode or don't care.
-        # * Tools we may want to use for remote execution, such as the `fabric`
-        #   package, only support text mode.
-        assert text is True
+        if capture_output:
+            # As in subprocess.run, if capture_output is set, then
+            # it is an error to have also set stdout or stderr.
+            assert stdout is None
+            assert stderr is None
+            stdout = PIPE
+            stderr = PIPE
 
-        return subprocess.run(
+        if input is not None:
+            assert stdin is None
+            stdin = PIPE
+
+        p = self.popen(
             args,
             stdin=stdin,
             stdout=stdout,
             stderr=stderr,
-            capture_output=capture_output,
-            check=check,
-            input=input,
             text=text,
+        )
+
+        (stdout_data, stderr_data) = p.communicate(input)
+
+        if check and p.returncode != 0:
+            raise CalledProcessError(
+                returncode=p.returncode,
+                cmd=args,
+                output=stdout_data,
+                stderr=stderr_data,
+            )
+
+        return CompletedProcess(
+            args=args, returncode=p.returncode, stdout=stdout_data, stderr=stderr_data
         )
 
     def popen(
