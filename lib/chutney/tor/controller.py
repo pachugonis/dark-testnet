@@ -32,7 +32,7 @@ class LocalNodeController(TorNet.NodeController):
         TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
-        self._launcher = chutney.launcher.Launcher()
+        self._launcher = chutney.launcher.LocalLauncher()
         self.most_recent_oniondesc_status: Optional[DirInfoStatus] = None
         self.most_recent_bootstrap_status: Optional[DirInfoStatus] = None
 

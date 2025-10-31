@@ -1150,7 +1150,7 @@ class Network(object):
                 "--keygen-family",
                 str(get_familykey_path(fid, ext=False)),
             ]
-            launcher = chutney.launcher.Launcher()
+            launcher = chutney.launcher.LocalLauncher()
             output = chutney.tor.util.run_tor(launcher, cmdline, tolerate_error=True)
             if "Unknown option 'keygen-family'" in output:
                 print("No support for --keygen-family; using legacy families only.")

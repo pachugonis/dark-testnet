@@ -8,9 +8,10 @@ import sys
 
 import chutney.errors
 
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Union, Optional, Literal
-from typing_extensions import TypeAlias
+from typing_extensions import TypeAlias, override
 
 from chutney.known_bins import KnownBin
 
@@ -43,7 +44,8 @@ class Capture(enum.Enum):
     MERGED = enum.auto()
 
 
-class Launcher:
+class Launcher(ABC):
+    @abstractmethod
     def launch_detached(
         self,
         cmd: Path,
@@ -81,6 +83,193 @@ class Launcher:
         signal it. That's not so bad, but there might be other surprising corner
         cases.
         """
+        ...
+
+    def run(
+        self,
+        args: CMD,
+        *,
+        # bufsize: int = -1,
+        # executable: StrOrBytesPath | None = None,
+        stdin: Optional[TEXT_FILE] = None,
+        stdout: Optional[TEXT_FILE] = None,
+        stderr: Optional[TEXT_FILE] = None,
+        # preexec_fn: Callable[[], Any] | None = None,
+        # close_fds: bool = True,
+        # shell: bool = False,
+        # cwd: StrOrBytesPath | None = None,
+        # env: _ENV | None = None,
+        # universal_newlines: Optional[bool] = None,
+        # startupinfo: Any = None,
+        # creationflags: int = 0,
+        # restore_signals: bool = True,
+        # start_new_session: bool = False,
+        # pass_fds: Collection[int] = ...,
+        capture_strategy: Optional[Capture] = None,
+        check: bool = False,
+        # encoding: str | None = None,
+        # errors: str | None = None,
+        input: Optional[str] = None,
+        text: Literal[True],
+        # timeout: float | None = None,
+        # user: str | int | None = None,
+        # group: str | int | None = None,
+        # extra_groups: Iterable[str | int] | None = None,
+        # umask: int = -1,
+        # pipesize: int = -1,
+        # process_group: int | None = None,
+        known_bin: Optional[KnownBin],
+    ) -> CompletedProcess[str]:
+        """Run a process to completion and return the result.
+
+        Analogous to `subprocess.run`, but doesn't support all of its options.
+
+        Currently only supports text-mode. Since `subprocess.run`'s default is
+        binary mode, to avoid confusion we currently *require* the `text`
+        parameter, and require it to be `True`.
+
+        The `capture_output` parameter has been replaced with
+        `capture_strategy`.  If `capture_strategy` is set, then also setting
+        `stdout` or `stderr` is an error. Setting `capture_strategy` to `Capture.SEPARATE`
+        captures stdout and stderr separately, similarly to `capture_output=True`.
+        Setting it to `Capture.MERGED` merges stderr into stdout and captures stdout.
+
+        The `known_bin` parameter, if set, will be used to potentially add extra
+        arguments, and add extra debug info if the binary isn't found.
+        """
+        if capture_strategy is not None:
+            # As in subprocess.run, if capture_output is set, then
+            # it is an error to have also set stdout or stderr.
+            assert stdout is None
+            assert stderr is None
+            if capture_strategy is Capture.SEPARATE:
+                stdout = PIPE
+                stderr = PIPE
+            elif capture_strategy is Capture.MERGED:
+                stdout = PIPE
+                stderr = STDOUT
+            else:
+                raise chutney.errors.ChutneyInternalError(
+                    "Unhandled capture strategy " + capture_strategy
+                )
+
+        if input is not None:
+            assert stdin is None
+            stdin = PIPE
+
+        p = self.popen(
+            args,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            text=text,
+            known_bin=known_bin,
+        )
+
+        (stdout_data, stderr_data) = p.communicate(input)
+
+        if check and p.returncode != 0:
+            raise CalledProcessError(
+                returncode=p.returncode,
+                cmd=args,
+                output=stdout_data,
+                stderr=stderr_data,
+            )
+
+        return CompletedProcess(
+            args=args, returncode=p.returncode, stdout=stdout_data, stderr=stderr_data
+        )
+
+    @abstractmethod
+    def popen(
+        self,
+        args: CMD,
+        *,
+        bufsize: int = -1,
+        # executable: StrOrBytesPath | None = None,
+        stdin: Optional[TEXT_FILE] = None,
+        stdout: Optional[TEXT_FILE] = None,
+        stderr: Optional[TEXT_FILE] = None,
+        # preexec_fn: Callable[[], Any] | None = None,
+        # close_fds: bool = True,
+        # shell: bool = False,
+        # cwd: StrOrBytesPath | None = None,
+        # env: _ENV | None = None,
+        # universal_newlines: bool | None = None,
+        # startupinfo: Any | None = None,
+        # creationflags: int = 0,
+        # restore_signals: bool = True,
+        # start_new_session: bool = False,
+        # pass_fds: Collection[int] = (),
+        # text: bool | None = None,
+        text: Literal[True],
+        # encoding: str,
+        # errors: str | None = None,
+        # user: str | int | None = None,
+        # group: str | int | None = None,
+        # extra_groups: Iterable[str | int] | None = None,
+        # umask: int = -1,
+        # pipesize: int = -1,
+        # process_group: int | None = None
+        known_bin: Optional[KnownBin],
+    ) -> Popen[str]:
+        """Launch a process.
+
+        Analogous `subprocess.Popen`, but doesn't support all of its options.
+
+        Currently only supports text-mode. Since `subprocess.Popen`'s default is
+        binary mode, to avoid confusion we currently *require* the `text`
+        parameter, and require it to be `True`.
+
+        The `known_bin` parameter, if set, will be used to potentially add extra
+        arguments, and add extra debug info if the binary isn't found.
+        """
+        ...
+
+
+class LocalLauncher(Launcher):
+    """A `Launcher` that launches processes locally, akin to the `subprocess` module"""
+
+    @override
+    def popen(
+        self,
+        args: CMD,
+        *,
+        bufsize: int = -1,
+        stdin: Optional[TEXT_FILE] = None,
+        stdout: Optional[TEXT_FILE] = None,
+        stderr: Optional[TEXT_FILE] = None,
+        text: Literal[True],
+        known_bin: Optional[KnownBin],
+    ) -> Popen[str]:
+        assert text is True
+        try:
+            return subprocess.Popen(
+                args,
+                bufsize=bufsize,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                text=text,
+            )
+        except FileNotFoundError as e:
+            if known_bin is not None:
+                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+                    known_bin, args
+                ) from e
+            else:
+                raise chutney.errors.ChutneyMissingBinaryError(args[0], args, "")
+
+    @override
+    def launch_detached(
+        self,
+        cmd: Path,
+        args: list[str],
+        stdout_path: Path,
+        stderr_path: Path,
+        pid_path: Path,
+        known_bin: KnownBin,
+    ) -> None:
         # We use this to signal back if exec failed.
         # TODO: Consider communicating via the sd_notify(3) protocol instead (e.g.
         # ERRNO=x), particularly if and when arti itself supports it.
@@ -185,162 +374,6 @@ class Launcher:
             else:
                 errno_str = errno.errorcode[errno_int]
                 raise chutney.errors.ChutneyError(f"exec failed with {errno_str}")
-
-    def run(
-        self,
-        args: CMD,
-        *,
-        # bufsize: int = -1,
-        # executable: StrOrBytesPath | None = None,
-        stdin: Optional[TEXT_FILE] = None,
-        stdout: Optional[TEXT_FILE] = None,
-        stderr: Optional[TEXT_FILE] = None,
-        # preexec_fn: Callable[[], Any] | None = None,
-        # close_fds: bool = True,
-        # shell: bool = False,
-        # cwd: StrOrBytesPath | None = None,
-        # env: _ENV | None = None,
-        # universal_newlines: Optional[bool] = None,
-        # startupinfo: Any = None,
-        # creationflags: int = 0,
-        # restore_signals: bool = True,
-        # start_new_session: bool = False,
-        # pass_fds: Collection[int] = ...,
-        capture_strategy: Optional[Capture] = None,
-        check: bool = False,
-        # encoding: str | None = None,
-        # errors: str | None = None,
-        input: Optional[str] = None,
-        text: Literal[True],
-        # timeout: float | None = None,
-        # user: str | int | None = None,
-        # group: str | int | None = None,
-        # extra_groups: Iterable[str | int] | None = None,
-        # umask: int = -1,
-        # pipesize: int = -1,
-        # process_group: int | None = None,
-        known_bin: Optional[KnownBin],
-    ) -> CompletedProcess[str]:
-        """Run a process to completion and return the result.
-
-        Analogous to `subprocess.run`, but doesn't support all of its options.
-
-        Currently only supports text-mode. Since `subprocess.run`'s default is
-        binary mode, to avoid confusion we currently *require* the `text`
-        parameter, and require it to be `True`.
-
-        The `capture_output` parameter has been replaced with
-        `capture_strategy`.  If `capture_strategy` is set, then also setting
-        `stdout` or `stderr` is an error. Setting `capture_strategy` to `Capture.SEPARATE`
-        captures stdout and stderr separately, similarly to `capture_output=True`.
-        Setting it to `Capture.MERGED` merges stderr into stdout and captures stdout.
-
-        The `known_bin` parameter, if set, will be used to potentially add extra
-        arguments, and add extra debug info if the binary isn't found.
-        """
-        if capture_strategy is not None:
-            # As in subprocess.run, if capture_output is set, then
-            # it is an error to have also set stdout or stderr.
-            assert stdout is None
-            assert stderr is None
-            if capture_strategy is Capture.SEPARATE:
-                stdout = PIPE
-                stderr = PIPE
-            elif capture_strategy is Capture.MERGED:
-                stdout = PIPE
-                stderr = STDOUT
-            else:
-                raise chutney.errors.ChutneyInternalError(
-                    "Unhandled capture strategy " + capture_strategy
-                )
-
-        if input is not None:
-            assert stdin is None
-            stdin = PIPE
-
-        p = self.popen(
-            args,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            text=text,
-            known_bin=known_bin,
-        )
-
-        (stdout_data, stderr_data) = p.communicate(input)
-
-        if check and p.returncode != 0:
-            raise CalledProcessError(
-                returncode=p.returncode,
-                cmd=args,
-                output=stdout_data,
-                stderr=stderr_data,
-            )
-
-        return CompletedProcess(
-            args=args, returncode=p.returncode, stdout=stdout_data, stderr=stderr_data
-        )
-
-    def popen(
-        self,
-        args: CMD,
-        *,
-        bufsize: int = -1,
-        # executable: StrOrBytesPath | None = None,
-        stdin: Optional[TEXT_FILE] = None,
-        stdout: Optional[TEXT_FILE] = None,
-        stderr: Optional[TEXT_FILE] = None,
-        # preexec_fn: Callable[[], Any] | None = None,
-        # close_fds: bool = True,
-        # shell: bool = False,
-        # cwd: StrOrBytesPath | None = None,
-        # env: _ENV | None = None,
-        # universal_newlines: bool | None = None,
-        # startupinfo: Any | None = None,
-        # creationflags: int = 0,
-        # restore_signals: bool = True,
-        # start_new_session: bool = False,
-        # pass_fds: Collection[int] = (),
-        # text: bool | None = None,
-        text: Literal[True],
-        # encoding: str,
-        # errors: str | None = None,
-        # user: str | int | None = None,
-        # group: str | int | None = None,
-        # extra_groups: Iterable[str | int] | None = None,
-        # umask: int = -1,
-        # pipesize: int = -1,
-        # process_group: int | None = None
-        known_bin: Optional[KnownBin],
-    ) -> Popen[str]:
-        """Launch a process.
-
-        Analogous `subprocess.Popen`, but doesn't support all of its options.
-
-        Currently only supports text-mode. Since `subprocess.Popen`'s default is
-        binary mode, to avoid confusion we currently *require* the `text`
-        parameter, and require it to be `True`.
-
-        The `known_bin` parameter, if set, will be used to potentially add extra
-        arguments, and add extra debug info if the binary isn't found.
-        """
-        assert text is True
-        try:
-            return subprocess.Popen(
-                args,
-                bufsize=bufsize,
-                stdin=stdin,
-                stdout=stdout,
-                stderr=stderr,
-                text=text,
-            )
-        except FileNotFoundError as e:
-            if known_bin is not None:
-                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
-                    known_bin, args
-                ) from e
-            else:
-                raise chutney.errors.ChutneyMissingBinaryError(args[0], args, "")
 
 
 def _closerange(start: int, end: int) -> None:

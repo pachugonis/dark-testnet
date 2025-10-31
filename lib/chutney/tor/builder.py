@@ -170,7 +170,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     def __init__(self, node: TorNet.Node):
         TorNet.NodeBuilder.__init__(self)
         self._node = node
-        self._launcher = chutney.launcher.Launcher()
+        self._launcher = chutney.launcher.LocalLauncher()
 
     def _createTorrcFile(self, checkOnly: bool = False) -> None:
         """Write the torrc file for this node, disabling any options
@@ -236,7 +236,9 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
     def _getTorrcContents(self) -> str:
         """Return the filled template used to write the torrc for this node."""
-        return chutney.tor.torrc.format(self._node)
+        return chutney.tor.torrc.format(
+            self._node, get_tor_version(self._launcher, self._node._config.tor)
+        )
 
     @override
     def checkConfig(self, net: TorNet.Network) -> None:
