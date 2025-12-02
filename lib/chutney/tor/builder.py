@@ -324,7 +324,10 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                     f" tor process {p.pid()} to generate {self._hs_hostname_path()}"
                 )
                 last_warn_time = now
-            time.sleep(0.01)
+            try:
+                p.communicate(timeout=0.01)
+            except chutney.errors.ChutneyTimeoutError:
+                pass
 
     @override
     def config(self, net: TorNet.Network) -> None:
