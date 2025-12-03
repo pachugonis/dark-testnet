@@ -68,6 +68,7 @@ class Launcher(ABC):
         stderr_path: Path,
         pid_path: Path,
         known_bin: KnownBin,
+        cwd: Optional[Path] = None,
     ) -> None:
         """
         Launch a ~daemonized process.
@@ -111,7 +112,7 @@ class Launcher(ABC):
         # preexec_fn: Callable[[], Any] | None = None,
         # close_fds: bool = True,
         # shell: bool = False,
-        # cwd: StrOrBytesPath | None = None,
+        cwd: Optional[Path] = None,
         # env: _ENV | None = None,
         # universal_newlines: Optional[bool] = None,
         # startupinfo: Any = None,
@@ -180,7 +181,7 @@ class Launcher(ABC):
         # preexec_fn: Callable[[], Any] | None = None,
         # close_fds: bool = True,
         # shell: bool = False,
-        # cwd: StrOrBytesPath | None = None,
+        cwd: Optional[Path] = None,
         # env: _ENV | None = None,
         # universal_newlines: bool | None = None,
         # startupinfo: Any | None = None,
@@ -260,6 +261,7 @@ class LocalLauncher(Launcher):
         capture_strategy: Capture = Capture.SEPARATE,
         text: Literal[True],
         known_bin: Optional[KnownBin],
+        cwd: Optional[Path] = None,
     ) -> Popen:
         assert text is True
         stdin = subprocess.PIPE
@@ -279,6 +281,7 @@ class LocalLauncher(Launcher):
                 stdout=stdout,
                 stderr=stderr,
                 text=text,
+                cwd=cwd,
             )
         except FileNotFoundError as e:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
@@ -294,6 +297,7 @@ class LocalLauncher(Launcher):
         stderr_path: Path,
         pid_path: Path,
         known_bin: KnownBin,
+        cwd: Optional[Path] = None,
     ) -> None:
         # We use this to signal back if exec failed.
         # TODO: Consider communicating via the sd_notify(3) protocol instead (e.g.
