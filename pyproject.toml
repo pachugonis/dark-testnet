@@ -29,6 +29,7 @@ classifiers = [
 license = {file = "LICENSE"}
 dependencies = [
   'cryptography~=3.4',
+  'paramiko~=4.0',
   'typeguard==4.3.0',
   'tomli-w~=1.2.0',
 ]

@@ -370,6 +370,7 @@ python-lint:
   - FAILURES=""
 
   - python3 -m pip install mypy=="$MYPY_VERSION"
+  - python3 -m pip install types-paramiko
   - if ! mypy --exclude build . ; then FAILURES+=" mypy"; fi
 
   - python3 -m pip install black=="$BLACK_VERSION"
