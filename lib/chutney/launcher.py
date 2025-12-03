@@ -19,13 +19,6 @@ from chutney.known_bins import KnownBin
 CalledProcessError = subprocess.CalledProcessError
 CompletedProcess = subprocess.CompletedProcess
 
-# Probably ok to just reuse these. Explicitly declare with types so that
-# typechecking will notice if the subprocess constants become something other
-# than dumb ints.
-PIPE: int = subprocess.PIPE
-STDOUT: int = subprocess.STDOUT
-DEVNULL: int = subprocess.DEVNULL
-
 # Based on typeshed's _CMD, but more restrictive
 CMD: TypeAlias = list[str]
 TEXT_FILE: TypeAlias = Union[int, IO[str]]
@@ -112,9 +105,9 @@ class Launcher(ABC):
         *,
         # bufsize: int = -1,
         # executable: StrOrBytesPath | None = None,
-        stdin: Optional[TEXT_FILE] = None,
-        stdout: Optional[TEXT_FILE] = None,
-        stderr: Optional[TEXT_FILE] = None,
+        # stdin: Optional[TEXT_FILE] = None,
+        # stdout: Optional[TEXT_FILE] = None,
+        # stderr: Optional[TEXT_FILE] = None,
         # preexec_fn: Callable[[], Any] | None = None,
         # close_fds: bool = True,
         # shell: bool = False,
@@ -126,7 +119,7 @@ class Launcher(ABC):
         # restore_signals: bool = True,
         # start_new_session: bool = False,
         # pass_fds: Collection[int] = ...,
-        capture_strategy: Optional[Capture] = None,
+        capture_strategy: Capture = Capture.SEPARATE,
         check: bool = False,
         # encoding: str | None = None,
         # errors: str | None = None,
@@ -158,33 +151,8 @@ class Launcher(ABC):
         The `known_bin` parameter, if set, will be used to potentially add extra
         arguments, and add extra debug info if the binary isn't found.
         """
-        if capture_strategy is not None:
-            # As in subprocess.run, if capture_output is set, then
-            # it is an error to have also set stdout or stderr.
-            assert stdout is None
-            assert stderr is None
-            if capture_strategy is Capture.SEPARATE:
-                stdout = PIPE
-                stderr = PIPE
-            elif capture_strategy is Capture.MERGED:
-                stdout = PIPE
-                stderr = STDOUT
-            else:
-                raise chutney.errors.ChutneyInternalError(
-                    "Unhandled capture strategy " + capture_strategy
-                )
-
-        if input is not None:
-            assert stdin is None
-            stdin = PIPE
-
         popen = self.popen(
-            args,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            text=text,
-            known_bin=known_bin,
+            args, capture_strategy=capture_strategy, text=True, known_bin=known_bin
         )
         res = popen.communicate(input=input)
         if check and res.returncode != 0:
@@ -194,7 +162,6 @@ class Launcher(ABC):
                 output=res.stdout,
                 stderr=res.stderr,
             )
-
         return CompletedProcess(
             args=args, returncode=res.returncode, stdout=res.stdout, stderr=res.stderr
         )
@@ -206,9 +173,10 @@ class Launcher(ABC):
         *,
         bufsize: int = -1,
         # executable: StrOrBytesPath | None = None,
-        stdin: Optional[TEXT_FILE] = None,
-        stdout: Optional[TEXT_FILE] = None,
-        stderr: Optional[TEXT_FILE] = None,
+        # stdin: Optional[TEXT_FILE] = None,
+        # stdout: Optional[TEXT_FILE] = None,
+        # stderr: Optional[TEXT_FILE] = None,
+        capture_strategy: Capture = Capture.SEPARATE,
         # preexec_fn: Callable[[], Any] | None = None,
         # close_fds: bool = True,
         # shell: bool = False,
@@ -289,13 +257,21 @@ class LocalLauncher(Launcher):
         args: CMD,
         *,
         bufsize: int = -1,
-        stdin: Optional[TEXT_FILE] = None,
-        stdout: Optional[TEXT_FILE] = None,
-        stderr: Optional[TEXT_FILE] = None,
+        capture_strategy: Capture = Capture.SEPARATE,
         text: Literal[True],
         known_bin: Optional[KnownBin],
     ) -> Popen:
         assert text is True
+        stdin = subprocess.PIPE
+        stdout = subprocess.PIPE
+        if capture_strategy is Capture.SEPARATE:
+            stderr = subprocess.PIPE
+        elif capture_strategy is Capture.MERGED:
+            stderr = subprocess.STDOUT
+        else:
+            raise chutney.errors.ChutneyInternalError(
+                "Unhandled capture strategy " + capture_strategy
+            )
         try:
             inner = subprocess.Popen(
                 args,

@@ -178,8 +178,7 @@ class LocalNodeController(TorNet.NodeController):
         ]
         p = self._launcher.popen(
             cmdline,
-            stdout=chutney.launcher.PIPE,
-            stderr=chutney.launcher.STDOUT,
+            capture_strategy=chutney.launcher.Capture.MERGED,
             known_bin=chutney.known_bins.TorBin(),
             text=True,
         )

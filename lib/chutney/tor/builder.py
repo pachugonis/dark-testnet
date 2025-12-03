@@ -65,6 +65,7 @@ def tor_gencert_exists(launcher: chutney.launcher.Launcher, gencert: str) -> boo
         launcher.run(
             [gencert, "--help"],
             known_bin=chutney.known_bins.TorGenCertBin(),
+            capture_strategy=chutney.launcher.Capture.MERGED,
             text=True,
         )
         return True
@@ -289,9 +290,6 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
                 "-HiddenServicePort",
                 "1 1",
             ],
-            stdin=chutney.launcher.DEVNULL,
-            stdout=chutney.launcher.PIPE,
-            stderr=chutney.launcher.PIPE,
             known_bin=chutney.known_bins.TorBin(),
             text=True,
         )
