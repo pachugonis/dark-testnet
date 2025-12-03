@@ -63,6 +63,8 @@ def get_tor_version(launcher: chutney.launcher.Launcher, tor: str) -> str:
     tor_version = tor_version.replace("version ", "")
     tor_version = tor_version.replace(").", ")")
     # check we received a tor version, and nothing else
-    assert re.match(r"^[-+.() A-Za-z0-9]+$", tor_version)
+    assert re.match(
+        r"^[-+.() A-Za-z0-9]+$", tor_version
+    ), f"Couldn't parse tor_version '{tor_version}'"
 
     return tor_version
