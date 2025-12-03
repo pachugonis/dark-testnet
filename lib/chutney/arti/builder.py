@@ -34,7 +34,10 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def __init__(self, node: TorNet.Node):
         TorNet.NodeBuilder.__init__(self)
         self._node = node
-        self._launcher = chutney.launcher.LocalLauncher()
+
+    @property
+    def _launcher(self) -> chutney.launcher.Launcher:
+        return self._node._launcher
 
     def _debug_log_path(self) -> Path:
         return self._node.dir.joinpath("debug.log")

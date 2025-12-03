@@ -35,7 +35,10 @@ class LocalArtiNodeController(TorNet.NodeController):
         self._node = node
         self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None
         self._most_recent_oniondesc_status: Optional[DirInfoStatus] = None
-        self._launcher = chutney.launcher.LocalLauncher()
+
+    @property
+    def _launcher(self) -> chutney.launcher.Launcher:
+        return self._node._launcher
 
     @override
     def getPtExtra(self) -> Option[str]:

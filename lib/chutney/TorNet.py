@@ -45,6 +45,7 @@ from chutney.errors import (
     ChutneyErrorGroup,
     ChutneyTimeoutError,
 )
+from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     getenv_int,
     getenv_bool,
@@ -79,6 +80,16 @@ _TORRC_OPTIONS = None
 
 HSV2_KEYWORD = "hidden service v2"
 HSV3_KEYWORD = "hidden service v3"
+
+
+class LauncherBackend(Enum):
+    """Specifies class for launching processes for target node"""
+
+    # Launch processes locally, e.g. using the subprocess module.
+    LOCAL = 1
+    # Connect to the (potentially remote) node via ssh and use that to run
+    # processes.
+    SSH = 2
 
 
 class NodeBackend(Enum):
@@ -238,6 +249,15 @@ class Node(object):
         self._network = network
         self._config = config
 
+        self._launcher: Launcher
+        if config.launcher_backend == LauncherBackend.LOCAL:
+            self._launcher = LocalLauncher()
+        elif config.launcher_backend == LauncherBackend.SSH:
+            host = self._config.ip.as_optional() or self._config.ipv6_addr.as_optional()
+            assert host, f"No ip address for {self.nick}"
+            self._launcher = SshLauncher(host)
+        else:
+            raise ChutneyError(f"Unrecognized launcher {config.launcher_backend}")
         self._builder: NodeBuilder
         self._controller: NodeController
         if config.backend == NodeBackend.TOR:
@@ -683,6 +703,8 @@ class NodeConfig:
 
     # Which backend to use to run the node.
     backend: NodeBackend = NodeBackend.TOR
+    # Which process-launcher to use.
+    launcher_backend: LauncherBackend = LauncherBackend.LOCAL
     # a short text string that represents the type of node.
     # Some special tag prefixes:
     # * 'h' configures it to run an onion service.

@@ -32,9 +32,12 @@ class LocalNodeController(TorNet.NodeController):
         TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
-        self._launcher = chutney.launcher.LocalLauncher()
         self.most_recent_oniondesc_status: Optional[DirInfoStatus] = None
         self.most_recent_bootstrap_status: Optional[DirInfoStatus] = None
+
+    @property
+    def _launcher(self) -> chutney.launcher.Launcher:
+        return self._node._launcher
 
     def _loadPtExtraObfs4(self) -> Option[str]:
         """_loadPtExtra impl for the obfs4 transport"""
