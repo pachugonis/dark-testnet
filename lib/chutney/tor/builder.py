@@ -133,10 +133,9 @@ def run_tor_gencert(
         input=passphrase + "\n",
         capture_strategy=chutney.launcher.Capture.MERGED,
         text=True,
+        check=True,
     )
     logger.debug(p.stdout)
-    assert p.returncode == 0  # XXXX BAD!
-    assert p.stderr is None
     return p.stdout
 
 
@@ -299,28 +298,29 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         start_time = time.time()
         last_warn_time = start_time
         while True:
-            if p.poll() is not None:
+            if not p.running():
+                res = p.communicate()
                 # Process exited unexpectedly.
-                logger.error(
-                    "tor exited: %s", p.stdout.read() if p.stdout else "<None>"
-                )
+                logger.error("tor exited: %s", res.stdout if res.stdout else "<None>")
                 raise ChutneyError(
-                    f"tor exited unexpectedly with returncode={p.returncode}"
+                    f"tor exited unexpectedly with returncode={res.returncode}"
                 )
             if self._hs_hostname_path().exists():
                 logger.debug("Generated hostname %s", self.get_hs_hostname().unwrap())
                 # Done. Terminate and wait for process to exit.
                 p.terminate()
-                rv = p.wait()
-                logger.debug("tor exited with returncode %d, after terminating", rv)
+                res = p.communicate()
+                logger.debug(
+                    "tor exited with returncode %d, after terminating", res.returncode
+                )
                 break
-            logger.debug(f"waiting for tor {p.pid} to generate hidden service state")
+            logger.debug(f"waiting for tor {p.pid()} to generate hidden service state")
             now = time.time()
             if (now - last_warn_time) > 5:
                 total_seconds = round(now - start_time, 1)
                 logger.warning(
                     f"{self._node.nick} has been waiting {total_seconds} seconds for"
-                    f" tor process {p.pid} to generate {self._hs_hostname_path()}"
+                    f" tor process {p.pid()} to generate {self._hs_hostname_path()}"
                 )
                 last_warn_time = now
             time.sleep(0.01)

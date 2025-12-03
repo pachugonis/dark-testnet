@@ -15,10 +15,8 @@ from typing_extensions import TypeAlias, override
 
 from chutney.known_bins import KnownBin
 
-# XXX We'll want to wrap these to constrain their functionality
-# and abstract over non-local versions
+# These are basically just "dumb structs". We can just reuse directly.
 CalledProcessError = subprocess.CalledProcessError
-Popen = subprocess.Popen
 CompletedProcess = subprocess.CompletedProcess
 
 # Probably ok to just reuse these. Explicitly declare with types so that
@@ -42,6 +40,28 @@ class Capture(enum.Enum):
     SEPARATE = enum.auto()
     # Merge stderr into stdout.
     MERGED = enum.auto()
+
+
+class Popen(ABC):
+    @abstractmethod
+    def communicate(
+        self, input: Optional[str] = None, timeout: Optional[float] = None
+    ) -> CompletedProcess[str]: ...
+
+    @abstractmethod
+    def pid(self) -> int: ...
+
+    @abstractmethod
+    def running(self) -> bool: ...
+
+    @abstractmethod
+    def send_signal(self, sig: int) -> None: ...
+
+    def terminate(self) -> None:
+        self.send_signal(15)
+
+    def kill(self) -> None:
+        self.send_signal(9)
 
 
 class Launcher(ABC):
@@ -157,7 +177,7 @@ class Launcher(ABC):
             assert stdin is None
             stdin = PIPE
 
-        p = self.popen(
+        popen = self.popen(
             args,
             stdin=stdin,
             stdout=stdout,
@@ -165,19 +185,17 @@ class Launcher(ABC):
             text=text,
             known_bin=known_bin,
         )
-
-        (stdout_data, stderr_data) = p.communicate(input)
-
-        if check and p.returncode != 0:
+        res = popen.communicate(input=input)
+        if check and res.returncode != 0:
             raise CalledProcessError(
-                returncode=p.returncode,
+                returncode=res.returncode,
                 cmd=args,
-                output=stdout_data,
-                stderr=stderr_data,
+                output=res.stdout,
+                stderr=res.stderr,
             )
 
         return CompletedProcess(
-            args=args, returncode=p.returncode, stdout=stdout_data, stderr=stderr_data
+            args=args, returncode=res.returncode, stdout=res.stdout, stderr=res.stderr
         )
 
     @abstractmethod
@@ -212,7 +230,7 @@ class Launcher(ABC):
         # pipesize: int = -1,
         # process_group: int | None = None
         known_bin: Optional[KnownBin],
-    ) -> Popen[str]:
+    ) -> Popen:
         """Launch a process.
 
         Analogous `subprocess.Popen`, but doesn't support all of its options.
@@ -225,6 +243,40 @@ class Launcher(ABC):
         arguments, and add extra debug info if the binary isn't found.
         """
         ...
+
+
+class LocalPopen(Popen):
+    """Specialization of Popen returnced by `LocalLauncher`"""
+
+    def __init__(self, inner: subprocess.Popen[str]) -> None:
+        self._inner = inner
+
+    @override
+    def communicate(
+        self, input: Optional[str] = None, timeout: Optional[float] = None
+    ) -> CompletedProcess[str]:
+        try:
+            stdout, stderr = self._inner.communicate(input=input, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise chutney.errors.ChutneyTimeoutError
+        return CompletedProcess(
+            args=self._inner.args,
+            returncode=self._inner.returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    @override
+    def pid(self) -> int:
+        return self._inner.pid
+
+    @override
+    def running(self) -> bool:
+        return self._inner.poll() is None
+
+    @override
+    def send_signal(self, sig: int) -> None:
+        self._inner.send_signal(sig)
 
 
 class LocalLauncher(Launcher):
@@ -241,10 +293,10 @@ class LocalLauncher(Launcher):
         stderr: Optional[TEXT_FILE] = None,
         text: Literal[True],
         known_bin: Optional[KnownBin],
-    ) -> Popen[str]:
+    ) -> Popen:
         assert text is True
         try:
-            return subprocess.Popen(
+            inner = subprocess.Popen(
                 args,
                 bufsize=bufsize,
                 stdin=stdin,
@@ -254,6 +306,7 @@ class LocalLauncher(Launcher):
             )
         except FileNotFoundError as e:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
+        return LocalPopen(inner)
 
     @override
     def launch_detached(

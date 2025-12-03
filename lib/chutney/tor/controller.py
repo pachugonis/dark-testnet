@@ -185,16 +185,16 @@ class LocalNodeController(TorNet.NodeController):
         )
         if self.waitOnLaunch():
             # this requires that RunAsDaemon is set.
-            (stdouterr, empty_stderr) = p.communicate()
-            logger.debug(stdouterr)
-            assert empty_stderr is None
+            res = p.communicate()
+            logger.debug(res.stdout)
+            assert res.stderr is None
             # We expect the parent process to have exited with code 0.
-            if p.returncode != 0:
+            if res.returncode != 0:
                 raise chutney.errors.ChutneyError(
                     f"Couldn't launch {self._node.nick:12}"
                     + f" command '{' '.join(cmdline)}': "
-                    + f" exit {p.returncode},"
-                    + f" output '{stdouterr}'"
+                    + f" exit {res.returncode},"
+                    + f" output '{res.stdout}'"
                 )
         else:
             # this requires RunAsDaemon to *not* be set, and is slower.
@@ -209,11 +209,12 @@ class LocalNodeController(TorNet.NodeController):
             print(".", end="", flush=True)
             assert self._node._config.poll_launch_time is not None
             time.sleep(self._node._config.poll_launch_time)
-            p.poll()
-            if p.returncode is not None:
+            if not self.isRunning():
+                # Process unexpectedly exited
+                c = p.communicate()
                 # Process unexpectedly exited
                 raise chutney.errors.ChutneyError(
-                    f"'{self._node.nick:12}' unexpectedly exited with code {p.returncode}."
+                    f"'{self._node.nick:12}' unexpectedly exited with code {c.returncode}."
                     + f" command '{' '.join(cmdline)}'"
                     + f" after waiting {self._node._config.poll_launch_time} seconds for launch"
                 )
