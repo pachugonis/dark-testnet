@@ -316,6 +316,7 @@ class LocalLauncher(Launcher):
         # Open all the files in this process, where errors will be reported most
         # loudly and obviously.
         with (
+            open("/dev/null") as stdin_file,
             stdout_path.open("wb") as stdout_file,
             stderr_path.open("wb") as stderr_file,
             pid_path.open("w") as pid_file,
@@ -329,13 +330,11 @@ class LocalLauncher(Launcher):
             if child1 == 0:
                 # running in child1
 
-                # we don't need stdin.
-                sys.stdin.close()
-
-                # Reassign specified files to stdout and stderr.
+                # Reassign specified files to stdin, stdout, and stderr.
                 # We do this here instead of in child2 so that a failure will be
                 # directly detectable in the chutney process by this process
                 # failing.
+                os.dup2(stdin_file.fileno(), 0, inheritable=True)
                 os.dup2(stdout_file.fileno(), 1, inheritable=True)
                 os.dup2(stderr_file.fileno(), 2, inheritable=True)
 
