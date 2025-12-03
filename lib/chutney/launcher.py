@@ -171,7 +171,7 @@ class Launcher(ABC):
         self,
         args: CMD,
         *,
-        bufsize: int = -1,
+        # bufsize: int = -1,
         # executable: StrOrBytesPath | None = None,
         # stdin: Optional[TEXT_FILE] = None,
         # stdout: Optional[TEXT_FILE] = None,
@@ -256,7 +256,7 @@ class LocalLauncher(Launcher):
         self,
         args: CMD,
         *,
-        bufsize: int = -1,
+        # bufsize: int = -1,
         capture_strategy: Capture = Capture.SEPARATE,
         text: Literal[True],
         known_bin: Optional[KnownBin],
@@ -275,7 +275,6 @@ class LocalLauncher(Launcher):
         try:
             inner = subprocess.Popen(
                 args,
-                bufsize=bufsize,
                 stdin=stdin,
                 stdout=stdout,
                 stderr=stderr,
