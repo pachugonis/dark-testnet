@@ -253,12 +253,7 @@ class LocalLauncher(Launcher):
                 text=text,
             )
         except FileNotFoundError as e:
-            if known_bin is not None:
-                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
-                    known_bin, args
-                ) from e
-            else:
-                raise chutney.errors.ChutneyMissingBinaryError(args[0], args, "")
+            raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
 
     @override
     def launch_detached(
@@ -368,7 +363,7 @@ class LocalLauncher(Launcher):
         if exec_errno_str:
             errno_int = int(exec_errno_str)
             if errno_int == errno.ENOENT:
-                raise chutney.errors.ChutneyMissingBinaryError.for_missing_known_bin(
+                raise chutney.errors.ChutneyMissingBinaryError(
                     known_bin, [str(cmd)] + args
                 )
             else:
