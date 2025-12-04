@@ -74,16 +74,18 @@ shadow_network_config_tests () {
     mv "$dst" "$final_dst"
 }
 
-# Run at head
-shadow_network_config_tests "$head_top_level" head
-
-# Run at specified commit
 tmpdir="$(mktemp -d network-diff-test.XXXX)"
-git clone "$head_top_level" "$tmpdir"/chutney
-git -C "$tmpdir"/chutney checkout "$base_commit"
 python3 -m venv "$tmpdir"/venv
 # shellcheck disable=SC1091
 source "$tmpdir"/venv/bin/activate
+
+# Run at head
+python3 -m pip install --ignore-installed "$head_top_level"
+shadow_network_config_tests "$head_top_level" head
+
+# Run at specified commit
+git clone "$head_top_level" "$tmpdir"/chutney
+git -C "$tmpdir"/chutney checkout "$base_commit"
 python3 -m pip install --ignore-installed "$tmpdir"/chutney
 shadow_network_config_tests "$tmpdir"/chutney base
 rm -rf "$tmpdir"
