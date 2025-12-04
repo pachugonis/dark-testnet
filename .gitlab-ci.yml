@@ -343,8 +343,7 @@ network-config-tests-diff:
   # install arti
   - stow -d opt -t "$HOME"/.local arti
 
-  # install chutney
-  - python3 -m pip install .
+  # No need to install chutney; `network-config-tests-diff` does it itself.
 
   - ./tests/network-config-tests-diff "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
   artifacts:
