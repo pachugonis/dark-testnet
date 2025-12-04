@@ -33,12 +33,30 @@ class Tests(unittest.TestCase):
     def tearDown(self) -> None:
         self.network.stop()
 
-    def test_basic(self) -> None:
-        base = NodeConfig(controlling_pid=os.getpid())
+    def _test_basic_with_launcher(
+        self, launcher_backend: TorNet.LauncherBackend
+    ) -> None:
+        base = NodeConfig(
+            controlling_pid=os.getpid(), launcher_backend=launcher_backend
+        )
         self.network.addNodes(basic_net_configs(base))
         self.network.configure()
         self.network.bootstrap()
         verify.run_test(self.network)
+
+    def test_basic_local(self) -> None:
+        self._test_basic_with_launcher(launcher_backend=TorNet.LauncherBackend.LOCAL)
+
+    def test_basic_ssh(self) -> None:
+        # This test assumes that sshd is running on localhost, and that the current
+        # user has a locally unencrypted key authorized on localhost.
+        #
+        # e.g.:
+        # ```
+        # $ ssh-keygen
+        # $ cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+        # ```
+        self._test_basic_with_launcher(launcher_backend=TorNet.LauncherBackend.SSH)
 
     def test_offset_addresses_v4only(self) -> None:
         base = NodeConfig(
