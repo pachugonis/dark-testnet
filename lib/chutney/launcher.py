@@ -44,28 +44,52 @@ class Capture(enum.Enum):
 
 
 class Popen(ABC):
+    """
+    An open process, modeled after `subprocess.Popen`.
+    """
+
     @abstractmethod
     def communicate(
         self, input: Optional[str] = None, timeout: Optional[float] = None
-    ) -> CompletedProcess[str]: ...
+    ) -> CompletedProcess[str]:
+        """Handle inputs and outputs until `timeout` expires or process completes.
+
+        After a non-`None` timeout expires, raises `ChutneyTimeoutError`.
+        This does not lose data, and `communicate` can be safely called again.
+
+        `input` may only be provided on the first call, and any leftover input
+        not read by the program after first calls will be fed to the program on
+        subsequent calls.
+        """
+        ...
 
     @abstractmethod
-    def pid(self) -> int: ...
+    def pid(self) -> int:
+        """Return the process-id of the process"""
+        ...
 
     @abstractmethod
-    def running(self) -> bool: ...
+    def running(self) -> bool:
+        """Return whether the process is still running"""
+        ...
 
     @abstractmethod
-    def send_signal(self, sig: int) -> None: ...
+    def send_signal(self, sig: int) -> None:
+        """Sends the specified signal to the process"""
+        ...
 
     def terminate(self) -> None:
+        """Sends SIGTERM to the process"""
         self.send_signal(15)
 
     def kill(self) -> None:
+        """Sends SIGKILL to the process"""
         self.send_signal(9)
 
 
 class Launcher(ABC):
+    """Launches and manages processes"""
+
     @abstractmethod
     def launch_detached(
         self,
@@ -442,15 +466,28 @@ class SshPopen(Popen):
 
     def __init__(
         self,
+        # The launcher used to launch this process.
+        # We need it to launch auxiliary processes (e.g. `kill`) affecting this
+        # process.
         launcher: SshLauncher,
+        # The open paramikio Channel connected to the remote process.
         channel: paramiko.Channel,
+        # The remote pid of the process.
         pid: int,
+        # The original arguments used to launch the process.
         args: list[str],
+        # Metadata about the program binary.
         known_bin: Optional[KnownBin],
+        # Any already-captured stdout.
         buffered_stdout: bytes,
+        # The channel window size.
         window_size: int,
+        # The capture strategy for this process.
         capture_strategy: Capture,
     ) -> None:
+        """
+        "private" to `SshLauncher`.
+        """
         self._launcher = launcher
         self._channel = channel
         self._pid = pid
