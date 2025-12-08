@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import tomli_w
 
 from pathlib import Path
@@ -13,11 +12,13 @@ from typing import Optional
 
 import chutney.TorNet as TorNet
 import chutney.arti.config as arti_config
+import chutney.launcher
 
 from chutney.errors import (
     ChutneyError,
     ChutneyInternalError,
 )
+from chutney.known_bins import ArtiBin
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
@@ -33,6 +34,10 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def __init__(self, node: TorNet.Node):
         TorNet.NodeBuilder.__init__(self)
         self._node = node
+
+    @property
+    def _launcher(self) -> chutney.launcher.Launcher:
+        return self._node._launcher
 
     def _debug_log_path(self) -> Path:
         return self._node.dir.joinpath("debug.log")
@@ -192,7 +197,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def get_hs_hostname(self) -> Option[str]:
         if not self._node._config.hs:
             return Option(None)
-        sp = subprocess.run(
+        sp = self._launcher.run(
             [
                 self._node._config.arti,
                 # Only available as a flag, not in config file.
@@ -207,8 +212,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "onion-address",
                 "--generate=if-needed",
             ],
-            capture_output=True,
+            capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
+            known_bin=ArtiBin(),
         )
         # TODO: recognize specific return codes?
         if sp.returncode != 0:
@@ -222,7 +228,7 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
     def get_hs_client_pubkey(self, hs_address: str) -> str:
         # TODO: use `arti hsc key get`, as per
         # <https://gitlab.torproject.org/tpo/core/arti/-/blob/main/doc/hsc.md?ref_type=heads#generating-a-service-discovery-key>.
-        sp = subprocess.run(
+        sp = self._launcher.run(
             [
                 self._node._config.arti,
                 # Only available as a flag, not in config file.
@@ -236,8 +242,9 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
                 "--output=-",
             ],
             input=hs_address,
-            capture_output=True,
+            capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
+            known_bin=ArtiBin(),
         )
         if sp.returncode != 0:
             logger.warning(

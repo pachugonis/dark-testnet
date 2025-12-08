@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
+from chutney.known_bins import KnownBin
 
 
 class ChutneyError(Exception):
@@ -20,29 +21,26 @@ class ChutneyUnimplementedError(ChutneyError):
 
 
 class ChutneyMissingBinaryError(ChutneyError):
-    def __init__(self, name: str, cmdline: List[str], help: str):
-        self._name = name
-        self._cmdline = cmdline
-        self._help = help
-
-    @staticmethod
-    def for_missing_tor(tor_name: str, cmdline: List[str]) -> ChutneyMissingBinaryError:
+    def __init__(self, known_bin: Optional[KnownBin], cmdline: List[str]) -> None:
         """Create an exception for a missing tor binary, with help for how to fix it."""
-        help_msg_fmt = (
-            "Set the '{0}' environment variable to the path of "
-            + "'{1}'. If using test-network.sh, set the 'TOR_DIR' "
-            + "environment variable to the directory containing '{1}'."
+        self._cmdline = cmdline
+
+        if known_bin is None:
+            self._name = cmdline[0]
+            self._help = ""
+            return
+
+        self._name = known_bin.name()
+        self._help = (
+            f"Set the '{known_bin.config_envvar()}' environment variable"
+            + f" to the path of '{known_bin.name()}'."
         )
-        help_msg = ""
-        if tor_name == "tor":
-            help_msg = help_msg_fmt.format("CHUTNEY_TOR", tor_name)
-        elif tor_name == "tor-gencert":
-            help_msg = help_msg_fmt.format("CHUTNEY_TOR_GENCERT", tor_name)
-        elif tor_name == "arti":
-            help_msg = help_msg_fmt.format("CHUTNEY_ARTI", tor_name)
-        else:
-            raise ValueError("Unknown tor_name: '{}'".format(tor_name))
-        return ChutneyMissingBinaryError(tor_name, cmdline, help_msg)
+
+        test_network_sh_hint = known_bin.test_network_sh_hint()
+        if test_network_sh_hint is not None:
+            self._help += (
+                " Alternatively, if using test-network.sh: " + test_network_sh_hint
+            )
 
     def __str__(self) -> str:
         return (

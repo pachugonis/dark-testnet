@@ -38,12 +38,14 @@ import time
 import tomli_w
 import json
 
+from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 from chutney.errors import (
     ChutneyError,
     ChutneyErrorGroup,
     ChutneyTimeoutError,
 )
+from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     getenv_int,
     getenv_bool,
@@ -78,6 +80,16 @@ _TORRC_OPTIONS = None
 
 HSV2_KEYWORD = "hidden service v2"
 HSV3_KEYWORD = "hidden service v3"
+
+
+class LauncherBackend(Enum):
+    """Specifies class for launching processes for target node"""
+
+    # Launch processes locally, e.g. using the subprocess module.
+    LOCAL = 1
+    # Connect to the (potentially remote) node via ssh and use that to run
+    # processes.
+    SSH = 2
 
 
 class NodeBackend(Enum):
@@ -237,6 +249,15 @@ class Node(object):
         self._network = network
         self._config = config
 
+        self._launcher: Launcher
+        if config.launcher_backend == LauncherBackend.LOCAL:
+            self._launcher = LocalLauncher()
+        elif config.launcher_backend == LauncherBackend.SSH:
+            host = self._config.ip.as_optional() or self._config.ipv6_addr.as_optional()
+            assert host, f"No ip address for {self.nick}"
+            self._launcher = SshLauncher(host)
+        else:
+            raise ChutneyError(f"Unrecognized launcher {config.launcher_backend}")
         self._builder: NodeBuilder
         self._controller: NodeController
         if config.backend == NodeBackend.TOR:
@@ -682,6 +703,8 @@ class NodeConfig:
 
     # Which backend to use to run the node.
     backend: NodeBackend = NodeBackend.TOR
+    # Which process-launcher to use.
+    launcher_backend: LauncherBackend = LauncherBackend.LOCAL
     # a short text string that represents the type of node.
     # Some special tag prefixes:
     # * 'h' configures it to run an onion service.
@@ -730,9 +753,9 @@ class NodeConfig:
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
-    tor: str = os.environ.get("CHUTNEY_TOR", "tor")
+    tor: str = os.environ.get(TorBin().config_envvar(), "tor")
     # path of the arti binary (for backend = NodeBackend.ARTI)
-    arti: str = os.environ.get("CHUTNEY_ARTI", "arti")
+    arti: str = os.environ.get(ArtiBin().config_envvar(), "arti")
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
@@ -806,7 +829,7 @@ class NodeConfig:
     @property
     def tor_gencert(self) -> str:
         """name or path of the tor-gencert binary (if present)"""
-        return os.getenv("CHUTNEY_TOR_GENCERT", self.tor + "-gencert")
+        return os.getenv(TorGenCertBin().config_envvar(), self.tor + "-gencert")
 
     # XXX Move template logic into template
     @property
@@ -1145,11 +1168,12 @@ class Network(object):
                 all_family_ids.update(n._config.families)
         for fid in all_family_ids:
             cmdline = [
-                os.environ.get("CHUTNEY_TOR", "tor"),
+                os.environ.get(TorBin().config_envvar(), "tor"),
                 "--keygen-family",
                 str(get_familykey_path(fid, ext=False)),
             ]
-            output = chutney.tor.util.run_tor(cmdline, tolerate_error=True)
+            launcher = chutney.launcher.LocalLauncher()
+            output = chutney.tor.util.run_tor(launcher, cmdline, tolerate_error=True)
             if "Unknown option 'keygen-family'" in output:
                 print("No support for --keygen-family; using legacy families only.")
                 break

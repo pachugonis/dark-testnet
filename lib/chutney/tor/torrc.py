@@ -6,7 +6,6 @@ import textwrap
 from typing import Iterable
 
 from chutney.errors import ChutneyError
-from chutney.tor.util import get_tor_version
 from chutney.Util import find_executable_on_path, addr_and_port_str
 
 
@@ -22,7 +21,7 @@ def _family_member_fps(node: TorNet.Node) -> Iterable[str]:
     return fp_set
 
 
-def format(n: TorNet.Node) -> str:
+def format(n: TorNet.Node, tor_version: str) -> str:
     """
     Returns the contents of a torrc config file for the given node.
     """
@@ -93,7 +92,6 @@ def format(n: TorNet.Node) -> str:
         UseMicrodescriptors {int(n._config.use_microdescriptors)}
         """
     )
-    tor_version = get_tor_version(n._config.tor)
     if (
         "0.4.9.1-alpha-dev" in tor_version or "0.4.9.2-alpha-dev" in tor_version
     ) and n._config.pt_transport:

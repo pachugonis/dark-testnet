@@ -12,10 +12,11 @@ from typing_extensions import override
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 import chutney.errors
+import chutney.known_bins
+import chutney.launcher
 import chutney.TorNet as TorNet
 
 from chutney.Util import (
-    launch_detached,
     Option,
 )
 
@@ -34,6 +35,10 @@ class LocalArtiNodeController(TorNet.NodeController):
         self._node = node
         self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None
         self._most_recent_oniondesc_status: Optional[DirInfoStatus] = None
+
+    @property
+    def _launcher(self) -> chutney.launcher.Launcher:
+        return self._node._launcher
 
     @override
     def getPtExtra(self) -> Option[str]:
@@ -104,7 +109,7 @@ class LocalArtiNodeController(TorNet.NodeController):
         if self.isRunning():
             print("{:12} is already running".format(self._node.nick))
             return
-        launch_detached(
+        self._launcher.launch_detached(
             cmd=Path(self._node._config.arti),
             args=[
                 # Currently only client/proxy mode is supported
@@ -121,7 +126,7 @@ class LocalArtiNodeController(TorNet.NodeController):
             # logging.
             stderr_path=self._node.dir.joinpath("arti.stderr"),
             pid_path=self._node.pidfile,
-            tor_name="arti",
+            known_bin=chutney.known_bins.ArtiBin(),
         )
 
     @override
