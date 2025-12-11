@@ -146,8 +146,8 @@ build-shadow:
   variables:
     JOB_SHADOW_REPO: "https://github.com/shadow/shadow.git"
     JOB_SHADOW_BRANCH: "main"
-    # main @ 2025-06-23
-    JOB_SHADOW_COMMIT: "ba47be2ed70cb90c018f66f5881cccc69fc06e02"
+    # main @ 2025-12-10
+    JOB_SHADOW_COMMIT: "7b2d0c526b93594e9572a9f639faccd6a715e1f4"
   artifacts:
     paths:
       - opt/shadow
@@ -343,8 +343,7 @@ network-config-tests-diff:
   # install arti
   - stow -d opt -t "$HOME"/.local arti
 
-  # install chutney
-  - python3 -m pip install .
+  # No need to install chutney; `network-config-tests-diff` does it itself.
 
   - ./tests/network-config-tests-diff "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
   artifacts:

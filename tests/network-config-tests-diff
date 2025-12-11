@@ -58,13 +58,13 @@ shadow_network_config_tests () {
         exit 1
     fi
     mkdir -p "$dst"/net
-    mkdir -p "$dst"/shadow
     for netdir in "$chutney_top"/lib/chutney/data/networks/*; do
         network=$(basename "$netdir")
+        mkdir -p "$dst"/shadow/"$network"
         shadow_args=()
         # Needed for Popen.communicate deadline: https://github.com/shadow/shadow/issues/3697
         shadow_args+=("--model-unblocked-syscall-latency=true")
-        shadow-exec --temp-dir="$dst"/shadow --preserve=always --shadow-args="${shadow_args[*]}" -- bash -c "
+        shadow-exec --temp-dir="$dst"/shadow/"$network" --preserve=always --shadow-args="${shadow_args[*]}" -- bash -c "
             set -xeuo pipefail
             export PATH='$PATH'
             export CHUTNEY_DATA_DIR='$dst/net'
@@ -74,18 +74,28 @@ shadow_network_config_tests () {
     mv "$dst" "$final_dst"
 }
 
-# Run at head
-shadow_network_config_tests "$head_top_level" head
-
-# Run at specified commit
 tmpdir="$(mktemp -d network-diff-test.XXXX)"
-git clone "$head_top_level" "$tmpdir"/chutney
-git -C "$tmpdir"/chutney checkout "$base_commit"
 python3 -m venv "$tmpdir"/venv
 # shellcheck disable=SC1091
 source "$tmpdir"/venv/bin/activate
-python3 -m pip install --ignore-installed "$tmpdir"/chutney
+
+# Run at specified commit
+git clone "$head_top_level" "$tmpdir"/chutney
+git -C "$tmpdir"/chutney checkout "$base_commit"
+python3 -m pip install "$tmpdir"/chutney
 shadow_network_config_tests "$tmpdir"/chutney base
+
+# Run at head
+#
+# We explicitly uninstall chutney and reinstall the head version.  Compared to
+# using --ignore-installed this avoids unnecessarily reinstalling dependencies
+# (whose version requirements are still met) and the (admittedly unlikely) race
+# condition of new versions of dependencies becoming available and installed
+# this time around.
+python3 -m pip uninstall -y chutney
+python3 -m pip install "$head_top_level"
+shadow_network_config_tests "$head_top_level" head
+
 rm -rf "$tmpdir"
 
 # Compare
