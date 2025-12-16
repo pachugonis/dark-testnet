@@ -1042,6 +1042,14 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return self._nodes
 
     @staticmethod
+    def from_nodes_dir(nodes_dir: Path) -> Network:
+        json_str = nodes_dir.joinpath("network.json").read_text()
+        json_obj = json.loads(json_str)
+        net = Network.from_decoded_json(json_obj)
+        net.dir = nodes_dir
+        return net
+
+    @staticmethod
     def from_network_script_contents(network_script_contents: str) -> Network:
         """Create a Network object using the contents of a chutney network script.
 
@@ -1905,14 +1913,27 @@ def getNetworks() -> list[str]:
     return [s.name for s in _NETWORKS.iterdir()]
 
 
-def main(action: str, network_cfg_name: str) -> None:
+def main(action: str, network_cfg_name: Optional[str]) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
     Raises an exception derived from `ChutneyError` on failure.
     """
     level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
     logging.basicConfig(level=level)
-    network = Network.from_network_script_name(network_cfg_name)
+    network: Network
+    if network_cfg_name is not None:
+        network = Network.from_network_script_name(network_cfg_name)
+    else:
+        nodes_dir = get_absolute_nodes_path()
+        if not nodes_dir.exists():
+            raise ChutneyError(
+                f"Nodes dir '{nodes_dir}' doesn't exist."
+                " Try providing a network name or setting CHUTNEY_DATA_DIR."
+            )
+        try:
+            network = Network.from_nodes_dir(nodes_dir)
+        except Exception as e:
+            raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
     result = runConfigFile(network, action)
     if result is False:
         # TODO: eliminate this case. Have all commands
@@ -1924,12 +1945,15 @@ def __main__() -> None:
     """Raw main, suitable for use with `project.scripts` in `pyproject.toml`"""
     import traceback
 
-    try:
-        (action, network_cfg) = sys.argv[1:]
-    except ValueError:
+    if not 2 <= len(sys.argv) <= 3:
         print("Wrong number of arguments.")
         print(usage())
         sys.exit(1)
+    action = sys.argv[1]
+    try:
+        network_cfg = sys.argv[2]
+    except IndexError:
+        network_cfg = None
     try:
         main(action, network_cfg)
     except ChutneyError as e:
