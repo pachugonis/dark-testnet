@@ -21,6 +21,7 @@ from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import List, Optional, Any, Iterable, Union
+from typing_extensions import assert_never
 
 import copy
 import dataclasses
@@ -257,7 +258,7 @@ class Node(object):
             assert host, f"No ip address for {self.nick}"
             self._launcher = SshLauncher(host)
         else:
-            raise ChutneyError(f"Unrecognized launcher {config.launcher_backend}")
+            assert_never(config.launcher_backend)
         self._builder: NodeBuilder
         self._controller: NodeController
         if config.backend == NodeBackend.TOR:
@@ -276,7 +277,7 @@ class Node(object):
                 self._network, self
             )
         else:
-            raise ChutneyError(f"Unrecognized backend {config.backend}")
+            assert_never(config.backend)
 
     @property
     def fingerprint(self) -> Option[str]:
@@ -299,7 +300,7 @@ class Node(object):
         elif strategy == AddressAssignmentStrategy.OFFSET:
             return Option(IPv4Address(int(base) + self.nodenum))
         else:
-            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
+            assert_never(strategy)
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
