@@ -21,7 +21,7 @@ from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import List, Optional, Any, Iterable, Union
-from typing_extensions import assert_never
+from typing_extensions import assert_never, override
 
 import copy
 import dataclasses
@@ -46,6 +46,7 @@ from chutney.errors import (
     ChutneyErrorGroup,
     ChutneyTimeoutError,
 )
+from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     getenv_int,
@@ -83,7 +84,7 @@ HSV2_KEYWORD = "hidden service v2"
 HSV3_KEYWORD = "hidden service v3"
 
 
-class LauncherBackend(Enum):
+class LauncherBackend(FromDecodedJson, Enum):
     """Specifies class for launching processes for target node"""
 
     # Launch processes locally, e.g. using the subprocess module.
@@ -92,8 +93,13 @@ class LauncherBackend(Enum):
     # processes.
     SSH = 2
 
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> LauncherBackend:
+        return LauncherBackend[check_type(o, str)]
 
-class NodeBackend(Enum):
+
+class NodeBackend(FromDecodedJson, Enum):
     """Specifies the backend used to run a node"""
 
     # c-tor (running locally)
@@ -101,8 +107,13 @@ class NodeBackend(Enum):
     # arti (running locally)
     ARTI = 2
 
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> NodeBackend:
+        return NodeBackend[check_type(o, str)]
 
-class AddressAssignmentStrategy(Enum):
+
+class AddressAssignmentStrategy(FromDecodedJson, Enum):
     """How to assign addresses"""
 
     # Use exactly the addresses `ip` and `ipv6_addr`.
@@ -112,6 +123,11 @@ class AddressAssignmentStrategy(Enum):
     # This is primarily for future support of running nodes on different
     # (virtual, shadow) hosts, in different network namespaces, etc.
     OFFSET = 2
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> AddressAssignmentStrategy:
+        return AddressAssignmentStrategy[check_type(o, str)]
 
 
 def get_absolute_chutney_path() -> Path:
@@ -223,7 +239,7 @@ def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
     return family_key_dir.joinpath(fn)
 
 
-class Node(object):
+class Node(ToCustomJsonable):
     """A Node represents a Tor node or a set of Tor nodes.  It's created
     in a network configuration file.
 
@@ -475,7 +491,8 @@ class Node(object):
                 return formats
         return {}
 
-    def as_jsonable_dict(self) -> dict[str, object]:
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
         """Return a dict describing this object using primitive types.
 
         Values are of types accepted by the json module's encoder."""
@@ -505,6 +522,7 @@ class Node(object):
             hs_virtport=self.hs_virtport.as_optional(),
             hs_targetport=self.hs_targetport.as_optional(),
             hs_hostname=self.hs_hostname.as_optional(),
+            _config=self._config,
         )
 
 
@@ -699,7 +717,7 @@ CUR_LAUNCH_PHASE: int = getenv_int("CHUTNEY_LAUNCH_PHASE", 1)
 
 
 @dataclasses.dataclass
-class NodeConfig:
+class NodeConfig(ToCustomJsonable, FromDecodedJson):
     """Properties of a Tor Node"""
 
     # Which backend to use to run the node.
@@ -933,6 +951,21 @@ class NodeConfig:
         # * creating our own mypy plugin.
         return dataclasses.replace(self, **kwargs)
 
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
+        return dataclasses.asdict(self)
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, obj: object) -> NodeConfig:
+        d = check_type(obj, dict)
+        d["backend"] = NodeBackend.from_decoded_json(d["backend"])
+        d["launcher_backend"] = LauncherBackend.from_decoded_json(d["launcher_backend"])
+        d["address_assignment_strategy"] = AddressAssignmentStrategy.from_decoded_json(
+            d["address_assignment_strategy"]
+        )
+        return NodeConfig(**d)
+
 
 @dataclasses.dataclass
 class BridgeLine:
@@ -961,7 +994,7 @@ class AuthorityLine:
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
 
-class Network(object):
+class Network(ToCustomJsonable, FromDecodedJson):
     """A network of Tor nodes, plus functions to manipulate them"""
 
     def __init__(self) -> None:
@@ -1324,17 +1357,32 @@ class Network(object):
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
         with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
-            json.dump(self.as_jsonable_dict(), f, indent=2)
+            json.dump(self, f, indent=2, cls=chutney.jsonable.CustomEncoder)
 
-    def as_jsonable_dict(self) -> dict[str, object]:
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
         """Return a dict describing this object using primitive types.
 
         Values are of types accepted by the json module's encoder."""
         # Careful when modifying - this is ultimately used to produce "public"
         # json output that is consumed by other tools.
         return dict(
-            nodes=[n.as_jsonable_dict() for n in self.nodes],
+            nodes=[n for n in self.nodes],
+            requirements=self._requirements,
         )
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, obj: object) -> Network:
+        net = Network()
+        d = check_type(obj, dict)
+        for json_node in check_type(d["nodes"], list[dict[str, object]]):
+            node_config = NodeConfig.from_decoded_json(json_node["_config"])
+            net.addNode(node_config)
+        for requirement in check_type(d["requirements"], list[str]):
+            net._addRequirement(requirement)
+
+        return net
 
     def status(self) -> bool:
         """Print how many nodes are running and how many are expected, and
