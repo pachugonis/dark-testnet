@@ -1295,6 +1295,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
                         hs_client.nick, hs_client_pubkey
                     )
 
+    def init(self) -> None:
+        """Create a nodes directory and metadata"""
+        self.create_new_nodes_dir()
+        self._write_network_json()
+
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
         started.
@@ -1798,15 +1803,15 @@ class CLICommands:
         """
         self._net.final_cleanup(wrote_dot, any_tor_was_running, cleanup_runfiles)
 
-    def create_new_nodes_dir(self) -> None:
-        """Create a new directory with a unique name, and symlink it to nodes"""
-        self._net.create_new_nodes_dir()
-
     def supported(self) -> None:
         """Check whether this network is supported by the set of binaries
         and host information we have, and prints the result.
         """
         self._net.supported()
+
+    def init(self) -> None:
+        """Invoked from command line: save the network config to a fresh nodes direcory"""
+        self._net.init()
 
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
