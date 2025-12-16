@@ -15,7 +15,9 @@ from collections.abc import Iterable, Collection
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union
-from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec, override
+
+from chutney.jsonable import ToCustomJsonable, CustomJsonable
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,10 @@ def addr_and_port_str(ip_addr: Union[IPv4Address, IPv6Address], port: int) -> st
         return f"[{ip_addr}]:{port}"
 
 
-class Option(Generic[T]):
+CJ = TypeVar("CJ", bound=CustomJsonable)
+
+
+class Option(Generic[T], ToCustomJsonable):
     """A wrapper for values that may be None
 
     Modeled after Rust's Option type.  Unlike typing.Optional, this is a real
@@ -88,6 +93,10 @@ class Option(Generic[T]):
     def as_optional(self) -> Optional[T]:
         """Returns the value, or None"""
         return self._val
+
+    @override
+    def to_custom_jsonable(self: Option[CJ]) -> CustomJsonable:
+        return self.as_optional()
 
     def unwrap_or(self, default: T) -> T:
         return self._val if self._val is not None else default
