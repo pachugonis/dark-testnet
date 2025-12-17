@@ -106,10 +106,10 @@ chutney-script:
 
     - |
       "$CHUTNEY" configure "$NETWORK"
-      "$CHUTNEY" start "$NETWORK"
-      "$CHUTNEY" wait_for_bootstrap "$NETWORK"
-      "$CHUTNEY" verify "$NETWORK"
-      "$CHUTNEY" stop "$NETWORK"
+      "$CHUTNEY" start
+      "$CHUTNEY" wait_for_bootstrap
+      "$CHUTNEY" verify
+      "$CHUTNEY" stop
 
 unit-tests:
   <<: *debian-template
