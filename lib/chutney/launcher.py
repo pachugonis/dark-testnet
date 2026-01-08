@@ -251,8 +251,12 @@ class Launcher(ABC):
         ...
 
     def running(self, pid: int) -> bool:
+        # On some systems, kill is only available a shell built-in,
+        # so run it via a shell.
+        # TODO: consider implementing `shell` kwarg for `run` and `popen`.
+        shell_cmd = shlex.join(["kill", "-0", str(pid)])
         res = self.run(
-            ["kill", "-0", str(pid)],
+            ["sh", "-c", shell_cmd],
             text=True,
             known_bin=None,
             capture_strategy=Capture.MERGED,
@@ -265,7 +269,11 @@ class Launcher(ABC):
             return False
 
     def send_signal(self, pid: int, sig: int) -> None:
-        self.run(["kill", f"-{sig}", str(pid)], text=True, known_bin=None)
+        # On some systems, kill is only available a shell built-in,
+        # so run it via a shell.
+        # TODO: consider implementing `shell` kwarg for `run` and `popen`.
+        shell_cmd = shlex.join(["kill", f"-{sig}", str(pid)])
+        self.run(["sh", "-c", shell_cmd], text=True, known_bin=None)
 
 
 class LocalPopen(Popen):
