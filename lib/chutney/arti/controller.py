@@ -1,6 +1,4 @@
-import errno
 import logging
-import os
 import re
 import signal
 import sqlite3
@@ -81,16 +79,8 @@ class LocalArtiNodeController(TorNet.NodeController):
 
     def _is_running_with_pid(self, pid: int) -> bool:
         """As for isRunning, but takes the pid, which should be the process ID for this node"""
-        try:
-            os.kill(pid, 0)  # "kill 0" == "are you there?"
-        except OSError as e:
-            if e.errno == errno.ESRCH:
-                return False
-            raise
-
-        # okay, so the process exists.  Say "True" for now.
         # TODO: check if this is really arti?
-        return True
+        return self._launcher.running(pid)
 
     @override
     def hup(self) -> bool:
@@ -98,7 +88,7 @@ class LocalArtiNodeController(TorNet.NodeController):
         nick = self._node.nick
         if pid is not None and self._is_running_with_pid(pid):
             print("Sending sighup to {}".format(nick))
-            os.kill(pid, signal.SIGHUP)
+            self._launcher.send_signal(pid, signal.SIGHUP)
             return True
         else:
             print("{:12} is not running".format(nick))
@@ -135,7 +125,7 @@ class LocalArtiNodeController(TorNet.NodeController):
         if pid is None or not self._is_running_with_pid(pid):
             print("{:12} is not running".format(self._node.nick))
             return
-        os.kill(pid, sig)
+        self._launcher.send_signal(pid, sig)
 
     @override
     def cleanupRunFiles(self) -> None:
