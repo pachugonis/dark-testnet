@@ -251,6 +251,14 @@ class Launcher(ABC):
         ...
 
     def running(self, pid: int) -> bool:
+        """Check whether a process previously started with this Launcher is still running.
+
+        Should be preferred over directly calling python APIs like os.kill,
+        since the process may be remote.
+
+        If a Popen object is available, (i.e. the process isn't detached),
+        then Popen.running should be preferred.
+        """
         # On some systems, kill is only available a shell built-in,
         # so run it via a shell.
         # TODO: consider implementing `shell` kwarg for `run` and `popen`.
@@ -269,6 +277,15 @@ class Launcher(ABC):
             return False
 
     def send_signal(self, pid: int, sig: int) -> None:
+        """Signal a process previously started with this Launcher.
+
+        Should be preferred over directly calling python APIs like os.kill,
+        since the process may be remote.
+
+        If a Popen object is available, (i.e. the process isn't detached),
+        then Popen.send_signal should be preferred.
+        """
+
         # On some systems, kill is only available a shell built-in,
         # so run it via a shell.
         # TODO: consider implementing `shell` kwarg for `run` and `popen`.
