@@ -9,6 +9,7 @@ import logging
 import paramiko
 import os
 import selectors
+import signal
 import shlex
 import subprocess
 import sys
@@ -69,22 +70,25 @@ class Popen(ABC):
         ...
 
     @abstractmethod
-    def running(self) -> bool:
-        """Return whether the process is still running"""
+    def launcher(self) -> Launcher:
+        """Launcher used  to launch this process"""
         ...
 
-    @abstractmethod
+    def running(self) -> bool:
+        """Return whether the process is still running"""
+        return self.launcher().running(self.pid())
+
     def send_signal(self, sig: int) -> None:
         """Sends the specified signal to the process"""
-        ...
+        return self.launcher().send_signal(self.pid(), sig)
 
     def terminate(self) -> None:
         """Sends SIGTERM to the process"""
-        self.send_signal(15)
+        self.send_signal(signal.SIGTERM)
 
     def kill(self) -> None:
         """Sends SIGKILL to the process"""
-        self.send_signal(9)
+        self.send_signal(signal.SIGKILL)
 
 
 class Launcher(ABC):
@@ -246,12 +250,60 @@ class Launcher(ABC):
         """
         ...
 
+    def running(self, pid: int) -> bool:
+        """Check whether a process previously started with this Launcher is still running.
+
+        Should be preferred over directly calling python APIs like os.kill,
+        since the process may be remote.
+
+        If a Popen object is available, (i.e. the process isn't detached),
+        then Popen.running should be preferred.
+        """
+        # On some systems, kill is only available a shell built-in,
+        # so run it via a shell.
+        # TODO: consider implementing `shell` kwarg for `run` and `popen`.
+        shell_cmd = shlex.join(["kill", "-0", str(pid)])
+        res = self.run(
+            ["sh", "-c", shell_cmd],
+            text=True,
+            known_bin=None,
+            capture_strategy=Capture.MERGED,
+        )
+        if res.returncode == 0:
+            return True
+        else:
+            if "No such process" not in res.stdout:
+                _logger.warning("Unexpected kill output: %s", res.stdout)
+            return False
+
+    def send_signal(self, pid: int, sig: int) -> None:
+        """Signal a process previously started with this Launcher.
+
+        Should be preferred over directly calling python APIs like os.kill,
+        since the process may be remote.
+
+        If a Popen object is available, (i.e. the process isn't detached),
+        then Popen.send_signal should be preferred.
+        """
+
+        # On some systems, kill is only available a shell built-in,
+        # so run it via a shell.
+        # TODO: consider implementing `shell` kwarg for `run` and `popen`.
+        shell_cmd = shlex.join(["kill", f"-{sig}", str(pid)])
+        self.run(["sh", "-c", shell_cmd], text=True, known_bin=None)
+
 
 class LocalPopen(Popen):
     """Specialization of Popen returnced by `LocalLauncher`"""
 
-    def __init__(self, inner: subprocess.Popen[str]) -> None:
+    def __init__(self, launcher: LocalLauncher, inner: subprocess.Popen[str]) -> None:
+        self._launcher = launcher
         self._inner = inner
+
+    @override
+    def launcher(self) -> Launcher:
+        """Launcher used  to launch this process"""
+        return self._launcher
 
     @override
     def communicate(
@@ -317,7 +369,7 @@ class LocalLauncher(Launcher):
             )
         except FileNotFoundError as e:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
-        return LocalPopen(inner)
+        return LocalPopen(self, inner)
 
     @override
     def launch_detached(
@@ -503,6 +555,11 @@ class SshPopen(Popen):
         self._capture_strategy = capture_strategy
 
     @override
+    def launcher(self) -> Launcher:
+        """Launcher used  to launch this process"""
+        return self._launcher
+
+    @override
     def communicate(
         self, input: Optional[str] = None, timeout: Optional[float] = None
     ) -> CompletedProcess[str]:
@@ -632,27 +689,6 @@ class SshPopen(Popen):
     @override
     def pid(self) -> int:
         return self._pid
-
-    @override
-    def running(self) -> bool:
-        res = self._launcher.run(
-            ["kill", "-0", str(self._pid)],
-            text=True,
-            known_bin=None,
-            capture_strategy=Capture.MERGED,
-        )
-        if res.returncode == 0:
-            return True
-        else:
-            if "No such process" not in res.stdout:
-                _logger.warning("Unexpected kill output: %s", res.stdout)
-            return False
-
-    @override
-    def send_signal(self, sig: int) -> None:
-        self._launcher.run(
-            ["kill", f"-{sig}", str(self._pid)], text=True, known_bin=None
-        )
 
 
 class SshLauncher(Launcher):
