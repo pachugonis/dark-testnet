@@ -1927,9 +1927,11 @@ def main(action: str, network_cfg_name: Optional[str]) -> None:
     logging.basicConfig(level=level)
     network: Network
     if network_cfg_name is not None:
+        logger.info(f"Initializing network by name: '{network_cfg_name}'")
         network = Network.from_network_script_name(network_cfg_name)
     else:
         nodes_dir = get_absolute_nodes_path()
+        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
         if not nodes_dir.exists():
             raise ChutneyError(
                 f"Nodes dir '{nodes_dir}' doesn't exist."
