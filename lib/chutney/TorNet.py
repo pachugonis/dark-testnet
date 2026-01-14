@@ -1695,7 +1695,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
     # Wait for this long after signalling tor
     STOP_WAIT_TIME = SHUTDOWN_WAIT_LENGTH + EVENT_LOOP_SLOP
 
-    def final_cleanup(
+    def _final_cleanup(
         self, wrote_dot: bool, any_tor_was_running: bool, cleanup_runfiles: bool
     ) -> None:
         """Perform final cleanup actions, based on the arguments:
@@ -1737,7 +1737,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             for _ in range(15):
                 time.sleep(1)
                 if all(not n._controller.isRunning() for n in self._nodes):
-                    self.final_cleanup(wrote_dot, any_tor_was_running, True)
+                    self._final_cleanup(wrote_dot, any_tor_was_running, True)
                     return
                 sys.stdout.write(".")
                 wrote_dot = True
@@ -1746,9 +1746,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 if n._controller.isRunning():
                     print(f"{n.nick} is running")
             # cleanup chutney's logging, but don't wait or cleanup files
-            self.final_cleanup(wrote_dot, False, False)
+            self._final_cleanup(wrote_dot, False, False)
         # wait for tor to exit, but don't cleanup logging
-        self.final_cleanup(False, any_tor_was_running, True)
+        self._final_cleanup(False, any_tor_was_running, True)
 
     def bootstrap(self) -> None:
         """Bootstrap the network.
@@ -1791,17 +1791,6 @@ class CLICommands:
         launch_max = max(n._config.launch_phase for n in self._net._nodes)
         print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
         print("CHUTNEY_LAUNCH_PHASES={}".format(launch_max))
-
-    def final_cleanup(
-        self, wrote_dot: bool, any_tor_was_running: bool, cleanup_runfiles: bool
-    ) -> None:
-        """Perform final cleanup actions, based on the arguments:
-        - wrote_dot: end a series of logged dots with a newline
-        - any_tor_was_running: wait for STOP_WAIT_TIME for tor to stop
-        - cleanup_runfiles: delete old lockfiles from crashed tors
-                            rename old pid files from stopped tors
-        """
-        self._net.final_cleanup(wrote_dot, any_tor_was_running, cleanup_runfiles)
 
     def supported(self) -> None:
         """Check whether this network is supported by the set of binaries
