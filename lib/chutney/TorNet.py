@@ -20,9 +20,10 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import List, Optional, Any, Iterable, Union
+from typing import Callable, List, Optional, Any, Iterable, Union, Sequence
 from typing_extensions import assert_never, override
 
+import argparse
 import copy
 import dataclasses
 import errno
@@ -55,7 +56,6 @@ from chutney.Util import (
     Option,
     OptionalConversionDescriptor,
 )
-from chutney.network_tests import NetworkTestFailure
 from collections.abc import Collection
 
 if sys.version_info >= (3, 11):
@@ -1799,20 +1799,21 @@ class CLICommands:
         self._net.supported()
 
     def init(self) -> None:
-        """Invoked from command line: save the network config to a fresh nodes direcory"""
+        """Save the network configuration to a fresh nodes directory."""
         self._net.init()
 
     def configure(self) -> None:
-        """Invoked from command line: Configure and prepare the network to be
-        started.
-        """
+        """Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."""
         self._net.configure()
 
-    def status(self) -> bool:
-        """Print how many nodes are running and how many are expected, and
-        return True if all nodes are running.
+    def status(self) -> None:
+        """Print how many nodes are running and how many are expected for
+        CHUTNEY_LAUNCH_PHASE. Fails if not all expected nodes are running.
         """
-        return self._net.status()
+        if not self._net.status():
+            # TODO: have Network.status raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("status failed")
 
     def restart(self) -> None:
         """Invoked from command line: Stop and subsequently start our
@@ -1824,20 +1825,19 @@ class CLICommands:
         """Start all our network's nodes and return True on no errors."""
         return self._net.start()
 
-    def hup(self) -> bool:
-        """Send SIGHUP to all our network's running nodes and return True on no
-        errors.
-        """
-        return self._net.hup()
+    def hup(self) -> None:
+        """Send SIGHUP to all our network's running nodes."""
+        if not self._net.hup():
+            # TODO: have controller.hup raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("hup failed")
 
     def wait_for_bootstrap(self) -> None:
-        """Invoked from tools/test-network.sh to wait for the network to
-        bootstrap.
-        """
+        """Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."""
         self._net.wait_for_bootstrap()
 
     def stop(self) -> None:
-        """Stop our network's running tor nodes."""
+        """Stop the network's running processes."""
         self._net.stop()
 
     def bootstrap(self) -> None:
@@ -1847,54 +1847,13 @@ class CLICommands:
         nodes' configure and launch phases."""
         self._net.bootstrap()
 
+    def verify(self) -> None:
+        """Run the "verify" connectivity test.
 
-def getTests() -> list[str]:
-    chutney_tests_path = importlib.resources.files("chutney.network_tests")
+        Assumes the network is already bootstrapped."""
+        import chutney.network_tests.verify
 
-    return [
-        test.name.removesuffix(".py")
-        for test in chutney_tests_path.iterdir()
-        if test.name.endswith(".py") and not test.name.startswith("_")
-    ]
-
-
-def usage() -> str:
-    return "\n".join(
-        [
-            "Usage: chutney {command/test} {networkfile}",
-            "Known commands are: %s"
-            % (" ".join(x for x in dir(CLICommands) if not x.startswith("_"))),
-            "Known tests are: %s" % (" ".join(getTests())),
-            "Known networks are: %s" % (" ".join(getNetworks())),
-        ]
-    )
-
-
-def runConfigFile(network: Network, verb: str) -> Optional[bool]:
-    # let's check if the verb is a valid test and run it
-    if verb in getTests():
-        test_module = importlib.import_module("chutney.network_tests.{}".format(verb))
-        try:
-            run_test = test_module.run_test
-        except AttributeError as e:
-            print("Error running test {!r}: {}".format(verb, e))
-            return False
-        try:
-            run_test(network)
-        except NetworkTestFailure as e:
-            raise ChutneyError(f"Test '{verb}' failed") from e
-        return None
-
-    cli_cmds = CLICommands(network)
-
-    # tell the user we don't know what their verb meant
-    if not hasattr(cli_cmds, verb):
-        print(usage())
-        print("Error: I don't know how to %s." % verb)
-        return None
-
-    res: Optional[bool] = check_type(getattr(cli_cmds, verb)(), Optional[bool])
-    return res
+        chutney.network_tests.verify.run_test(self._net)
 
 
 _NETWORKS: Traversable = (
@@ -1907,11 +1866,45 @@ def getNetworks() -> list[str]:
     return [s.name for s in _NETWORKS.iterdir()]
 
 
-def main(action: str, network_cfg_name: Optional[str]) -> None:
+def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="chutney")
+    subparsers = parser.add_subparsers(dest="cmd")
+
+    def add_cli_command(f: Callable[[CLICommands], None]) -> None:
+        subparser = subparsers.add_parser(f.__name__, help=f.__doc__)
+        # Because the network-name comes after the command, which specifies the
+        # subparser, we have to add it to every subparser.
+        subparser.add_argument(
+            "network-name",
+            nargs="?",
+            help="Path to script, or name of a built-in network: "
+            + ",".join(getNetworks()),
+        )
+        subparser.set_defaults(func=f)
+
+    add_cli_command(CLICommands.print_phases)
+    add_cli_command(CLICommands.supported)
+    add_cli_command(CLICommands.init)
+    add_cli_command(CLICommands.configure)
+    add_cli_command(CLICommands.status)
+    add_cli_command(CLICommands.restart)
+    add_cli_command(CLICommands.start)
+    add_cli_command(CLICommands.wait_for_bootstrap)
+    add_cli_command(CLICommands.stop)
+    add_cli_command(CLICommands.bootstrap)
+    add_cli_command(CLICommands.verify)
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
     Raises an exception derived from `ChutneyError` on failure.
     """
+    args = vars(parse_args(argv))
+    network_cfg_name = check_type(args["network-name"], Optional[str])
+    action = check_type(args["func"], Callable[[CLICommands], None])
     level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
     logging.basicConfig(level=level)
     network: Network
@@ -1930,28 +1923,15 @@ def main(action: str, network_cfg_name: Optional[str]) -> None:
             network = Network.from_nodes_dir(nodes_dir)
         except Exception as e:
             raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
-    result = runConfigFile(network, action)
-    if result is False:
-        # TODO: eliminate this case. Have all commands
-        # return a more informative error instead of `False`
-        raise ChutneyError("Unspecified failure")
+    action(CLICommands(network))
 
 
 def __main__() -> None:
     """Raw main, suitable for use with `project.scripts` in `pyproject.toml`"""
     import traceback
 
-    if not 2 <= len(sys.argv) <= 3:
-        print("Wrong number of arguments.")
-        print(usage())
-        sys.exit(1)
-    action = sys.argv[1]
     try:
-        network_cfg = sys.argv[2]
-    except IndexError:
-        network_cfg = None
-    try:
-        main(action, network_cfg)
+        main()
     except ChutneyError as e:
         traceback.print_exception(None, value=e, tb=None, limit=0)
         sys.exit(1)
