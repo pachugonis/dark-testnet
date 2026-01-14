@@ -1092,32 +1092,21 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return _THE_NETWORK
 
     @staticmethod
-    def _get_network_script_contents(network_cfg_name: str) -> str:
-        # First look for built-in network with matching `name`
-        try:
-            return _NETWORKS.joinpath(network_cfg_name).read_text()
-        except FileNotFoundError:
-            # We'll try it as a path, below.
-            pass
-        try:
-            with open(network_cfg_name) as f:
-                return f.read()
-        except OSError as e:
-            raise ChutneyError(
-                f"'{network_cfg_name}' matches neither a built-in network name nor a readable file"
-            ) from e
+    def from_network_script_name(network_cfg_name: str) -> Network:
+        """Create a Network object using a built-in chutney network script.
+
+        Built in networks are located in `chutney/data/networks`, and can be
+        listed via the `getNetworks` function, or with `chutney --help` at the
+        command-line.
+        """
+        contents = _NETWORKS.joinpath(network_cfg_name).read_text()
+        return Network.from_network_script_contents(contents)
 
     @staticmethod
-    def from_network_script_name(network_cfg_name: str) -> Network:
-        """Create a Network object using the contents of a chutney network script name.
-
-        This can be either the name of a built-in network, such as "basic-min",
-        or path to a file containing a network script. Built in networks are
-        located in `chutney/data/networks`, and can be listed via the
-        `getNetworks` function, or with `chutney --help` at the command-line.
-        """
-        network_script_contents = Network._get_network_script_contents(network_cfg_name)
-        return Network.from_network_script_contents(network_script_contents)
+    def from_network_script_path(network_cfg_path: Path) -> Network:
+        """Create a Network object using a chutney network script by path."""
+        contents = network_cfg_path.read_text()
+        return Network.from_network_script_contents(contents)
 
     def addNode(self, config: NodeConfig) -> Node:
         """Create a node with the given config, add it to the network, and return it."""
@@ -1868,25 +1857,50 @@ def getNetworks() -> list[str]:
     return networks
 
 
-def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
+def _parse_args(
+    argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
+) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="chutney")
     subparsers = parser.add_subparsers(dest="cmd")
 
-    def add_cli_command(f: Callable[[CLICommands], None]) -> None:
+    def add_cli_command(
+        f: Callable[[CLICommands], None],
+        *,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
         subparser = subparsers.add_parser(f.__name__, help=f.__doc__)
-        # Because the network-name comes after the command, which specifies the
-        # subparser, we have to add it to every subparser.
-        subparser.add_argument(
-            "network-name",
-            nargs="?",
-            help="Path to script, or name of a built-in network: "
-            + ",".join(getNetworks()),
-        )
+        if require_net_spec_group is not None:
+            # This command supports specifying the network config.
+            # We add a group of mutually exclusive flags, one for each method of
+            # specifying the config.
+            method_group = subparser.add_mutually_exclusive_group(
+                required=require_net_spec_group
+            )
+            method_group.add_argument(
+                "--net",
+                choices=getNetworks(),
+                help="Load built-in network config by name",
+            )
+            method_group.add_argument(
+                "--net-from-script-path",
+                help="Load network config from a chutney network script",
+                type=Path,
+            )
+            method_group.add_argument(
+                "--net-from-data-dir",
+                action="store_true",
+                # If the group isn't required, then make this the default option.
+                default=not require_net_spec_group,
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
+            )
+        else:
+            # User isn't permitted to specify; always get from data dir.
+            subparser.set_defaults(net_from_data_dir=True)
         subparser.set_defaults(func=f)
 
-    add_cli_command(CLICommands.print_phases)
-    add_cli_command(CLICommands.supported)
-    add_cli_command(CLICommands.init)
+    add_cli_command(CLICommands.print_phases, require_net_spec_group=False)
+    add_cli_command(CLICommands.supported, require_net_spec_group=False)
+    add_cli_command(CLICommands.init, require_net_spec_group=True)
     add_cli_command(CLICommands.configure)
     add_cli_command(CLICommands.status)
     add_cli_command(CLICommands.restart)
@@ -1899,32 +1913,50 @@ def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _network_from_args(ns: argparse.Namespace) -> Network:
+    net_name = check_type(getattr(ns, "net", None), Optional[str])
+    if net_name is not None:
+        logger.info(f"Loading network config from built-in network name: '{net_name}'")
+        return Network.from_network_script_name(net_name)
+    script_path = check_type(getattr(ns, "net_from_script_path", None), Optional[Path])
+    if script_path is not None:
+        logger.info(
+            f"Loading network config from chutney network script path: '{script_path}'"
+        )
+        return Network.from_network_script_path(script_path)
+
+    assert ns.net_from_data_dir
+
+    unresolved_nodes_dir = get_absolute_nodes_path()
+    nodes_dir = unresolved_nodes_dir.resolve()
+    if nodes_dir == unresolved_nodes_dir:
+        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
+    else:
+        logger.info(
+            f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}"
+        )
+    if not nodes_dir.exists():
+        raise ChutneyError(
+            f"Nodes dir '{nodes_dir}' doesn't exist."
+            " Try providing a network name or setting CHUTNEY_DATA_DIR."
+        )
+    try:
+        return Network.from_nodes_dir(nodes_dir)
+    except Exception as e:
+        raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
     Raises an exception derived from `ChutneyError` on failure.
     """
-    args = vars(parse_args(argv))
-    network_cfg_name = check_type(args["network-name"], Optional[str])
-    action = check_type(args["func"], Callable[[CLICommands], None])
     level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
     logging.basicConfig(level=level)
-    network: Network
-    if network_cfg_name is not None:
-        logger.info(f"Initializing network by name: '{network_cfg_name}'")
-        network = Network.from_network_script_name(network_cfg_name)
-    else:
-        nodes_dir = get_absolute_nodes_path()
-        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
-        if not nodes_dir.exists():
-            raise ChutneyError(
-                f"Nodes dir '{nodes_dir}' doesn't exist."
-                " Try providing a network name or setting CHUTNEY_DATA_DIR."
-            )
-        try:
-            network = Network.from_nodes_dir(nodes_dir)
-        except Exception as e:
-            raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
+
+    args = _parse_args(argv)
+    network = _network_from_args(args)
+    action = check_type(args.func, Callable[[CLICommands], None])
     action(CLICommands(network))
 
 
