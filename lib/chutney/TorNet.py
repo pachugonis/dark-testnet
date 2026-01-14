@@ -1294,7 +1294,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         started.
         """
         if CUR_CONFIG_PHASE == 1:
-            self.create_new_nodes_dir()
             self.create_family_keys()
         else:
             self.load_family_key_ids()
