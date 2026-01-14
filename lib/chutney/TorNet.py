@@ -21,6 +21,7 @@ from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import List, Optional, Any, Iterable, Union
+from typing_extensions import assert_never, override
 
 import copy
 import dataclasses
@@ -45,6 +46,7 @@ from chutney.errors import (
     ChutneyErrorGroup,
     ChutneyTimeoutError,
 )
+from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     getenv_int,
@@ -82,7 +84,7 @@ HSV2_KEYWORD = "hidden service v2"
 HSV3_KEYWORD = "hidden service v3"
 
 
-class LauncherBackend(Enum):
+class LauncherBackend(FromDecodedJson, Enum):
     """Specifies class for launching processes for target node"""
 
     # Launch processes locally, e.g. using the subprocess module.
@@ -91,8 +93,13 @@ class LauncherBackend(Enum):
     # processes.
     SSH = 2
 
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> LauncherBackend:
+        return LauncherBackend[check_type(o, str)]
 
-class NodeBackend(Enum):
+
+class NodeBackend(FromDecodedJson, Enum):
     """Specifies the backend used to run a node"""
 
     # c-tor (running locally)
@@ -100,8 +107,13 @@ class NodeBackend(Enum):
     # arti (running locally)
     ARTI = 2
 
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> NodeBackend:
+        return NodeBackend[check_type(o, str)]
 
-class AddressAssignmentStrategy(Enum):
+
+class AddressAssignmentStrategy(FromDecodedJson, Enum):
     """How to assign addresses"""
 
     # Use exactly the addresses `ip` and `ipv6_addr`.
@@ -111,6 +123,11 @@ class AddressAssignmentStrategy(Enum):
     # This is primarily for future support of running nodes on different
     # (virtual, shadow) hosts, in different network namespaces, etc.
     OFFSET = 2
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, o: object) -> AddressAssignmentStrategy:
+        return AddressAssignmentStrategy[check_type(o, str)]
 
 
 def get_absolute_chutney_path() -> Path:
@@ -222,7 +239,7 @@ def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
     return family_key_dir.joinpath(fn)
 
 
-class Node(object):
+class Node(ToCustomJsonable):
     """A Node represents a Tor node or a set of Tor nodes.  It's created
     in a network configuration file.
 
@@ -257,7 +274,7 @@ class Node(object):
             assert host, f"No ip address for {self.nick}"
             self._launcher = SshLauncher(host)
         else:
-            raise ChutneyError(f"Unrecognized launcher {config.launcher_backend}")
+            assert_never(config.launcher_backend)
         self._builder: NodeBuilder
         self._controller: NodeController
         if config.backend == NodeBackend.TOR:
@@ -276,7 +293,7 @@ class Node(object):
                 self._network, self
             )
         else:
-            raise ChutneyError(f"Unrecognized backend {config.backend}")
+            assert_never(config.backend)
 
     @property
     def fingerprint(self) -> Option[str]:
@@ -299,7 +316,7 @@ class Node(object):
         elif strategy == AddressAssignmentStrategy.OFFSET:
             return Option(IPv4Address(int(base) + self.nodenum))
         else:
-            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
+            assert_never(strategy)
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
@@ -474,7 +491,8 @@ class Node(object):
                 return formats
         return {}
 
-    def as_jsonable_dict(self) -> dict[str, object]:
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
         """Return a dict describing this object using primitive types.
 
         Values are of types accepted by the json module's encoder."""
@@ -504,6 +522,7 @@ class Node(object):
             hs_virtport=self.hs_virtport.as_optional(),
             hs_targetport=self.hs_targetport.as_optional(),
             hs_hostname=self.hs_hostname.as_optional(),
+            _config=self._config,
         )
 
 
@@ -698,7 +717,7 @@ CUR_LAUNCH_PHASE: int = getenv_int("CHUTNEY_LAUNCH_PHASE", 1)
 
 
 @dataclasses.dataclass
-class NodeConfig:
+class NodeConfig(ToCustomJsonable, FromDecodedJson):
     """Properties of a Tor Node"""
 
     # Which backend to use to run the node.
@@ -932,6 +951,21 @@ class NodeConfig:
         # * creating our own mypy plugin.
         return dataclasses.replace(self, **kwargs)
 
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
+        return dataclasses.asdict(self)
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, obj: object) -> NodeConfig:
+        d = check_type(obj, dict)
+        d["backend"] = NodeBackend.from_decoded_json(d["backend"])
+        d["launcher_backend"] = LauncherBackend.from_decoded_json(d["launcher_backend"])
+        d["address_assignment_strategy"] = AddressAssignmentStrategy.from_decoded_json(
+            d["address_assignment_strategy"]
+        )
+        return NodeConfig(**d)
+
 
 @dataclasses.dataclass
 class BridgeLine:
@@ -960,7 +994,7 @@ class AuthorityLine:
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
 
-class Network(object):
+class Network(ToCustomJsonable, FromDecodedJson):
     """A network of Tor nodes, plus functions to manipulate them"""
 
     def __init__(self) -> None:
@@ -1006,6 +1040,14 @@ class Network(object):
     def nodes(self) -> Iterable[Node]:
         """The nodes in this network"""
         return self._nodes
+
+    @staticmethod
+    def from_nodes_dir(nodes_dir: Path) -> Network:
+        json_str = nodes_dir.joinpath("network.json").read_text()
+        json_obj = json.loads(json_str)
+        net = Network.from_decoded_json(json_obj)
+        net.dir = nodes_dir
+        return net
 
     @staticmethod
     def from_network_script_contents(network_script_contents: str) -> Network:
@@ -1253,6 +1295,11 @@ class Network(object):
                         hs_client.nick, hs_client_pubkey
                     )
 
+    def init(self) -> None:
+        """Create a nodes directory and metadata"""
+        self.create_new_nodes_dir()
+        self._write_network_json()
+
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
         started.
@@ -1323,17 +1370,32 @@ class Network(object):
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
         with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
-            json.dump(self.as_jsonable_dict(), f, indent=2)
+            json.dump(self, f, indent=2, cls=chutney.jsonable.CustomEncoder)
 
-    def as_jsonable_dict(self) -> dict[str, object]:
+    @override
+    def to_custom_jsonable(self) -> CustomJsonable:
         """Return a dict describing this object using primitive types.
 
         Values are of types accepted by the json module's encoder."""
         # Careful when modifying - this is ultimately used to produce "public"
         # json output that is consumed by other tools.
         return dict(
-            nodes=[n.as_jsonable_dict() for n in self.nodes],
+            nodes=[n for n in self.nodes],
+            requirements=self._requirements,
         )
+
+    @override
+    @classmethod
+    def from_decoded_json(cls, obj: object) -> Network:
+        net = Network()
+        d = check_type(obj, dict)
+        for json_node in check_type(d["nodes"], list[dict[str, object]]):
+            node_config = NodeConfig.from_decoded_json(json_node["_config"])
+            net.addNode(node_config)
+        for requirement in check_type(d["requirements"], list[str]):
+            net._addRequirement(requirement)
+
+        return net
 
     def status(self) -> bool:
         """Print how many nodes are running and how many are expected, and
@@ -1741,15 +1803,15 @@ class CLICommands:
         """
         self._net.final_cleanup(wrote_dot, any_tor_was_running, cleanup_runfiles)
 
-    def create_new_nodes_dir(self) -> None:
-        """Create a new directory with a unique name, and symlink it to nodes"""
-        self._net.create_new_nodes_dir()
-
     def supported(self) -> None:
         """Check whether this network is supported by the set of binaries
         and host information we have, and prints the result.
         """
         self._net.supported()
+
+    def init(self) -> None:
+        """Invoked from command line: save the network config to a fresh nodes direcory"""
+        self._net.init()
 
     def configure(self) -> None:
         """Invoked from command line: Configure and prepare the network to be
@@ -1856,14 +1918,29 @@ def getNetworks() -> list[str]:
     return [s.name for s in _NETWORKS.iterdir()]
 
 
-def main(action: str, network_cfg_name: str) -> None:
+def main(action: str, network_cfg_name: Optional[str]) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
     Raises an exception derived from `ChutneyError` on failure.
     """
     level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
     logging.basicConfig(level=level)
-    network = Network.from_network_script_name(network_cfg_name)
+    network: Network
+    if network_cfg_name is not None:
+        logger.info(f"Initializing network by name: '{network_cfg_name}'")
+        network = Network.from_network_script_name(network_cfg_name)
+    else:
+        nodes_dir = get_absolute_nodes_path()
+        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
+        if not nodes_dir.exists():
+            raise ChutneyError(
+                f"Nodes dir '{nodes_dir}' doesn't exist."
+                " Try providing a network name or setting CHUTNEY_DATA_DIR."
+            )
+        try:
+            network = Network.from_nodes_dir(nodes_dir)
+        except Exception as e:
+            raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
     result = runConfigFile(network, action)
     if result is False:
         # TODO: eliminate this case. Have all commands
@@ -1875,12 +1952,15 @@ def __main__() -> None:
     """Raw main, suitable for use with `project.scripts` in `pyproject.toml`"""
     import traceback
 
-    try:
-        (action, network_cfg) = sys.argv[1:]
-    except ValueError:
+    if not 2 <= len(sys.argv) <= 3:
         print("Wrong number of arguments.")
         print(usage())
         sys.exit(1)
+    action = sys.argv[1]
+    try:
+        network_cfg = sys.argv[2]
+    except IndexError:
+        network_cfg = None
     try:
         main(action, network_cfg)
     except ChutneyError as e:

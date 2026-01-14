@@ -138,25 +138,29 @@ chutney environmental variables documented below:
 ## Standard Actions
 
 ``` shell
-# Creates configuration files for the network `basic`.
-./chutney configure basic
-# Starts running the network `basic`.
+# (Optional) Initialize a new directory configured for the network `basic`
+./chutney init basic
+# Creates keys and configuration files for the network.
+# The network-name `basic` can be omitted if the current net dir is already
+# initialized with the desired network, e.g. using `init`.
+./chutney configure \[basic\]
+# Starts running the network.
 # Requires `configure` to have already been run.
-./chutney start basic
-# Checks and prints the status of the network `basic`.
-./chutney status basic
-# Waits for the network `basic` to be fully bootstrapped.
+./chutney start
+# Checks and prints the status of the network.
+./chutney status
+# Waits for the network to be fully bootstrapped.
 # Requires `start` to have already been run.
-./chutney wait_for_bootstrap basic
+./chutney wait_for_bootstrap
 # Combines `configure`, `start`, and `wait_for_bootstrap`.
 ./chutney bootstrap basic
 # Verifies functionality of network clients and hidden services.
 # Requires network to already be bootstrapped.
-./chutney verify basic
+./chutney verify
 # Sends SIGHUP to all network nodes.
-./chutney hup basic
+./chutney hup
 # Stops the network.
-./chutney stop basic
+./chutney stop
 ```
 
 ## Bandwidth Tests
@@ -167,8 +171,8 @@ chutney environmental variables documented below:
 
 Send 100MB of data per client connection:
 ``` shell
-CHUTNEY_DATA_BYTES=104857600 ./chutney verify basic-min
-./chutney stop basic-min
+CHUTNEY_DATA_BYTES=104857600 ./chutney verify
+./chutney stop
 ```
 
 If chutney sends at least `5 MB` of data, and it takes at least one second,
@@ -190,8 +194,8 @@ network performance is infinite.
 Make 5 simultaneous connections from each client through a random exit
 
 ``` shell
-CHUTNEY_CONNECTIONS=5 ./chutney verify basic-025
-./chutney stop basic-025
+CHUTNEY_CONNECTIONS=5 ./chutney verify
+./chutney stop
 ```
 
 Run 5 sequential verification rounds
@@ -209,8 +213,8 @@ CHUTNEY_ROUNDS=5 ./tools/test-network.sh --flavour basic
 Make a connection from each client to each hs Default behavior is one client
 connects to each HS: 
 ``` shell
-CHUTNEY_HS_MULTI_CLIENT=1 ./chutney verify hs-025
-./chutney stop hs-025
+CHUTNEY_HS_MULTI_CLIENT=1 ./chutney verify
+./chutney stop
 ```
 
 

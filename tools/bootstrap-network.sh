@@ -53,7 +53,7 @@ if ! "$CHUTNEY" supported "$NETWORK_FLAVOUR"; then
     exit 77
 fi
 
-"$CHUTNEY" stop "$NETWORK_FLAVOUR"
+"$CHUTNEY" stop || echo "Unable to stop previous network (possibly because there isn't one)"
 
 $ECHO "$myname: bootstrapping network: $NETWORK_FLAVOUR"
 if ! "$CHUTNEY" bootstrap "$NETWORK_FLAVOUR"; then
@@ -67,6 +67,6 @@ if ! "$CHUTNEY" bootstrap "$NETWORK_FLAVOUR"; then
 fi
 
 $ECHO "Chutney network launched and running. To stop the network, use:"
-$ECHO "$CHUTNEY stop $NETWORK_FLAVOUR"
+$ECHO "$CHUTNEY stop"
 "$DIAGNOSTICS"
 "$WARNINGS"

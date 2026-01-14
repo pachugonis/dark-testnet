@@ -433,7 +433,10 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     def get_fingerprint_ed25519(self) -> Option[str]:
         if not self._node._config.relay:
             return Option(None)
-        s = self._node.dir.joinpath("fingerprint-ed25519").read_text()
+        try:
+            s = self._node.dir.joinpath("fingerprint-ed25519").read_text()
+        except FileNotFoundError:
+            return Option(None)
         m = re.match(r"^\w+ (\S{43})$", s)
         if not m:
             raise chutney.errors.ChutneyError(
@@ -445,7 +448,10 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     def get_fingerprint(self) -> Option[str]:
         if not self._node._config.relay:
             return Option(None)
-        s = self._node.dir.joinpath("fingerprint").read_text()
+        try:
+            s = self._node.dir.joinpath("fingerprint").read_text()
+        except FileNotFoundError:
+            return Option(None)
         m = re.match(r"^\w+ ([A-F0-9]{40})$", s)
         if not m:
             raise chutney.errors.ChutneyError(
