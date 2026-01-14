@@ -1863,7 +1863,9 @@ _NETWORKS: Traversable = (
 
 def getNetworks() -> list[str]:
     """Get names of built-in networks."""
-    return [s.name for s in _NETWORKS.iterdir()]
+    networks = [s.name for s in _NETWORKS.iterdir()]
+    networks.sort()
+    return networks
 
 
 def parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
