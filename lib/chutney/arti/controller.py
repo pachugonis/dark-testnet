@@ -248,16 +248,14 @@ class LocalArtiNodeController(TorNet.NodeController):
         # Get path to most recent microdesc consensus file.
         # TODO: verify that we're within the valid and fresh times?
         try:
-            res = cur.execute(
-                """
+            res = cur.execute("""
                 SELECT filename
                 FROM Consensuses
                     JOIN ExtDocs ON Consensuses.digest=ExtDocs.digest
                 WHERE Consensuses.flavor="microdesc"
                 ORDER BY Consensuses.valid_until DESC
                 LIMIT 1
-                """
-            )
+                """)
         except sqlite3.OperationalError as oe:
             # TODO: use sqlite_errorcode when we require python >= 3.11
             # https://docs.python.org/3/library/sqlite3.html#sqlite3.Error.sqlite_errorcode
@@ -311,12 +309,10 @@ class LocalArtiNodeController(TorNet.NodeController):
             if dir_pattern is None:
                 return DirInfoStatusCode.NOT_YET_IMPLEMENTED
             try:
-                res = cur.execute(
-                    """
+                res = cur.execute("""
                     SELECT contents
                     FROM Microdescs
-                    """
-                )
+                    """)
             except sqlite3.OperationalError as oe:
                 # TODO: use sqlite_errorcode when we require python >= 3.11
                 # https://docs.python.org/3/library/sqlite3.html#sqlite3.Error.sqlite_errorcode

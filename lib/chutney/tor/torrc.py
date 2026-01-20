@@ -25,8 +25,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     """
     Returns the contents of a torrc config file for the given node.
     """
-    res = textwrap.dedent(
-        f"""
+    res = textwrap.dedent(f"""
         TestingTorNetwork 1
 
         ## Rapid Bootstrap Testing Options ##
@@ -90,8 +89,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         DnsPort {n.dnsport.unwrap_or(0)}
 
         UseMicrodescriptors {int(n._config.use_microdescriptors)}
-        """
-    )
+        """)
     if (
         "0.4.9.1-alpha-dev" in tor_version or "0.4.9.2-alpha-dev" in tor_version
     ) and n._config.pt_transport:
@@ -116,8 +114,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         if n.ipv6_addr.is_some():
             res += f"OrPort {addr_and_port_str(n.ipv6_addr.unwrap(), n.orport)}\n"
     if n._config.hs:
-        res += textwrap.dedent(
-            f"""
+        res += textwrap.dedent(f"""
             HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}
 
             # Redirect requests to the port used by chutney verify
@@ -125,11 +122,9 @@ def format(n: TorNet.Node, tor_version: str) -> str:
 
             # v3 is the only current supported version.
             HiddenServiceVersion 3
-            """
-        )
+            """)
         if n._config.hs_singlehop:
-            res += textwrap.dedent(
-                f"""
+            res += textwrap.dedent(f"""
                 # Make this hidden service instance a Single Onion Service
                 HiddenServiceSingleHopMode 1
                 HiddenServiceNonAnonymousMode 1
@@ -149,8 +144,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
                 LongLivedPorts
                 # This disables everything except hidden service preemptive 3-hop circuits.
                 # See #17360.
-                """
-            )
+                """)
     for auth in n._network.authorities:
         directive: str
         if auth.alt_dir_auth and (auth.alt_bridge_auth or not n._network.hasbridgeauth):
@@ -184,8 +178,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         res += f"{directive} {auth.nick} {' '.join(flags)}"
         res += f" {addr_and_port_str(auth.ipv4, auth.dirport)} {auth.fingerprint}\n"
     if n._config.relay:
-        res += textwrap.dedent(
-            f"""
+        res += textwrap.dedent(f"""
             ExitRelay {int(n._config.exit)}
 
             # These options are set here so they apply to IPv4 and IPv6 Exits
@@ -200,8 +193,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             {n._config.server_dns_resolv_conf}
 
             DirPort {n.dirport.unwrap_or(0)}
-            """
-        )
+            """)
     family_member_fps = _family_member_fps(n)
     if family_member_fps:
         res += "MyFamily {}\n".format(", ".join(family_member_fps))
@@ -211,8 +203,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     if n._config.exit:
         if not n._config.relay:
             raise ChutneyError("'exit' set without 'relay'")
-        res += textwrap.dedent(
-            """
+        res += textwrap.dedent("""
             # 1. Allow exiting to IPv4 localhost and private networks by default
             # -------------------------------------------------------------
 
@@ -243,13 +234,11 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             # 4. Finally, reject all IPv4 addresses which haven't been permitted
             # ------------------------------------------------------------------
             ExitPolicy reject *:*
-            """
-        )
+            """)
     if n._config.exit and n.ipv6_addr.is_some():
         if not n._config.relay:
             raise ChutneyError(f"'exit' set without 'relay' in node {n.nick}")
-        res += textwrap.dedent(
-            """
+        res += textwrap.dedent("""
             # 1. Allow exiting to IPv6 localhost and private networks by default
             # ------------------------------------------------------------------
             IPv6Exit 1
@@ -270,25 +259,19 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             # 3. Finally, reject all IPv6 addresses which haven't been permitted
             # ------------------------------------------------------------------
             ExitPolicy reject6 *:*
-            """
-        )
+            """)
     if n._config.authority:
-        res += textwrap.dedent(
-            f"""
+        res += textwrap.dedent(f"""
             AuthoritativeDirectory 1
             ContactInfo auth{n.nodenum}@test.test
-            """
-        )
+            """)
         if n.ipv6_addr.is_some() and not n._config.disableipv6:
-            res += textwrap.dedent(
-                """
+            res += textwrap.dedent("""
                 # And has IPv6 connectivity
                 AuthDirHasIPv6Connectivity 1
-                """
-            )
+                """)
     if n._config.authority and not n._config.bridgeauthority:
-        res += textwrap.dedent(
-            f"""
+        res += textwrap.dedent(f"""
             V3AuthoritativeDirectory 1
 
             # Disable authority to relay/bridge reachability checks
@@ -321,8 +304,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             V3AuthDistDelay 4
 
             ConsensusParams cc_alg=2
-            """
-        )
+            """)
     if n._config.bridgeauthority:
         if not n._config.authority:
             raise ChutneyError(
@@ -330,13 +312,11 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             )
         res += "BridgeAuthoritativeDir 1\n"
     if n._config.bridge:
-        res += textwrap.dedent(
-            """
+        res += textwrap.dedent("""
             BridgeRelay 1
             # Nor do we have GEOIP files in any reliable location
             BridgeRecordUsageByCountry 0
-            """
-        )
+            """)
     if n._config.pt_bridge:
         ip = n.ip.unwrap_or_raise(ChutneyError("ip is mandatory for bridges"))
         pt_executable = find_executable_on_path(n._config.pt_executable)
@@ -345,13 +325,11 @@ def format(n: TorNet.Node, tor_version: str) -> str:
                 "pt_bridge is set, but couldn't locate pt_executable "
                 + f"'{n._config.pt_executable}'"
             )
-        res += textwrap.dedent(
-            f"""
+        res += textwrap.dedent(f"""
             ServerTransportPlugin {n._config.pt_transport} exec {pt_executable}
             ExtOrPort {n.extorport}
             ServerTransportListenAddr obfs4 {addr_and_port_str(ip, n.ptport)}
-            """
-        )
+            """)
     if n._config.bridgeclient:
         res += "UseBridges 1\n"
         for bd in n._network.bridges:

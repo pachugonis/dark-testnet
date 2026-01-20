@@ -480,8 +480,8 @@ class LocalNodeController(TorNet.NodeController):
                 dir_status = new_status
                 continue
 
-            (old_status_code, old_flav) = dir_status
-            (new_status_code, new_flav) = new_status
+            old_status_code, old_flav = dir_status
+            new_status_code, new_flav = new_status
             if new_status_code == old_status_code:
                 # We want to know all the flavours that have an
                 # equal status, not just the latest one
@@ -731,7 +731,7 @@ class LocalNodeController(TorNet.NodeController):
             )
 
             if comb_status is not None:
-                (comb_code, comb_format_set) = comb_status
+                comb_code, comb_format_set = comb_status
                 assert comb_code == status_code
 
                 node_status[status_code] = (
