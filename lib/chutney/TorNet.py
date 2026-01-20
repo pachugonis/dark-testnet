@@ -1350,16 +1350,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         arti_tor_config = chutney.arti.config.tor_config(self)
         with get_absolute_nodes_path().joinpath("arti.toml").open("wb") as f:
-            f.write(
-                textwrap.dedent(
-                    """
+            f.write(textwrap.dedent("""
                 # Base `arti_client::TorClientConfig` options for configuring
                 # applications (not necessarily `arti`) that embed an arti
                 # client. For `arti` processes, consider instead adding network
                 # nodes with `backend=NodeBackend.ARTI`.
-                """
-                ).encode()
-            )
+                """).encode())
             tomli_w.dump(arti_tor_config, f)
 
         for n in cur_phase_nodes:

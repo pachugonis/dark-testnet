@@ -387,7 +387,7 @@ class LocalLauncher(Launcher):
         # TODO: Consider communicating via the sd_notify(3) protocol instead (e.g.
         # ERRNO=x), particularly if and when arti itself supports it.
         # <https://gitlab.torproject.org/tpo/core/arti/-/issues/1979>
-        (execfail_r, execfail_w) = os.pipe()
+        execfail_r, execfail_w = os.pipe()
 
         # Open all the files in this process, where errors will be reported most
         # loudly and obviously.
@@ -458,7 +458,7 @@ class LocalLauncher(Launcher):
                     os._exit(1)
 
         # verify that child1 completed successfully
-        (_, status) = os.waitpid(child1, 0)
+        _, status = os.waitpid(child1, 0)
         exitcode = os.waitstatus_to_exitcode(status)
         if exitcode != 0:
             raise chutney.errors.ChutneyError(

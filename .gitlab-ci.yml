@@ -362,8 +362,8 @@ shellcheck:
 python-lint:
   <<: *debian-template
   variables:
-    # Most recent as of 2025-09-11
-    BLACK_VERSION: 25.1.0
+    # Most recent as of 2026-01-20
+    BLACK_VERSION: 26.1.0
     # Most recent as of 2025-09-11
     MYPY_VERSION: 1.17.1
     # Most recent as of 2025-09-11
