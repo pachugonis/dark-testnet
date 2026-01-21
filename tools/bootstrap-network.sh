@@ -1,19 +1,25 @@
 #!/bin/sh
-#
-# 1. potentially stop running network
-# 2. bootstrap a network from scratch as quickly as possible
-# 3. tail -F all the tor log files
-#
-# NOTE: leaves debris around by renaming directory net/nodes
-#       and creating a new net/nodes
-#
-# Usage:
-#    tools/bootstrap-network.sh [network-flavour]
-#    network-flavour: one of the files in the networks directory,
-#                     (default: 'bridges+hs-v23')
 
 set -o errexit
 set -o nounset
+
+usage () {
+  cat <<EOF
+Usage:
+   tools/bootstrap-network.sh (--network-flavor network-flavor | --network-script path/to/script)
+
+   --network-flavor: use a built-in network name (e.g. 'bridges+hs-v23')
+   --network-script: use a chutney network script
+
+1. potentially stop running network
+2. bootstrap a network from scratch as quickly as possible
+3. tail -F all the tor log files
+
+NOTE: leaves debris around by renaming directory net/nodes
+      and creating a new net/nodes
+EOF
+  exit 1
+}
 
 # Set some default values if the variables are not already set
 : "${CHUTNEY_WARNINGS_ONLY:=false}"
@@ -23,8 +29,39 @@ set -o nounset
 : "${USE_COVERAGE_BINARY:=false}"
 : "${CHUTNEY_DIAGNOSTICS:=false}"
 : "${CHUTNEY_DATA_DIR:=}"
-
+: "${ECHO:=echo}"
+: "${DIAGNOSTICS:=$(dirname "$0")/diagnostics.sh}"
 myname=$(basename "$0")
+
+NETWORK_ARG=""
+until [ -z "${1:-}" ]
+do
+    case "$1" in
+        --network-flavor=*|--network-flavour=*)
+            NETWORK_ARG="--net=${1#*=}"
+        ;;
+        --network-flavor|--network-flavour)
+            NETWORK_ARG="--net=$2"
+            shift
+        ;;
+        --network-script=*)
+            NETWORK_ARG="--net-from-script-path=${1#*=}"
+        ;;
+        --network-script)
+            NETWORK_ARG="--net-from-script-path=$2"
+            shift
+        ;;
+        *)
+            $ECHO "$myname: Sorry, I don't know what to do with '$1'."
+            usage
+        ;;
+    esac
+    shift
+done
+
+if [ -z "$NETWORK_ARG" ]; then
+  usage
+fi
 
 # Get a working chutney
 if [ -n "$CHUTNEY_PATH" ]; then
@@ -44,19 +81,16 @@ else
   fi
 fi
 
-# Set the variables for the chutney network flavour
-NETWORK_FLAVOUR="${NETWORK_FLAVOUR:-bridges+hs-v23}"
-[ -n "${1-}" ] && { NETWORK_FLAVOUR=$1; shift; }
-
-if ! "$CHUTNEY" supported "$NETWORK_FLAVOUR"; then
+if ! "$CHUTNEY" supported "$NETWORK_ARG"; then
     echo "$myname: network not supported."
     exit 77
 fi
 
 "$CHUTNEY" stop || echo "Unable to stop previous network (possibly because there isn't one)"
 
-$ECHO "$myname: bootstrapping network: $NETWORK_FLAVOUR"
-if ! "$CHUTNEY" bootstrap "$NETWORK_FLAVOUR"; then
+$ECHO "$myname: bootstrapping network: $NETWORK_ARG"
+"$CHUTNEY" init "$NETWORK_ARG"
+if ! "$CHUTNEY" bootstrap; then
     "$DIAGNOSTICS"
     CHUTNEY_WARNINGS_IGNORE_EXPECTED=false \
     CHUTNEY_WARNINGS_SUMMARY=false \

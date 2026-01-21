@@ -20,9 +20,10 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import List, Optional, Any, Iterable, Union
+from typing import Callable, List, Optional, Any, Iterable, Union, Sequence
 from typing_extensions import assert_never, override
 
+import argparse
 import copy
 import dataclasses
 import errno
@@ -55,7 +56,6 @@ from chutney.Util import (
     Option,
     OptionalConversionDescriptor,
 )
-from chutney.network_tests import NetworkTestFailure
 from collections.abc import Collection
 
 if sys.version_info >= (3, 11):
@@ -1092,32 +1092,21 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return _THE_NETWORK
 
     @staticmethod
-    def _get_network_script_contents(network_cfg_name: str) -> str:
-        # First look for built-in network with matching `name`
-        try:
-            return _NETWORKS.joinpath(network_cfg_name).read_text()
-        except FileNotFoundError:
-            # We'll try it as a path, below.
-            pass
-        try:
-            with open(network_cfg_name) as f:
-                return f.read()
-        except OSError as e:
-            raise ChutneyError(
-                f"'{network_cfg_name}' matches neither a built-in network name nor a readable file"
-            ) from e
+    def from_network_script_name(network_cfg_name: str) -> Network:
+        """Create a Network object using a built-in chutney network script.
+
+        Built in networks are located in `chutney/data/networks`, and can be
+        listed via the `getNetworks` function, or with `chutney --help` at the
+        command-line.
+        """
+        contents = _NETWORKS.joinpath(network_cfg_name).read_text()
+        return Network.from_network_script_contents(contents)
 
     @staticmethod
-    def from_network_script_name(network_cfg_name: str) -> Network:
-        """Create a Network object using the contents of a chutney network script name.
-
-        This can be either the name of a built-in network, such as "basic-min",
-        or path to a file containing a network script. Built in networks are
-        located in `chutney/data/networks`, and can be listed via the
-        `getNetworks` function, or with `chutney --help` at the command-line.
-        """
-        network_script_contents = Network._get_network_script_contents(network_cfg_name)
-        return Network.from_network_script_contents(network_script_contents)
+    def from_network_script_path(network_cfg_path: Path) -> Network:
+        """Create a Network object using a chutney network script by path."""
+        contents = network_cfg_path.read_text()
+        return Network.from_network_script_contents(contents)
 
     def addNode(self, config: NodeConfig) -> Node:
         """Create a node with the given config, add it to the network, and return it."""
@@ -1305,7 +1294,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         started.
         """
         if CUR_CONFIG_PHASE == 1:
-            self.create_new_nodes_dir()
             self.create_family_keys()
         else:
             self.load_family_key_ids()
@@ -1691,7 +1679,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
     # Wait for this long after signalling tor
     STOP_WAIT_TIME = SHUTDOWN_WAIT_LENGTH + EVENT_LOOP_SLOP
 
-    def final_cleanup(
+    def _final_cleanup(
         self, wrote_dot: bool, any_tor_was_running: bool, cleanup_runfiles: bool
     ) -> None:
         """Perform final cleanup actions, based on the arguments:
@@ -1733,7 +1721,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             for _ in range(15):
                 time.sleep(1)
                 if all(not n._controller.isRunning() for n in self._nodes):
-                    self.final_cleanup(wrote_dot, any_tor_was_running, True)
+                    self._final_cleanup(wrote_dot, any_tor_was_running, True)
                     return
                 sys.stdout.write(".")
                 wrote_dot = True
@@ -1742,9 +1730,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 if n._controller.isRunning():
                     print(f"{n.nick} is running")
             # cleanup chutney's logging, but don't wait or cleanup files
-            self.final_cleanup(wrote_dot, False, False)
+            self._final_cleanup(wrote_dot, False, False)
         # wait for tor to exit, but don't cleanup logging
-        self.final_cleanup(False, any_tor_was_running, True)
+        self._final_cleanup(False, any_tor_was_running, True)
 
     def bootstrap(self) -> None:
         """Bootstrap the network.
@@ -1788,17 +1776,6 @@ class CLICommands:
         print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
         print("CHUTNEY_LAUNCH_PHASES={}".format(launch_max))
 
-    def final_cleanup(
-        self, wrote_dot: bool, any_tor_was_running: bool, cleanup_runfiles: bool
-    ) -> None:
-        """Perform final cleanup actions, based on the arguments:
-        - wrote_dot: end a series of logged dots with a newline
-        - any_tor_was_running: wait for STOP_WAIT_TIME for tor to stop
-        - cleanup_runfiles: delete old lockfiles from crashed tors
-                            rename old pid files from stopped tors
-        """
-        self._net.final_cleanup(wrote_dot, any_tor_was_running, cleanup_runfiles)
-
     def supported(self) -> None:
         """Check whether this network is supported by the set of binaries
         and host information we have, and prints the result.
@@ -1806,20 +1783,21 @@ class CLICommands:
         self._net.supported()
 
     def init(self) -> None:
-        """Invoked from command line: save the network config to a fresh nodes direcory"""
+        """Save the network configuration to a fresh nodes directory."""
         self._net.init()
 
     def configure(self) -> None:
-        """Invoked from command line: Configure and prepare the network to be
-        started.
-        """
+        """Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."""
         self._net.configure()
 
-    def status(self) -> bool:
-        """Print how many nodes are running and how many are expected, and
-        return True if all nodes are running.
+    def status(self) -> None:
+        """Print how many nodes are running and how many are expected for
+        CHUTNEY_LAUNCH_PHASE. Fails if not all expected nodes are running.
         """
-        return self._net.status()
+        if not self._net.status():
+            # TODO: have Network.status raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("status failed")
 
     def restart(self) -> None:
         """Invoked from command line: Stop and subsequently start our
@@ -1831,20 +1809,19 @@ class CLICommands:
         """Start all our network's nodes and return True on no errors."""
         return self._net.start()
 
-    def hup(self) -> bool:
-        """Send SIGHUP to all our network's running nodes and return True on no
-        errors.
-        """
-        return self._net.hup()
+    def hup(self) -> None:
+        """Send SIGHUP to all our network's running nodes."""
+        if not self._net.hup():
+            # TODO: have controller.hup raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("hup failed")
 
     def wait_for_bootstrap(self) -> None:
-        """Invoked from tools/test-network.sh to wait for the network to
-        bootstrap.
-        """
+        """Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."""
         self._net.wait_for_bootstrap()
 
     def stop(self) -> None:
-        """Stop our network's running tor nodes."""
+        """Stop the network's running processes."""
         self._net.stop()
 
     def bootstrap(self) -> None:
@@ -1854,54 +1831,13 @@ class CLICommands:
         nodes' configure and launch phases."""
         self._net.bootstrap()
 
+    def verify(self) -> None:
+        """Run the "verify" connectivity test.
 
-def getTests() -> list[str]:
-    chutney_tests_path = importlib.resources.files("chutney.network_tests")
+        Assumes the network is already bootstrapped."""
+        import chutney.network_tests.verify
 
-    return [
-        test.name.removesuffix(".py")
-        for test in chutney_tests_path.iterdir()
-        if test.name.endswith(".py") and not test.name.startswith("_")
-    ]
-
-
-def usage() -> str:
-    return "\n".join(
-        [
-            "Usage: chutney {command/test} {networkfile}",
-            "Known commands are: %s"
-            % (" ".join(x for x in dir(CLICommands) if not x.startswith("_"))),
-            "Known tests are: %s" % (" ".join(getTests())),
-            "Known networks are: %s" % (" ".join(getNetworks())),
-        ]
-    )
-
-
-def runConfigFile(network: Network, verb: str) -> Optional[bool]:
-    # let's check if the verb is a valid test and run it
-    if verb in getTests():
-        test_module = importlib.import_module("chutney.network_tests.{}".format(verb))
-        try:
-            run_test = test_module.run_test
-        except AttributeError as e:
-            print("Error running test {!r}: {}".format(verb, e))
-            return False
-        try:
-            run_test(network)
-        except NetworkTestFailure as e:
-            raise ChutneyError(f"Test '{verb}' failed") from e
-        return None
-
-    cli_cmds = CLICommands(network)
-
-    # tell the user we don't know what their verb meant
-    if not hasattr(cli_cmds, verb):
-        print(usage())
-        print("Error: I don't know how to %s." % verb)
-        return None
-
-    res: Optional[bool] = check_type(getattr(cli_cmds, verb)(), Optional[bool])
-    return res
+        chutney.network_tests.verify.run_test(self._net)
 
 
 _NETWORKS: Traversable = (
@@ -1911,54 +1847,120 @@ _NETWORKS: Traversable = (
 
 def getNetworks() -> list[str]:
     """Get names of built-in networks."""
-    return [s.name for s in _NETWORKS.iterdir()]
+    networks = [s.name for s in _NETWORKS.iterdir()]
+    networks.sort()
+    return networks
 
 
-def main(action: str, network_cfg_name: Optional[str]) -> None:
+def _parse_args(
+    argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="chutney")
+    subparsers = parser.add_subparsers(dest="cmd")
+
+    def add_cli_command(
+        f: Callable[[CLICommands], None],
+        *,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        subparser = subparsers.add_parser(f.__name__, help=f.__doc__)
+        if require_net_spec_group is not None:
+            # This command supports specifying the network config.
+            # We add a group of mutually exclusive flags, one for each method of
+            # specifying the config.
+            method_group = subparser.add_mutually_exclusive_group(
+                required=require_net_spec_group
+            )
+            method_group.add_argument(
+                "--net",
+                choices=getNetworks(),
+                help="Load built-in network config by name",
+            )
+            method_group.add_argument(
+                "--net-from-script-path",
+                help="Load network config from a chutney network script",
+                type=Path,
+            )
+            method_group.add_argument(
+                "--net-from-data-dir",
+                action="store_true",
+                # If the group isn't required, then make this the default option.
+                default=not require_net_spec_group,
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
+            )
+        else:
+            # User isn't permitted to specify; always get from data dir.
+            subparser.set_defaults(net_from_data_dir=True)
+        subparser.set_defaults(func=f)
+
+    add_cli_command(CLICommands.print_phases, require_net_spec_group=False)
+    add_cli_command(CLICommands.supported, require_net_spec_group=False)
+    add_cli_command(CLICommands.init, require_net_spec_group=True)
+    add_cli_command(CLICommands.configure)
+    add_cli_command(CLICommands.status)
+    add_cli_command(CLICommands.restart)
+    add_cli_command(CLICommands.start)
+    add_cli_command(CLICommands.wait_for_bootstrap)
+    add_cli_command(CLICommands.stop)
+    add_cli_command(CLICommands.bootstrap)
+    add_cli_command(CLICommands.verify)
+
+    return parser.parse_args(argv)
+
+
+def _network_from_args(ns: argparse.Namespace) -> Network:
+    net_name = check_type(getattr(ns, "net", None), Optional[str])
+    if net_name is not None:
+        logger.info(f"Loading network config from built-in network name: '{net_name}'")
+        return Network.from_network_script_name(net_name)
+    script_path = check_type(getattr(ns, "net_from_script_path", None), Optional[Path])
+    if script_path is not None:
+        logger.info(
+            f"Loading network config from chutney network script path: '{script_path}'"
+        )
+        return Network.from_network_script_path(script_path)
+
+    assert ns.net_from_data_dir
+
+    unresolved_nodes_dir = get_absolute_nodes_path()
+    nodes_dir = unresolved_nodes_dir.resolve()
+    if nodes_dir == unresolved_nodes_dir:
+        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
+    else:
+        logger.info(
+            f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}"
+        )
+    if not nodes_dir.exists():
+        raise ChutneyError(
+            f"Nodes dir '{nodes_dir}' doesn't exist."
+            " Try providing a network name or setting CHUTNEY_DATA_DIR."
+        )
+    try:
+        return Network.from_nodes_dir(nodes_dir)
+    except Exception as e:
+        raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
     Raises an exception derived from `ChutneyError` on failure.
     """
     level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
     logging.basicConfig(level=level)
-    network: Network
-    if network_cfg_name is not None:
-        logger.info(f"Initializing network by name: '{network_cfg_name}'")
-        network = Network.from_network_script_name(network_cfg_name)
-    else:
-        nodes_dir = get_absolute_nodes_path()
-        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
-        if not nodes_dir.exists():
-            raise ChutneyError(
-                f"Nodes dir '{nodes_dir}' doesn't exist."
-                " Try providing a network name or setting CHUTNEY_DATA_DIR."
-            )
-        try:
-            network = Network.from_nodes_dir(nodes_dir)
-        except Exception as e:
-            raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
-    result = runConfigFile(network, action)
-    if result is False:
-        # TODO: eliminate this case. Have all commands
-        # return a more informative error instead of `False`
-        raise ChutneyError("Unspecified failure")
+
+    args = _parse_args(argv)
+    network = _network_from_args(args)
+    action = check_type(args.func, Callable[[CLICommands], None])
+    action(CLICommands(network))
 
 
 def __main__() -> None:
     """Raw main, suitable for use with `project.scripts` in `pyproject.toml`"""
     import traceback
 
-    if not 2 <= len(sys.argv) <= 3:
-        print("Wrong number of arguments.")
-        print(usage())
-        sys.exit(1)
-    action = sys.argv[1]
     try:
-        network_cfg = sys.argv[2]
-    except IndexError:
-        network_cfg = None
-    try:
-        main(action, network_cfg)
+        main()
     except ChutneyError as e:
         traceback.print_exception(None, value=e, tb=None, limit=0)
         sys.exit(1)

@@ -105,7 +105,8 @@ chutney-script:
     - NETWORK=basic-min
 
     - |
-      "$CHUTNEY" configure "$NETWORK"
+      "$CHUTNEY" init --net="$NETWORK"
+      "$CHUTNEY" configure
       "$CHUTNEY" start
       "$CHUTNEY" wait_for_bootstrap
       "$CHUTNEY" verify

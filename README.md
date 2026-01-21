@@ -138,12 +138,10 @@ chutney environmental variables documented below:
 ## Standard Actions
 
 ``` shell
-# (Optional) Initialize a new directory configured for the network `basic`
-./chutney init basic
+# Initialize a new directory configured for the network `basic`
+./chutney init --net basic
 # Creates keys and configuration files for the network.
-# The network-name `basic` can be omitted if the current net dir is already
-# initialized with the desired network, e.g. using `init`.
-./chutney configure \[basic\]
+./chutney configure
 # Starts running the network.
 # Requires `configure` to have already been run.
 ./chutney start
@@ -153,7 +151,7 @@ chutney environmental variables documented below:
 # Requires `start` to have already been run.
 ./chutney wait_for_bootstrap
 # Combines `configure`, `start`, and `wait_for_bootstrap`.
-./chutney bootstrap basic
+./chutney bootstrap
 # Verifies functionality of network clients and hidden services.
 # Requires network to already be bootstrapped.
 ./chutney verify
@@ -166,7 +164,8 @@ chutney environmental variables documented below:
 ## Bandwidth Tests
 
 ``` shell
-./chutney bootstrap basic-min
+./chutney init --net basic-min
+./chutney bootstrap
 ```
 
 Send 100MB of data per client connection:
@@ -188,6 +187,7 @@ network performance is infinite.
 ## Connection Tests
 
 ``` shell
+./chutney init --net basic-025
 ./chutney bootstrap basic-025
 ```
 
@@ -207,7 +207,8 @@ CHUTNEY_ROUNDS=5 ./tools/test-network.sh --flavour basic
 ## HS Connection Tests
 
 ``` shell
-./chutney bootstrap hs-025
+./chutney init --net hs-025
+./chutney bootstrap
 ```
 
 Make a connection from each client to each hs Default behavior is one client

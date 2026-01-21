@@ -74,7 +74,11 @@ do
             export CHUTNEY_DEBUG="yes"
             ;;
         --flavor|--flavour|--network-flavor|--network-flavour)
-            export NETWORK_FLAVOUR="$2"
+            export BOOTSTRAP_ARG="--network-flavor=$2"
+            shift
+        ;;
+        --network-script)
+            export BOOTSTRAP_ARG="--network-script=$2"
             shift
         ;;
         # The maximum amount of time chutney will wait for bootstrap and
