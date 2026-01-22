@@ -86,7 +86,10 @@ class Tests(unittest.TestCase):
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ipv6_addr="::1",
+            # ipv6 only has a single loopback address; offsetting that address
+            # (::1) does *not* give loopback, or even private, addresses. fc00::
+            # is private.
+            ipv6_addr="fc00::",
         )
         self.network.addNodes(basic_net_configs(base))
 
@@ -99,12 +102,8 @@ class Tests(unittest.TestCase):
             v6addresses.add(ipv6)
 
         self.network.configure()
-        # we *don't* attempt to bootstrap or use the network here.
-        # Experimentally, offsetting from ipv6 `::1` doesn't work out of the box
-        # the way that offsetting from ipv4 127.0.0.1 does.
-        #
-        # We might still want this offsetting functionality for ipv6, but for it
-        # to actually work would require some additional network setup.
+        # we *don't* attempt to bootstrap or use the network here, since the private
+        # address space we're using is probably not set up on the host system.
 
 
 if __name__ == "__main__":
