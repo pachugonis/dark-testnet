@@ -6,38 +6,23 @@ Require("IPV6")
 import os
 
 OLD_TOR=os.getenv("CHUTNEY_OLD_TOR", "tor-stable")
+ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6', '[::1]')
 
 # By default, Authorities are not configured as exits
-Authority6 = Node(tag="a", authority=1, relay=1,
-                  ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                           '[::1]'))
-OldAuthority6 = Node(tag="aOLD", authority=1, relay=1,
-                     ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                              '[::1]'),
-                     tor=OLD_TOR)
+Authority6 = Node(tag="a", authority=1, relay=1, ipv6_addr=ipv6_addr)
+OldAuthority6 = Node(tag="aOLD", authority=1, relay=1, ipv6_addr=ipv6_addr, tor=OLD_TOR)
 
 NonExitRelay = Node(tag="r", relay=1)
 OldNonExitRelay = Node(tag="rOLD", relay=1,
                        tor=OLD_TOR)
-NonExitRelay6 = Node(tag="r", relay=1,
-                     ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                              '[::1]'))
-OldNonExitRelay6 = Node(tag="rOLD", relay=1,
-                        ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                                 '[::1]'),
-                        tor=OLD_TOR)
+NonExitRelay6 = Node(tag="r", relay=1, ipv6_addr=ipv6_addr)
+OldNonExitRelay6 = Node(tag="rOLD", relay=1, ipv6_addr=ipv6_addr, tor=OLD_TOR)
 
-Client6 = Node(tag="c", client=1,
-               ip=None, launch_phase=2)
-OldClient6 = Node(tag="cOLD", client=1,
-                  ip=None,
-                  tor=OLD_TOR, launch_phase=2)
+Client6 = Node(tag="c", client=1, ip=None, launch_phase=2, ipv6_addr=ipv6_addr)
+OldClient6 = Node(tag="cOLD", client=1, ip=None, tor=OLD_TOR, launch_phase=2, ipv6_addr=ipv6_addr)
 
-HSv3IPv6 = Node(tag="h", hs=1,
-              ip=None, launch_phase=2)
-OldHSv3IPv6 = Node(tag="hOLD", hs=1,
-                 ip=None,
-                 tor=OLD_TOR, launch_phase=2)
+HSv3IPv6 = Node(tag="h", hs=1, ip=None, launch_phase=2, ipv6_addr=ipv6_addr)
+OldHSv3IPv6 = Node(tag="hOLD", hs=1, ip=None, tor=OLD_TOR, launch_phase=2, ipv6_addr=ipv6_addr)
 
 NODES = Authority6.getN(3)    + OldAuthority6.getN(1) + \
         NonExitRelay.getN(1)  + OldNonExitRelay.getN(1) + \

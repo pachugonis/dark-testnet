@@ -1,15 +1,16 @@
 Require("IPV6")
 import os
+ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6', '[::1]')
 # By default, Authorities are not configured as exits
 Authority6 = Node(tag="a", authority=1, relay=1,
-                  ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                           '[::1]'))
+                  ipv6_addr=ipv6_addr)
 NonExitRelay6 = Node(tag="r", relay=1,
-                     ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6',
-                                              '[::1]'))
+                     ipv6_addr=ipv6_addr)
 Client = Node(tag="c", client=1, launch_phase=2)
-Client6 = Node(tag="c", client=1, ip=None, launch_phase=2)
-SingleOnionv3IPv6 = Node(tag="h", hs=1, hs_singlehop=True, ip=None, launch_phase=2)
+Client6 = Node(tag="c", client=1, ip=None, launch_phase=2,
+               ipv6_addr=ipv6_addr)
+SingleOnionv3IPv6 = Node(tag="h", hs=1, hs_singlehop=True, ip=None, launch_phase=2,
+               ipv6_addr=ipv6_addr)
 
 # Since only 25% of relays get the guard flag,
 # TestingDirAuthVoteGuard * may need to be used in small networks
