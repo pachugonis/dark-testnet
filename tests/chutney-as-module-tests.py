@@ -28,6 +28,7 @@ class Tests(unittest.TestCase):
     @override
     def setUp(self) -> None:
         self.network = TorNet.Network()
+        self.network.init()
 
     @override
     def tearDown(self) -> None:
@@ -40,7 +41,6 @@ class Tests(unittest.TestCase):
             controlling_pid=os.getpid(), launcher_backend=launcher_backend
         )
         self.network.addNodes(basic_net_configs(base))
-        self.network.configure()
         self.network.bootstrap()
         verify.run_test(self.network)
 
@@ -78,7 +78,6 @@ class Tests(unittest.TestCase):
         # ipv4-only networks typically work ok "out of the box" offsetting
         # addresses from 127.0.0.1. i.e. 127.0.0.2, 127.0.0.3, etc. are additional
         # working "localhost" addresses.
-        self.network.configure()
         self.network.bootstrap()
         verify.run_test(self.network)
 

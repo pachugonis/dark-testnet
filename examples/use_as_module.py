@@ -18,6 +18,7 @@ ExitRelay = dataclasses.replace(base, tag="r", relay=True, exit=True)
 Client = dataclasses.replace(base, tag="c", client=True)
 network.addNodes(Authority.getN(4) + ExitRelay.getN(1) + Client.getN(1))
 
+network.init()
 network.configure()
 network.start()
 
