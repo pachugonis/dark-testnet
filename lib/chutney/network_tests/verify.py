@@ -4,9 +4,13 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import time
+
 import chutney
 import chutney.TorNet
 import chutney.Traffic
+
+from ipaddress import ip_address, IPv4Address, IPv6Address
+from typing import Union
 
 from . import NetworkTestFailure
 from chutney.Util import getenv_int, getenv_bool
@@ -54,7 +58,7 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     # TODO: IPv6 SOCKSPorts, SOCKSPorts with IPv6Traffic, and IPv6 Exits
     # XXX don't hard-code this.
     # LISTEN_ADDR = network._dfltEnv["ip"]
-    LISTEN_ADDR = "127.0.0.1"
+    LISTEN_ADDR = ip_address("127.0.0.1")
     # The amount of data to send between each source-sink pair,
     # each time the source connects.
     # We create a source-sink pair for each (bridge) client to an exit,
@@ -183,7 +187,7 @@ def _configure_exits(
     reps: int,
     client_list: list[chutney.TorNet.Node],
     exit_list: list[chutney.TorNet.Node],
-    LISTEN_ADDR: str,
+    LISTEN_ADDR: Union[str, IPv4Address, IPv6Address],
     LISTEN_PORT: int,
     connection_count: int,
 ) -> int:
@@ -216,7 +220,7 @@ def _configure_hs(
     reps: int,
     client_list: list[chutney.TorNet.Node],
     hs_list: list[chutney.TorNet.Node],
-    LISTEN_ADDR: str,
+    LISTEN_ADDR: Union[str, IPv4Address, IPv6Address],
     LISTEN_PORT: int,
     connection_count: int,
     hs_multi_client: bool,
