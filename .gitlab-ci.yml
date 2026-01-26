@@ -24,8 +24,8 @@ include:
       tor-commit: 3a7bb70e0141c109c14337a0fc3c0ba7d9632119
   - project: tpo/tpa/ci-templates
     file: scripts/apt.yml
-    # main@2024-11-19
-    ref: c800c775550109d6842756e00a397e02962b3534
+    # main@2026-01-26
+    ref: b521e40f68f5e6e262f702a4bd1496f0a665655d
 
 # A more stripped-down debian template for tests that aren't specifically
 # replicating tor's CI.
