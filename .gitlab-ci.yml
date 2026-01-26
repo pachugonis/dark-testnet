@@ -20,8 +20,8 @@ include:
     inputs:
       tor-repo: https://gitlab.torproject.org/tpo/core/tor.git
       tor-branch: main
-      # main@2024-11-19
-      tor-commit: 89e5e03dd535c9b8a8b3a7e40da57145fdd558ba
+      # main@2026-01-26
+      tor-commit: 3a7bb70e0141c109c14337a0fc3c0ba7d9632119
   - project: tpo/tpa/ci-templates
     file: scripts/apt.yml
     # main@2024-11-19
