@@ -58,7 +58,9 @@ def uniq(s: str) -> str:
     return "%s-%s" % (s, UNIQ_CTR)
 
 
-def addr_to_family(addr: Union[str, IPv4Address, IPv6Address]) -> socket.AddressFamily:
+def addr_to_family(
+    addr: Union[str, IPv4Address, IPv6Address],
+) -> Optional[socket.AddressFamily]:
     if isinstance(addr, IPv4Address):
         return socket.AF_INET
     elif isinstance(addr, IPv6Address):
@@ -70,8 +72,8 @@ def addr_to_family(addr: Union[str, IPv4Address, IPv6Address]) -> socket.Address
                 return family
             except (socket.error, OSError):
                 pass
-        # We get here e.g. if `addr` is a hostname. Default to AF_INET.
-        return socket.AF_INET
+        # We get here if `addr` is a hostname.
+        return None
     else:
         assert_never(addr)
 
@@ -206,12 +208,21 @@ class Listener(object):
         ) -> None:
             await self.handle_accepted(reader, writer)
 
+        family = addr_to_family(self._endpoint[0])
+        if family is None:
+            # endpoint is a hostname to be resolved.
+            # Try resolving it an ipv4 address by default.
+            # TODO: Maybe don't support hostnames here, and push this
+            # logic/decision up to caller.
+            assert isinstance(self._endpoint[0], str)
+            family = socket.AF_INET
+
         try:
             server = await asyncio.start_server(
                 _accept_cb,
                 host=str(self._endpoint[0]),
                 port=self._endpoint[1],
-                family=addr_to_family(self._endpoint[0]),
+                family=family,
             )
             self._server.set_result(server)
         except BaseException as e:
