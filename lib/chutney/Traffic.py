@@ -39,6 +39,7 @@ import textwrap
 import time
 
 from chutney.errors import ChutneyUnimplementedError
+from chutney.Util import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
 from typing import Optional, Iterable, Union
@@ -59,7 +60,7 @@ def uniq(s: str) -> str:
 
 
 def addr_to_family(
-    addr: Union[str, IPv4Address, IPv6Address],
+    addr: Union[str, IPAddress],
 ) -> Optional[socket.AddressFamily]:
     if isinstance(addr, IPv4Address):
         return socket.AF_INET

@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Callable, List, Optional, Any, Iterable, Union, Sequence
+from typing import Callable, List, Optional, Any, Iterable, Sequence
 from typing_extensions import assert_never, override
 
 import argparse
@@ -53,6 +53,7 @@ from chutney.Util import (
     getenv_int,
     getenv_bool,
     mkdir_p,
+    IPAddress,
     Option,
     OptionalConversionDescriptor,
 )
@@ -969,7 +970,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
 
 @dataclasses.dataclass
 class BridgeLine:
-    ipaddr: Union[IPv4Address, IPv6Address]
+    ipaddr: IPAddress
     port: int
     fingerprint: str
     pt_transport: Option[str] = Option(None)

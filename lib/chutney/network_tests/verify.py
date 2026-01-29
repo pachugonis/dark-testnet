@@ -9,11 +9,11 @@ import chutney
 import chutney.TorNet
 import chutney.Traffic
 
-from ipaddress import ip_address, IPv4Address, IPv6Address
+from ipaddress import ip_address
 from typing import Union
 
 from . import NetworkTestFailure
-from chutney.Util import getenv_int, getenv_bool
+from chutney.Util import getenv_int, getenv_bool, IPAddress
 from chutney.errors import ChutneyInternalError
 
 # Try to verify twice each consensus, but don't verify too fast
@@ -187,7 +187,7 @@ def _configure_exits(
     reps: int,
     client_list: list[chutney.TorNet.Node],
     exit_list: list[chutney.TorNet.Node],
-    LISTEN_ADDR: Union[str, IPv4Address, IPv6Address],
+    LISTEN_ADDR: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,
 ) -> int:
@@ -220,7 +220,7 @@ def _configure_hs(
     reps: int,
     client_list: list[chutney.TorNet.Node],
     hs_list: list[chutney.TorNet.Node],
-    LISTEN_ADDR: Union[str, IPv4Address, IPv6Address],
+    LISTEN_ADDR: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,
     hs_multi_client: bool,
