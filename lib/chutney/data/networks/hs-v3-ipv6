@@ -1,12 +1,27 @@
 Require("IPV6")
 import os
-ipv6_addr=os.environ.get('CHUTNEY_LISTEN_ADDRESS_V6', '[::1]')
+
+ipv6_addr = os.environ.get("CHUTNEY_LISTEN_ADDRESS_V6", "[::1]")
 # By default, Authorities are not configured as exits
 Authority6 = Node(tag="a", authority=1, relay=1, ipv6_addr=ipv6_addr)
 NonExitRelay6 = Node(tag="r", relay=1, ipv6_addr=ipv6_addr)
 Client = Node(tag="c", client=1, launch_phase=2)
-Client6 = Node(tag="c", client=1, ip=None, ipv6_addr=ipv6_addr, use_microdescriptors=False, launch_phase=2)
-HS6 = Node(tag="h", hs=1, ip=None, ipv6_addr=ipv6_addr, use_microdescriptors=False, launch_phase=2)
+Client6 = Node(
+    tag="c",
+    client=1,
+    ip=None,
+    ipv6_addr=ipv6_addr,
+    use_microdescriptors=False,
+    launch_phase=2,
+)
+HS6 = Node(
+    tag="h",
+    hs=1,
+    ip=None,
+    ipv6_addr=ipv6_addr,
+    use_microdescriptors=False,
+    launch_phase=2,
+)
 
 # Since only 25% of relays get the guard flag,
 # TestingDirAuthVoteGuard * may need to be used in small networks
@@ -15,7 +30,12 @@ HS6 = Node(tag="h", hs=1, ip=None, ipv6_addr=ipv6_addr, use_microdescriptors=Fal
 # connections:
 # a minimum path length of 3, plus the client-nominated rendezvous point,
 # plus a seperate introduction point
-NODES = Authority6.getN(4) + NonExitRelay6.getN(3) + \
-        Client.getN(1) + Client6.getN(1) + HS6.getN(1)
+NODES = (
+    Authority6.getN(4)
+    + NonExitRelay6.getN(3)
+    + Client.getN(1)
+    + Client6.getN(1)
+    + HS6.getN(1)
+)
 
 ConfigureNodes(NODES)

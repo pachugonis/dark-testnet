@@ -4,7 +4,11 @@ Authority = Node(tag="a", authority=1, relay=1)
 NonExitRelay = Node(tag="m", relay=1, exit=0)
 ExitRelay = Node(tag="r", relay=1, exit=1)
 
-Client = Node(tag="c", client=1, use_microdescriptors=False, extra_raw_torrc="""\
+Client = Node(
+    tag="c",
+    client=1,
+    use_microdescriptors=False,
+    extra_raw_torrc="""\
 UseEntryGuards 0
 FetchDirInfoEarly 1
 FetchDirInfoExtraEarly 1
@@ -12,14 +16,21 @@ FetchUselessDescriptors 1
 LearnCircuitBuildTimeout 0
 CircuitBuildTimeout 60
 ConnectionPadding 0
-""")
+""",
+)
 
-RelayMAB = Node(tag="relayMAB", relay=1, extra_raw_torrc="MaxAdvertisedBandwidth 1 MBytes")
+RelayMAB = Node(
+    tag="relayMAB", relay=1, extra_raw_torrc="MaxAdvertisedBandwidth 1 MBytes"
+)
 RelayMBR = Node(tag="relayMBR", relay=1, extra_raw_torrc="RelayBandwidthRate 1 MBytes")
 
-NODES = Authority.getN(4) + \
-      NonExitRelay.getN(7) + \
-      RelayMBR.getN(1) + RelayMAB.getN(1) + \
-      ExitRelay.getN(3) + Client.getN(1)
+NODES = (
+    Authority.getN(4)
+    + NonExitRelay.getN(7)
+    + RelayMBR.getN(1)
+    + RelayMAB.getN(1)
+    + ExitRelay.getN(3)
+    + Client.getN(1)
+)
 
 ConfigureNodes(NODES)
