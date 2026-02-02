@@ -75,8 +75,14 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         )
         get_new_section(config, "proxy").update(
             {
-                "socks_listen": self._node.socksport.unwrap_or(0),
-                "dns_listen": self._node.dnsport.unwrap_or(0),
+                "socks_listen": [
+                    addr_and_port_str(addr, port)
+                    for (addr, port) in self._node.socksport_endpoints()
+                ],
+                "dns_listen": [
+                    addr_and_port_str(addr, port)
+                    for (addr, port) in self._node.dnsport_endpoints()
+                ],
             }
         )
         get_new_section(config, "logging").update(

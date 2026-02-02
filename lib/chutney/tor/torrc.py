@@ -3,10 +3,10 @@ from __future__ import annotations
 import chutney.TorNet as TorNet
 import textwrap
 
-from typing import Iterable
+from typing import Iterable, Iterator, Tuple
 
 from chutney.errors import ChutneyError
-from chutney.Util import find_executable_on_path, addr_and_port_str
+from chutney.Util import find_executable_on_path, addr_and_port_str, IPAddress
 
 
 def _family_member_fps(node: TorNet.Node) -> Iterable[str]:
@@ -19,6 +19,18 @@ def _family_member_fps(node: TorNet.Node) -> Iterable[str]:
             )
         )
     return fp_set
+
+
+def _directive_for_endpoints(
+    directive: str, endpoints: Iterator[Tuple[IPAddress, int]]
+) -> str:
+    res = ""
+    for addr, port in endpoints:
+        res += f"{directive} {addr_and_port_str(addr, port)}\n"
+    if not res:
+        # Explicitly disable
+        return f"{directive} 0\n"
+    return res
 
 
 def format(n: TorNet.Node, tor_version: str) -> str:
@@ -59,7 +71,6 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         DisableDebuggerAttachment 0
 
         AddressDisableIPv6 {int(n._config.disableipv6)}
-        ControlPort {n.controlport}
         # Use ControlSocket rather than ControlPort unix: to support older tors
         ControlSocket {n.controlsocket or 0}
         CookieAuthentication 1
@@ -85,11 +96,11 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         # disabled)
         {n._config.owning_controller_process}
 
-        SocksPort {n.socksport.unwrap_or(0)}
-        DnsPort {n.dnsport.unwrap_or(0)}
-
         UseMicrodescriptors {int(n._config.use_microdescriptors)}
         """)
+    res += _directive_for_endpoints("SocksPort", n.socksport_endpoints())
+    res += _directive_for_endpoints("DnsPort", n.dnsport_endpoints())
+    res += _directive_for_endpoints("ControlPort", n.controlport_endpoints())
     if (
         "0.4.9.1-alpha-dev" in tor_version or "0.4.9.2-alpha-dev" in tor_version
     ) and n._config.pt_transport:
