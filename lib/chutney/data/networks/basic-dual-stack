@@ -6,6 +6,12 @@ V4ExitRelay = Node(tag="r", relay=1, exit=1)
 V6ExitRelay = Node(tag="r", relay=1, exit=1, ipv6_addr="[::1]")
 Client = Node(tag="c", client=1)
 
-NODES = V4Authority.getN(2) + V6Authority.getN(2) + V4ExitRelay.getN(3) + V6ExitRelay.getN(3) + Client.getN(2)
+NODES = (
+    V4Authority.getN(2)
+    + V6Authority.getN(2)
+    + V4ExitRelay.getN(3)
+    + V6ExitRelay.getN(3)
+    + Client.getN(2)
+)
 
 ConfigureNodes(NODES)

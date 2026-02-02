@@ -6,6 +6,12 @@ ExitRelayF2 = Node(tag="r", relay=1, exit=1, families=["fam2"])
 ExitRelayF3 = Node(tag="r", relay=1, exit=1, families=["fam3"])
 Client = Node(tag="c", client=1)
 
-NODES = Authority.getN(4) + ExitRelayF1.getN(2) + ExitRelayF2.getN(2) + ExitRelayF3.getN(2) + Client.getN(2)
+NODES = (
+    Authority.getN(4)
+    + ExitRelayF1.getN(2)
+    + ExitRelayF2.getN(2)
+    + ExitRelayF3.getN(2)
+    + Client.getN(2)
+)
 
 ConfigureNodes(NODES)

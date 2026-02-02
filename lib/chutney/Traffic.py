@@ -38,12 +38,16 @@ import struct
 import textwrap
 import time
 
+from chutney.errors import ChutneyUnimplementedError
+from chutney.Util import IPAddress
+from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Union
+from typing_extensions import assert_never
 
 logger = logging.getLogger(__name__)
 
-HostPortTuple = tuple[str, int]
+HostPortTuple = tuple[Union[str, IPv4Address, IPv6Address], int]
 
 
 UNIQ_CTR = 0
@@ -55,16 +59,24 @@ def uniq(s: str) -> str:
     return "%s-%s" % (s, UNIQ_CTR)
 
 
-def addr_to_family(addr: str) -> socket.AddressFamily:
-    for family in [socket.AF_INET, socket.AF_INET6]:
-        try:
-            socket.inet_pton(family, addr)
-            return family
-        except (socket.error, OSError):
-            pass
-
-    # We get here e.g. if `addr` is a hostname. Default to AF_INET.
-    return socket.AF_INET
+def addr_to_family(
+    addr: Union[str, IPAddress],
+) -> Optional[socket.AddressFamily]:
+    if isinstance(addr, IPv4Address):
+        return socket.AF_INET
+    elif isinstance(addr, IPv6Address):
+        return socket.AF_INET6
+    elif isinstance(addr, str):
+        for family in [socket.AF_INET, socket.AF_INET6]:
+            try:
+                socket.inet_pton(family, addr)
+                return family
+            except (socket.error, OSError):
+                pass
+        # We get here if `addr` is a hostname.
+        return None
+    else:
+        assert_never(addr)
 
 
 def socks_cmd(addr_port: HostPortTuple) -> bytes:
@@ -79,11 +91,19 @@ def socks_cmd(addr_port: HostPortTuple) -> bytes:
     user = b"\x00"
     dnsname = ""
     host, port = addr_port
-    try:
-        addr = socket.inet_aton(host)
-    except socket.error:
+    addr: bytes
+    if isinstance(host, str):
+        # hostname, to be resolved (socksv4a)
         addr = b"\x00\x00\x00\x01"
         dnsname = "%s\x00" % host
+    elif isinstance(host, IPv6Address):
+        raise ChutneyUnimplementedError(
+            f"ipv6 address {addr_port} requires socksv5, which is unimplemented"
+        )
+    elif isinstance(host, IPv4Address):
+        addr = host.packed
+    else:
+        assert_never(host)
     logger.debug("Socks 4a request to %s:%d" % (host, port))
     dnsname_enc: bytes = dnsname.encode("ascii")
     return struct.pack("!BBH", ver, cmd, port) + addr + user + dnsname_enc
@@ -189,12 +209,21 @@ class Listener(object):
         ) -> None:
             await self.handle_accepted(reader, writer)
 
+        family = addr_to_family(self._endpoint[0])
+        if family is None:
+            # endpoint is a hostname to be resolved.
+            # Try resolving it an ipv4 address by default.
+            # TODO: Maybe don't support hostnames here, and push this
+            # logic/decision up to caller.
+            assert isinstance(self._endpoint[0], str)
+            family = socket.AF_INET
+
         try:
             server = await asyncio.start_server(
                 _accept_cb,
-                host=self._endpoint[0],
+                host=str(self._endpoint[0]),
                 port=self._endpoint[1],
-                family=addr_to_family(self._endpoint[0]),
+                family=family,
             )
             self._server.set_result(server)
         except BaseException as e:
@@ -365,7 +394,7 @@ class EchoClient(object):
             logger.debug("connecting to %r...", dest)
             try:
                 reader, writer = await asyncio.open_connection(
-                    host=dest[0], port=dest[1]
+                    host=str(dest[0]), port=dest[1]
                 )
                 self._reader.set_result(reader)
                 self._writer.set_result(writer)

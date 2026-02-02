@@ -14,12 +14,14 @@ import stat
 from collections.abc import Iterable, Collection
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union
+from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, TypeAlias
 from typing_extensions import ParamSpec, override
 
 from chutney.jsonable import ToCustomJsonable, CustomJsonable
 
 logger = logging.getLogger(__name__)
+
+IPAddress: TypeAlias = Union[IPv4Address, IPv6Address]
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -46,7 +48,7 @@ def memoized(fn: Callable[P, T]) -> Callable[P, T]:
     return memoized_fn
 
 
-def addr_and_port_str(ip_addr: Union[IPv4Address, IPv6Address], port: int) -> str:
+def addr_and_port_str(ip_addr: IPAddress, port: int) -> str:
     """Format an ip address and port pair.
 
     Concretely, this surrounds ipv6 addresses with brackets, which is a common

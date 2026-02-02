@@ -7,8 +7,6 @@ Client = Node(tag="c", client=1, launch_phase=2)
 HS = Node(tag="h", hs=1, launch_phase=2)
 
 # We need 5 authorities/relays/exits to ensure we can build HS connections
-NODES = Authority.getN(4) + ExitRelay.getN(5) + \
-        Client.getN(1) + HS.getN(1)
+NODES = Authority.getN(4) + ExitRelay.getN(5) + Client.getN(1) + HS.getN(1)
 
 ConfigureNodes(NODES)
-

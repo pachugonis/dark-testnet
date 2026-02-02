@@ -381,7 +381,7 @@ python-lint:
   - if ! mypy --exclude build . ; then FAILURES+=" mypy"; fi
 
   - python3 -m pip install black=="$BLACK_VERSION"
-  - if ! black --check --diff . ; then FAILURES+=" black"; fi
+  - if ! black --check --diff . ./lib/chutney/data/networks/*; then FAILURES+=" black"; fi
 
   - python3 -m pip install flake8=="$FLAKE8_VERSION"
   - if ! flake8 . ; then FAILURES+=" flake8"; fi

@@ -28,6 +28,7 @@ class Tests(unittest.TestCase):
     @override
     def setUp(self) -> None:
         self.network = TorNet.Network()
+        self.network.init()
 
     @override
     def tearDown(self) -> None:
@@ -40,7 +41,6 @@ class Tests(unittest.TestCase):
             controlling_pid=os.getpid(), launcher_backend=launcher_backend
         )
         self.network.addNodes(basic_net_configs(base))
-        self.network.configure()
         self.network.bootstrap()
         verify.run_test(self.network)
 
@@ -78,7 +78,6 @@ class Tests(unittest.TestCase):
         # ipv4-only networks typically work ok "out of the box" offsetting
         # addresses from 127.0.0.1. i.e. 127.0.0.2, 127.0.0.3, etc. are additional
         # working "localhost" addresses.
-        self.network.configure()
         self.network.bootstrap()
         verify.run_test(self.network)
 
@@ -87,7 +86,10 @@ class Tests(unittest.TestCase):
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ipv6_addr="::1",
+            # ipv6 only has a single loopback address; offsetting that address
+            # (::1) does *not* give loopback, or even private, addresses. fc00::
+            # is private.
+            ipv6_addr="fc00::",
         )
         self.network.addNodes(basic_net_configs(base))
 
@@ -100,12 +102,8 @@ class Tests(unittest.TestCase):
             v6addresses.add(ipv6)
 
         self.network.configure()
-        # we *don't* attempt to bootstrap or use the network here.
-        # Experimentally, offsetting from ipv6 `::1` doesn't work out of the box
-        # the way that offsetting from ipv4 127.0.0.1 does.
-        #
-        # We might still want this offsetting functionality for ipv6, but for it
-        # to actually work would require some additional network setup.
+        # we *don't* attempt to bootstrap or use the network here, since the private
+        # address space we're using is probably not set up on the host system.
 
 
 if __name__ == "__main__":

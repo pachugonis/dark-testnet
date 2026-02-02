@@ -11,7 +11,8 @@ SingleOnionv3 = Node(tag="h", hs=1, hs_singlehop=True, launch_phase=2)
 # connections:
 # a minimum path length of 3, plus the client-nominated rendezvous point,
 # plus a seperate introduction point
-NODES = Authority.getN(4) + NonExitRelay.getN(3) + \
-        Client.getN(1) + SingleOnionv3.getN(1)
+NODES = (
+    Authority.getN(4) + NonExitRelay.getN(3) + Client.getN(1) + SingleOnionv3.getN(1)
+)
 
 ConfigureNodes(NODES)
