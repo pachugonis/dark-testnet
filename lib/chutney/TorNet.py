@@ -20,7 +20,17 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
-from typing import Callable, List, Optional, Any, Iterable, Sequence
+from typing import (
+    Callable,
+    List,
+    Optional,
+    Any,
+    Iterable,
+    Union,
+    Sequence,
+    Iterator,
+    Tuple,
+)
 from typing_extensions import assert_never, override
 
 import argparse
@@ -50,6 +60,7 @@ from chutney.errors import (
 from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
+    addr_and_port_str,
     getenv_int,
     getenv_bool,
     mkdir_p,
@@ -339,31 +350,43 @@ class Node(ToCustomJsonable):
         else:
             raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
 
+    def _internal_addrs(self) -> Iterator[Union[IPv4Address, IPv6Address]]:
+        """Listening addresses for "internal" services, e.g. socks.
+
+        Currently this returns localhost address(es) (including ipv6 if
+        enabled).
+        """
+        yield IPv4Address("127.0.0.1")
+        if not self._config.disableipv6:
+            yield IPv6Address("::1")
+
     @property
     def orport(self) -> int:
         """OrPort that this node exposes"""
         return self._network.orport_base + self.nodenum
 
-    @property
-    def controlport(self) -> int:
-        """ControlPort that this node exposes"""
-        return self._network.controlport_base + self.nodenum
+    def controlport_endpoints(
+        self,
+    ) -> Iterator[Tuple[IPAddress, int]]:
+        """ControlPort endpoints (address, port) that this node exposes, if any."""
+        port = self._network.controlport_base + self.nodenum
+        return map(lambda a: (a, port), self._internal_addrs())
 
-    @property
-    def socksport(self) -> Option[int]:
-        """SocksPort that this node exposes, if any."""
-        if self._config.client:
-            return Option(self._network.socksport_base + self.nodenum)
-        else:
-            return Option(None)
+    def socksport_endpoints(
+        self,
+    ) -> Iterator[Tuple[IPAddress, int]]:
+        """SocksPort endpoints (address, port) that this node exposes, if any."""
+        if not self._config.client:
+            return iter([])
+        port = self._network.socksport_base + self.nodenum
+        return map(lambda a: (a, port), self._internal_addrs())
 
-    @property
-    def dnsport(self) -> Option[int]:
+    def dnsport_endpoints(self) -> Iterator[Tuple[IPAddress, int]]:
         """DnsPort that this node exposes, if any."""
-        if self._config.enable_dnsport:
-            return Option(self._network.dnsport_base + self.nodenum)
-        else:
-            return Option(None)
+        if not self._config.enable_dnsport:
+            return iter([])
+        port = self._network.dnsport_base + self.nodenum
+        return map(lambda a: (a, port), self._internal_addrs())
 
     @property
     def dirport(self) -> Option[int]:
@@ -508,9 +531,15 @@ class Node(ToCustomJsonable):
             fingerprint=self.fingerprint.as_optional(),
             fingerprint_ed25519=self.fingerprint_ed25519.as_optional(),
             orport=self.orport,
-            controlport=self.controlport,
-            socksport=self.socksport.as_optional(),
-            dnsport=self.dnsport.as_optional(),
+            controlport_endpoints=[
+                addr_and_port_str(a, p) for (a, p) in self.controlport_endpoints()
+            ],
+            socksport_endpoints=[
+                addr_and_port_str(a, p) for (a, p) in self.socksport_endpoints()
+            ],
+            dnsport_endpoints=[
+                addr_and_port_str(a, p) for (a, p) in self.dnsport_endpoints()
+            ],
             dirport=self.dirport.as_optional(),
             extorport=self.extorport,
             ptport=self.ptport,
