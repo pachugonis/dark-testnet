@@ -271,9 +271,9 @@ class Node(ToCustomJsonable):
         if config.launcher_backend == LauncherBackend.LOCAL:
             self._launcher = LocalLauncher()
         elif config.launcher_backend == LauncherBackend.SSH:
-            host = self._config.ip.as_optional() or self._config.ipv6_addr.as_optional()
+            host = self.ip.as_optional() or self.ipv6_addr.as_optional()
             assert host, f"No ip address for {self.nick}"
-            self._launcher = SshLauncher(host)
+            self._launcher = SshLauncher(str(host))
         else:
             assert_never(config.launcher_backend)
         self._builder: NodeBuilder
