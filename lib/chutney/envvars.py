@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TypeVar, Generic, Optional, cast
 from typing_extensions import override
 
-from chutney.Util import IPNetwork
+from chutney.Util import IPAddress, IPNetwork
 
 C = TypeVar("C", covariant=True)
 
@@ -138,6 +138,12 @@ class EnvVarPath(EnvVar[Path]):
     @override
     def parse(self, x: str) -> Path:
         return Path(x)
+
+
+class EnvVarIPAddress(EnvVar[IPAddress]):
+    @override
+    def parse(self, x: str) -> IPAddress:
+        return ipaddress.ip_address(x)
 
 
 class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):

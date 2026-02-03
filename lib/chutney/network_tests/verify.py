@@ -58,11 +58,19 @@ class VerifyConfig:
     )
     hs_multi_client: bool
 
+    _LISTEN_ADDRESS_ENV: ClassVar[envvars.EnvVarIPAddress] = envvars.EnvVarIPAddress(
+        "CHUTNEY_VERIFY_LISTEN_ADDRESS",
+        ip_address("127.0.0.1"),
+        "IP address for the 'verify' test to bind its server to",
+    )
+    listen_addr: IPAddress
+
     @staticmethod
     def register_argparser(parser: argparse.ArgumentParser) -> None:
         VerifyConfig._DATA_BYTES_ENV.register_argparser(parser)
         VerifyConfig._CONNECTIONS_ENV.register_argparser(parser)
         VerifyConfig._HS_MULTI_CLIENT_ENV.register_argparser(parser)
+        VerifyConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> VerifyConfig:
@@ -70,6 +78,7 @@ class VerifyConfig:
             data_bytes=VerifyConfig._DATA_BYTES_ENV.get(ns=ns),
             connections=VerifyConfig._CONNECTIONS_ENV.get(ns=ns),
             hs_multi_client=VerifyConfig._HS_MULTI_CLIENT_ENV.get(ns=ns),
+            listen_addr=VerifyConfig._LISTEN_ADDRESS_ENV.get(ns=ns),
         )
 
 
@@ -98,6 +107,7 @@ def run_test(
         last_attempt_time = now
         status = _verify_traffic(
             network,
+            listen_addr=config.listen_addr,
             timeout=TIMEOUT_INTERVAL,
             data_bytes=config.data_bytes,
             connections=config.connections,
@@ -122,6 +132,7 @@ def _verify_traffic(
     network: TorNet.Network,
     *,
     timeout: float = 5.0,
+    listen_addr: IPAddress,
     data_bytes: int,
     connections: int,
     hs_multi_client: bool,
@@ -129,9 +140,6 @@ def _verify_traffic(
     """Verify (parts of) the network by sending traffic through it
     and verify what is received."""
     # TODO: IPv6 SOCKSPorts, SOCKSPorts with IPv6Traffic, and IPv6 Exits
-    # XXX don't hard-code this.
-    # LISTEN_ADDR = network._dfltEnv["ip"]
-    LISTEN_ADDR = ip_address("127.0.0.1")
     # Calculate the amount of random data we should use
     randomlen = _calculate_randomlen(data_bytes)
     reps = _calculate_reps(data_bytes, randomlen)
@@ -147,7 +155,7 @@ def _verify_traffic(
     else:
         tmpdata = b""
     # now make the connections
-    bind_to = (LISTEN_ADDR, LISTEN_PORT)
+    bind_to = (listen_addr, LISTEN_PORT)
     tt = chutney.Traffic.TrafficTester(
         bind_to,
         data=tmpdata,
@@ -189,7 +197,7 @@ def _verify_traffic(
         reps,
         client_list,
         exit_list,
-        LISTEN_ADDR,
+        listen_addr,
         LISTEN_PORT,
         connection_count,
     )
@@ -201,7 +209,7 @@ def _verify_traffic(
         reps,
         client_list,
         hs_list,
-        LISTEN_ADDR,
+        listen_addr,
         LISTEN_PORT,
         connection_count,
         hs_multi_client,
@@ -243,7 +251,7 @@ def _calculate_reps(datalen: int, replen: int) -> int:
 
 # if there are any exits, each client / bridge client transmits
 # via 4 nodes (including the client) to an arbitrary exit
-# Each client binds directly to <CHUTNEY_LISTEN_ADDRESS>:LISTEN_PORT
+# Each client binds directly to <listen_addr>:LISTEN_PORT
 # via an Exit relay
 def _configure_exits(
     tt: chutney.Traffic.TrafficTester,
@@ -252,7 +260,7 @@ def _configure_exits(
     reps: int,
     client_list: list[TorNet.Node],
     exit_list: list[TorNet.Node],
-    LISTEN_ADDR: Union[str, IPAddress],
+    listen_addr: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,
 ) -> int:
@@ -264,14 +272,14 @@ def _configure_exits(
         )
         for op in client_list:
             proxy = next(op.socksport_endpoints())
-            print("  Exit to %s:%d via client %s" % (LISTEN_ADDR, LISTEN_PORT, proxy))
+            print("  Exit to %s:%d via client %s" % (listen_addr, LISTEN_PORT, proxy))
             for _ in range(connection_count):
                 tt.add_client(f"exit via {op.nick}", bind_to, proxy)
     return exit_path_node_count
 
 
 # The HS redirects .onion connections made to hs_hostname:hs_virtport
-# to the Traffic Tester's CHUTNEY_LISTEN_ADDRESS:LISTEN_PORT
+# to the Traffic Tester's listen_addr:LISTEN_PORT
 # an arbitrary client / bridge client transmits via 8 nodes
 # (including the client and hs) to each hidden service
 # Instead of binding directly to LISTEN_PORT via an Exit relay,
@@ -282,7 +290,7 @@ def _configure_hs(
     reps: int,
     client_list: list[TorNet.Node],
     hs_list: list[TorNet.Node],
-    LISTEN_ADDR: Union[str, IPAddress],
+    listen_addr: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,
     hs_multi_client: bool,
@@ -322,7 +330,7 @@ def _configure_hs(
                 % (
                     hs.hs_hostname.unwrap(),
                     hs.hs_virtport.unwrap(),
-                    LISTEN_ADDR,
+                    listen_addr,
                     LISTEN_PORT,
                     proxy,
                 )
