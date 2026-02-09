@@ -26,7 +26,6 @@ from typing import (
     Optional,
     Any,
     Iterable,
-    Union,
     Sequence,
     Iterator,
     Tuple,
@@ -39,6 +38,7 @@ import dataclasses
 import errno
 import importlib
 import importlib.resources
+import ipaddress
 import logging
 import os
 import platform
@@ -65,6 +65,7 @@ from chutney.Util import (
     getenv_bool,
     mkdir_p,
     IPAddress,
+    IPNetwork,
     Option,
     OptionalConversionDescriptor,
 )
@@ -350,15 +351,47 @@ class Node(ToCustomJsonable):
         else:
             raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
 
-    def _internal_addrs(self) -> Iterator[Union[IPv4Address, IPv6Address]]:
+    def _address_in_trusted_net(self, addr: IPAddress) -> bool:
+        """Return whether `addr` is an any of the configured trusted networks"""
+        return any(map(lambda net: addr in net, self._config.trusted_networks))
+
+    def _internal_addrs(self) -> Iterator[IPAddress]:
         """Listening addresses for "internal" services, e.g. socks.
 
-        Currently this returns localhost address(es) (including ipv6 if
-        enabled).
+        This returns localhost address(es) (including ipv6 if enabled), and
+        other assigned addresses iff they fall within the configured trusted
+        networks.
         """
-        yield IPv4Address("127.0.0.1")
+        localhost_addrs: list[IPAddress] = [IPv4Address("127.0.0.1")]
         if not self._config.disableipv6:
-            yield IPv6Address("::1")
+            localhost_addrs.append(IPv6Address("::1"))
+
+        # Emit non-localhost addresses first, since clients should generally
+        # prefer to connect via those.
+        a: Optional[IPAddress]
+        for a in [self.ip.as_optional(), self.ipv6_addr.as_optional()]:
+            if a is None:
+                continue
+            if a in localhost_addrs:
+                # localhost addrs emitted separately, below.
+                continue
+            if not self._address_in_trusted_net(a):
+                # This might be a bit easy to miss in the case that the user
+                # intended the address to be an internal one, and thus used as a
+                # socks port etc.  OTOH this would be overly noisy in the case
+                # that the user *wants* the address to be used for "public"
+                # ports like orport, but not "internal" ports like socks.
+                #
+                # If we want a louder failure here, consider adding some other
+                # config parameter to convey the user intent.
+                logger.debug(
+                    f"Excluding {a} from internal addrs; not in trusted networks"
+                )
+                continue
+            yield a
+
+        for a in localhost_addrs:
+            yield a
 
     @property
     def orport(self) -> int:
@@ -813,6 +846,14 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     address_assignment_strategy: AddressAssignmentStrategy = (
         AddressAssignmentStrategy.STATIC
     )
+    # trusted networks. unsecured services, such as socks, dns, and the tor
+    # controlport, will be bound to the node's assigned IP addresses if they
+    # fall within one of these (in addition to binding them to localhost).
+    trusted_networks: list[IPNetwork] = dataclasses.field(
+        default_factory=lambda: Option(os.environ.get("CHUTNEY_TRUSTED_NETWORKS"))
+        .map(lambda s: [ipaddress.ip_network(a) for a in s.split(",")])
+        .unwrap_or([])
+    )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
@@ -984,7 +1025,9 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
 
     @override
     def to_custom_jsonable(self) -> CustomJsonable:
-        return dataclasses.asdict(self)
+        d = dataclasses.asdict(self)
+        d["trusted_networks"] = [str(n) for n in d["trusted_networks"]]
+        return d
 
     @override
     @classmethod
@@ -995,6 +1038,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         d["address_assignment_strategy"] = AddressAssignmentStrategy.from_decoded_json(
             d["address_assignment_strategy"]
         )
+        d["trusted_networks"] = [ipaddress.ip_network(n) for n in d["trusted_networks"]]
         return NodeConfig(**d)
 
 
