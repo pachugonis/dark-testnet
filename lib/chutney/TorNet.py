@@ -14,11 +14,11 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import (
-    Callable,
     List,
     Optional,
     Any,
@@ -1542,87 +1542,243 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 self.wait_for_bootstrap()
 
 
-class CLICommands:
-    """
-    Methods invokable from CLI.
+class CLICommand(ABC):
+    """A CLI command"""
 
-    All methods that don't start with `_` are invocable from the command-line.
-    """
+    @staticmethod
+    @abstractmethod
+    def name() -> str:
+        """Name of the command"""
+        ...
 
-    def __init__(self, network: Network):
-        self._net = network
+    @staticmethod
+    @abstractmethod
+    def help() -> str:
+        """Help string of the command"""
+        ...
 
-    def print_phases(self) -> None:
-        """Print the total number of phases in which the network is
-        initialized, configured, or bootstrapped."""
+    @abstractmethod
+    def run(self, network: Network) -> None:
+        """Run the command"""
+        ...
 
-        cfg_max = max(n._config.config_phase for n in self._net._nodes)
-        launch_max = max(n._config.launch_phase for n in self._net._nodes)
+
+class PrintPhasesCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "print_phases"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""
+            Print the total number of phases in which the network is
+            initialized, configured, or bootstrapped.
+            """)
+
+    @override
+    def run(self, network: Network) -> None:
+        cfg_max = max(n._config.config_phase for n in network._nodes)
+        launch_max = max(n._config.launch_phase for n in network._nodes)
         print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
         print("CHUTNEY_LAUNCH_PHASES={}".format(launch_max))
 
-    def supported(self) -> None:
-        """Check whether this network is supported by the set of binaries
-        and host information we have, and prints the result.
-        """
-        self._net.supported()
 
-    def init(self) -> None:
-        """Save the network configuration to a fresh nodes directory."""
-        self._net.init()
+class SupportedCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "supported"
 
-    def configure(self) -> None:
-        """Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."""
-        self._net.configure()
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent(
+            """Check whether this network is supported by the set of binaries
+        and host information we have, and prints the result."""
+        )
 
-    def status(self) -> None:
-        """Print how many nodes are running and how many are expected for
+    @override
+    def run(self, network: Network) -> None:
+        network.supported()
+
+
+class InitCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "init"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Save the network configuration to a fresh nodes directory."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.init()
+
+
+class ConfigureCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "configure"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.configure()
+
+
+class StatusCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "status"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent(
+            """Print how many nodes are running and how many are expected for
         CHUTNEY_LAUNCH_PHASE. Fails if not all expected nodes are running.
         """
-        if not self._net.status():
+        )
+
+    @override
+    def run(self, network: Network) -> None:
+        if not network.status():
             # TODO: have Network.status raise an informative Exception
             # instead of returning a bool.
             raise ChutneyError("status failed")
 
-    def restart(self) -> None:
-        """Invoked from command line: Stop and subsequently start our
-        network's nodes.
-        """
-        self._net.restart()
 
-    def start(self) -> None:
-        """Start all our network's nodes and return True on no errors."""
-        return self._net.start()
+class RestartCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "restart"
 
-    def hup(self) -> None:
-        """Send SIGHUP to all our network's running nodes."""
-        if not self._net.hup():
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Stop and subsequently start our network's nodes."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.restart()
+
+
+class StartCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "start"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Start all our network's nodes and return True on no errors."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.start()
+
+
+class HupCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "hup"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Send SIGHUP to all our network's running nodes."
+
+    @override
+    def run(self, network: Network) -> None:
+        if not network.hup():
             # TODO: have controller.hup raise an informative Exception
             # instead of returning a bool.
             raise ChutneyError("hup failed")
 
-    def wait_for_bootstrap(self) -> None:
-        """Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."""
-        self._net.wait_for_bootstrap()
 
-    def stop(self) -> None:
-        """Stop the network's running processes."""
-        self._net.stop()
+class WaitForBootstrapCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "wait_for_bootstrap"
 
-    def bootstrap(self) -> None:
-        """Bootstrap the network.
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.wait_for_bootstrap()
+
+
+class StopCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "stop"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Stop the network's running processes."
+
+    @override
+    def run(self, network: Network) -> None:
+        network.stop()
+
+
+class BootstrapCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "bootstrap"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""Bootstrap the network.
 
         Configures, starts, and waits for bootstrap, for all of the network
-        nodes' configure and launch phases."""
-        self._net.bootstrap()
+        nodes' configure and launch phases.""")
 
-    def verify(self) -> None:
-        """Run the "verify" connectivity test.
+    @override
+    def run(self, network: Network) -> None:
+        network.bootstrap()
 
-        Assumes the network is already bootstrapped."""
+
+class VerifyCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "verify"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""Run the "verify" connectivity test.
+
+        Assumes the network is already bootstrapped.""")
+
+    @override
+    def run(self, network: Network) -> None:
         import chutney.network_tests.verify
 
-        chutney.network_tests.verify.run_test(self._net)
+        chutney.network_tests.verify.run_test(network)
 
 
 _NETWORKS: Traversable = (
@@ -1648,11 +1804,11 @@ def _parse_args(
     subparsers = parser.add_subparsers(dest="cmd")
 
     def add_cli_command(
-        f: Callable[[CLICommands], None],
+        cmd: CLICommand,
         *,
         require_net_spec_group: Optional[bool] = None,
     ) -> None:
-        subparser = subparsers.add_parser(f.__name__, help=f.__doc__)
+        subparser = subparsers.add_parser(cmd.name(), help=cmd.help())
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
             # We add a group of mutually exclusive flags, one for each method of
@@ -1680,20 +1836,20 @@ def _parse_args(
         else:
             # User isn't permitted to specify; always get from data dir.
             subparser.set_defaults(net_from_data_dir=True)
-        subparser.set_defaults(func=f)
+        subparser.set_defaults(cmd=cmd)
 
-    add_cli_command(CLICommands.print_phases, require_net_spec_group=False)
-    add_cli_command(CLICommands.supported, require_net_spec_group=False)
-    add_cli_command(CLICommands.init, require_net_spec_group=True)
-    add_cli_command(CLICommands.configure)
-    add_cli_command(CLICommands.status)
-    add_cli_command(CLICommands.restart)
-    add_cli_command(CLICommands.start)
-    add_cli_command(CLICommands.hup)
-    add_cli_command(CLICommands.wait_for_bootstrap)
-    add_cli_command(CLICommands.stop)
-    add_cli_command(CLICommands.bootstrap)
-    add_cli_command(CLICommands.verify)
+    add_cli_command(PrintPhasesCLICommand(), require_net_spec_group=False)
+    add_cli_command(SupportedCLICommand(), require_net_spec_group=False)
+    add_cli_command(InitCLICommand(), require_net_spec_group=True)
+    add_cli_command(ConfigureCLICommand())
+    add_cli_command(StatusCLICommand())
+    add_cli_command(RestartCLICommand())
+    add_cli_command(StartCLICommand())
+    add_cli_command(HupCLICommand())
+    add_cli_command(WaitForBootstrapCLICommand())
+    add_cli_command(StopCLICommand())
+    add_cli_command(BootstrapCLICommand())
+    add_cli_command(VerifyCLICommand())
 
     return parser.parse_args(argv)
 
@@ -1741,8 +1897,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     args = _parse_args(argv)
     network = _network_from_args(args)
-    action = check_type(args.func, Callable[[CLICommands], None])
-    action(CLICommands(network))
+    cmd = check_type(args.cmd, CLICommand)
+    cmd.run(network)
 
 
 def __main__() -> None:
