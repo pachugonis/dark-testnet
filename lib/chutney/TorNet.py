@@ -25,6 +25,7 @@ from typing import (
     Iterable,
     Sequence,
     Iterator,
+    Protocol,
     Tuple,
 )
 from typing_extensions import assert_never, override
@@ -1542,8 +1543,53 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 self.wait_for_bootstrap()
 
 
+# This is the type returned by `ArgumentParser.add_subparsers`. Unfortunately
+# the argparse module doesn't expose a public named type. We refer to it using
+# the internal _SubParsersAction type that it gets, encapsulating that bit of
+# ugliness into this alias.
+class _SubParsers(Protocol):
+    # Since we can't name a lot of the kwarg types either, we just use Any.
+    # This means mypy etc. won't statically catch type errors when calling this
+    # method via this type. In practice such errors will be found on any run of
+    # the chutney CLI though, so will be found quickly.
+    def add_parser(self, name: str, **kwargs: Any) -> argparse.ArgumentParser: ...
+
+
 class CLICommand(ABC):
     """A CLI command"""
+
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        subparser = subparsers.add_parser(self.name(), help=self.help())
+        if require_net_spec_group is not None:
+            # This command supports specifying the network config.
+            # We add a group of mutually exclusive flags, one for each method of
+            # specifying the config.
+            method_group = subparser.add_mutually_exclusive_group(
+                required=require_net_spec_group
+            )
+            method_group.add_argument(
+                "--net",
+                choices=getNetworks(),
+                help="Load built-in network config by name",
+            )
+            method_group.add_argument(
+                "--net-from-script-path",
+                help="Load network config from a chutney network script",
+                type=Path,
+            )
+            method_group.add_argument(
+                "--net-from-data-dir",
+                action="store_true",
+                # If the group isn't required, then make this the default option.
+                default=not require_net_spec_group,
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
+            )
+        else:
+            # User isn't permitted to specify; always get from data dir.
+            subparser.set_defaults(net_from_data_dir=True)
+        subparser.set_defaults(cmd=self)
 
     @staticmethod
     @abstractmethod
@@ -1801,55 +1847,20 @@ def _parse_args(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=envvars.EnvVar.help_all(),
     )
-    subparsers = parser.add_subparsers(dest="cmd")
+    subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
 
-    def add_cli_command(
-        cmd: CLICommand,
-        *,
-        require_net_spec_group: Optional[bool] = None,
-    ) -> None:
-        subparser = subparsers.add_parser(cmd.name(), help=cmd.help())
-        if require_net_spec_group is not None:
-            # This command supports specifying the network config.
-            # We add a group of mutually exclusive flags, one for each method of
-            # specifying the config.
-            method_group = subparser.add_mutually_exclusive_group(
-                required=require_net_spec_group
-            )
-            method_group.add_argument(
-                "--net",
-                choices=getNetworks(),
-                help="Load built-in network config by name",
-            )
-            method_group.add_argument(
-                "--net-from-script-path",
-                help="Load network config from a chutney network script",
-                type=Path,
-            )
-            method_group.add_argument(
-                "--net-from-data-dir",
-                action="store_true",
-                # If the group isn't required, then make this the default option.
-                default=not require_net_spec_group,
-                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
-            )
-        else:
-            # User isn't permitted to specify; always get from data dir.
-            subparser.set_defaults(net_from_data_dir=True)
-        subparser.set_defaults(cmd=cmd)
-
-    add_cli_command(PrintPhasesCLICommand(), require_net_spec_group=False)
-    add_cli_command(SupportedCLICommand(), require_net_spec_group=False)
-    add_cli_command(InitCLICommand(), require_net_spec_group=True)
-    add_cli_command(ConfigureCLICommand())
-    add_cli_command(StatusCLICommand())
-    add_cli_command(RestartCLICommand())
-    add_cli_command(StartCLICommand())
-    add_cli_command(HupCLICommand())
-    add_cli_command(WaitForBootstrapCLICommand())
-    add_cli_command(StopCLICommand())
-    add_cli_command(BootstrapCLICommand())
-    add_cli_command(VerifyCLICommand())
+    PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
+    SupportedCLICommand(subparsers, require_net_spec_group=False)
+    InitCLICommand(subparsers, require_net_spec_group=True)
+    ConfigureCLICommand(subparsers)
+    StatusCLICommand(subparsers)
+    RestartCLICommand(subparsers)
+    StartCLICommand(subparsers)
+    HupCLICommand(subparsers)
+    WaitForBootstrapCLICommand(subparsers)
+    StopCLICommand(subparsers)
+    BootstrapCLICommand(subparsers)
+    VerifyCLICommand(subparsers)
 
     return parser.parse_args(argv)
 
