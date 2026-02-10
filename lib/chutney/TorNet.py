@@ -1978,6 +1978,7 @@ def _parse_args(
     add_cli_command(CLICommands.status)
     add_cli_command(CLICommands.restart)
     add_cli_command(CLICommands.start)
+    add_cli_command(CLICommands.hup)
     add_cli_command(CLICommands.wait_for_bootstrap)
     add_cli_command(CLICommands.stop)
     add_cli_command(CLICommands.bootstrap)
