@@ -5,6 +5,7 @@ Test chutney as a module.
 """
 
 import dataclasses
+import ipaddress
 import os
 import unittest
 
@@ -13,7 +14,20 @@ from typing_extensions import override
 
 from chutney import TorNet
 from chutney.TorNet import NodeConfig, AddressAssignmentStrategy
+from chutney.Util import Option
 from chutney.network_tests import verify
+
+_LOOPBACK_IPV4_NET = ipaddress.IPv4Network("127.0.0.0/8")
+assert _LOOPBACK_IPV4_NET.is_private
+assert _LOOPBACK_IPV4_NET.is_loopback
+
+_PRIVATE_IPV4_NET = ipaddress.IPv4Network("192.168.0.0/16")
+assert _PRIVATE_IPV4_NET.is_private
+assert not _PRIVATE_IPV4_NET.is_loopback
+
+_PRIVATE_IPV6_NET = ipaddress.IPv6Network("fc00::/7")
+assert _PRIVATE_IPV6_NET.is_private
+assert not _PRIVATE_IPV6_NET.is_loopback
 
 
 def basic_net_configs(base: NodeConfig) -> list[NodeConfig]:
@@ -62,6 +76,8 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
+            ip=Option(str(next(iter(_LOOPBACK_IPV4_NET.hosts())))),
+            trusted_networks=[_LOOPBACK_IPV4_NET],
             controlling_pid=os.getpid(),
         )
         self.network.addNodes(basic_net_configs(base))
@@ -76,8 +92,10 @@ class Tests(unittest.TestCase):
             addresses.add(ip)
 
         # ipv4-only networks typically work ok "out of the box" offsetting
-        # addresses from 127.0.0.1. i.e. 127.0.0.2, 127.0.0.3, etc. are additional
-        # working "localhost" addresses.
+        # addresses from the default node ip of localhost=127.0.0.1.
+        # The 127.0.0.0/8 block is designated as loopback, and typically any
+        # addresses in that block can be used without additional system
+        # configuration.
         self.network.bootstrap()
         verify.run_test(self.network)
 
@@ -86,10 +104,9 @@ class Tests(unittest.TestCase):
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            # ipv6 only has a single loopback address; offsetting that address
-            # (::1) does *not* give loopback, or even private, addresses. fc00::
-            # is private.
-            ipv6_addr="fc00::",
+            # ipv6 only has a single loopback address; use a private address
+            # range instead.
+            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
         )
         self.network.addNodes(basic_net_configs(base))
 
@@ -104,6 +121,54 @@ class Tests(unittest.TestCase):
         self.network.configure()
         # we *don't* attempt to bootstrap or use the network here, since the private
         # address space we're using is probably not set up on the host system.
+
+    def test_services_unexposed_on_untrusted_nets(self) -> None:
+        base = NodeConfig(
+            address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
+            controlling_pid=os.getpid(),
+            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
+            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+        )
+        self.network.addNodes(basic_net_configs(base))
+        for node in self.network.nodes:
+            for endpoint_iter in [
+                node.socksport_endpoints(),
+                node.controlport_endpoints(),
+                node.dnsport_endpoints(),
+            ]:
+                endpoints = list(endpoint_iter)
+                # should *not* be bound to the assigned IPs, only the localhost IPs.
+                for ip, _port in endpoints:
+                    self.assertNotIn(ip, _PRIVATE_IPV4_NET)
+                    self.assertNotIn(ip, _PRIVATE_IPV6_NET)
+                    self.assertTrue(
+                        ip.is_loopback,
+                        f"Unsecured service bound to non-loopback ip {ip}",
+                    )
+
+    def test_services_exposed_on_trusted_private_nets(self) -> None:
+        base = NodeConfig(
+            address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
+            controlling_pid=os.getpid(),
+            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
+            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            trusted_networks=[_PRIVATE_IPV4_NET, _PRIVATE_IPV6_NET],
+        )
+        self.network.addNodes(basic_net_configs(base))
+        for node in self.network.nodes:
+            for endpoint_iter in [
+                node.socksport_endpoints(),
+                node.controlport_endpoints(),
+                node.dnsport_endpoints(),
+            ]:
+                endpoints = list(endpoint_iter)
+                # should be bound to the assigned IPs and the localhost IPs.
+                for ip, _port in endpoints:
+                    self.assertTrue(
+                        ip.is_loopback
+                        or ip in _PRIVATE_IPV4_NET
+                        or ip in _PRIVATE_IPV6_NET
+                    )
 
 
 if __name__ == "__main__":

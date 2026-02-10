@@ -7,12 +7,12 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import ipaddress
 import logging
 import os
 import stat
 
 from collections.abc import Iterable, Collection
-from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, TypeAlias
 from typing_extensions import ParamSpec, override
@@ -21,7 +21,8 @@ from chutney.jsonable import ToCustomJsonable, CustomJsonable
 
 logger = logging.getLogger(__name__)
 
-IPAddress: TypeAlias = Union[IPv4Address, IPv6Address]
+IPAddress: TypeAlias = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+IPNetwork: TypeAlias = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 P = ParamSpec("P")
 T = TypeVar("T")
