@@ -1561,12 +1561,12 @@ class CLICommand(ABC):
     def __init__(
         self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
     ) -> None:
-        subparser = subparsers.add_parser(self.name(), help=self.help())
+        self._subparser = subparsers.add_parser(self.name(), help=self.help())
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
             # We add a group of mutually exclusive flags, one for each method of
             # specifying the config.
-            method_group = subparser.add_mutually_exclusive_group(
+            method_group = self._subparser.add_mutually_exclusive_group(
                 required=require_net_spec_group
             )
             method_group.add_argument(
@@ -1588,8 +1588,8 @@ class CLICommand(ABC):
             )
         else:
             # User isn't permitted to specify; always get from data dir.
-            subparser.set_defaults(net_from_data_dir=True)
-        subparser.set_defaults(cmd=self)
+            self._subparser.set_defaults(net_from_data_dir=True)
+        self._subparser.set_defaults(cmd=self)
 
     @staticmethod
     @abstractmethod
@@ -1604,9 +1604,16 @@ class CLICommand(ABC):
         ...
 
     @abstractmethod
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         """Run the command"""
         ...
+
+    def _get_subparser(self) -> argparse.ArgumentParser:
+        """Return the subparser registered for this command.
+
+        Intended for usage by child classes, to register additional arguments.
+        """
+        return self._subparser
 
 
 class PrintPhasesCLICommand(CLICommand):
@@ -1624,7 +1631,7 @@ class PrintPhasesCLICommand(CLICommand):
             """)
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         cfg_max = max(n._config.config_phase for n in network._nodes)
         launch_max = max(n._config.launch_phase for n in network._nodes)
         print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
@@ -1646,7 +1653,7 @@ class SupportedCLICommand(CLICommand):
         )
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.supported()
 
 
@@ -1662,7 +1669,7 @@ class InitCLICommand(CLICommand):
         return "Save the network configuration to a fresh nodes directory."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.init()
 
 
@@ -1678,7 +1685,7 @@ class ConfigureCLICommand(CLICommand):
         return "Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.configure()
 
 
@@ -1698,7 +1705,7 @@ class StatusCLICommand(CLICommand):
         )
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         if not network.status():
             # TODO: have Network.status raise an informative Exception
             # instead of returning a bool.
@@ -1717,7 +1724,7 @@ class RestartCLICommand(CLICommand):
         return "Stop and subsequently start our network's nodes."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.restart()
 
 
@@ -1733,7 +1740,7 @@ class StartCLICommand(CLICommand):
         return "Start all our network's nodes and return True on no errors."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.start()
 
 
@@ -1749,7 +1756,7 @@ class HupCLICommand(CLICommand):
         return "Send SIGHUP to all our network's running nodes."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         if not network.hup():
             # TODO: have controller.hup raise an informative Exception
             # instead of returning a bool.
@@ -1768,7 +1775,7 @@ class WaitForBootstrapCLICommand(CLICommand):
         return "Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.wait_for_bootstrap()
 
 
@@ -1784,7 +1791,7 @@ class StopCLICommand(CLICommand):
         return "Stop the network's running processes."
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.stop()
 
 
@@ -1803,7 +1810,7 @@ class BootstrapCLICommand(CLICommand):
         nodes' configure and launch phases.""")
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         network.bootstrap()
 
 
@@ -1821,7 +1828,7 @@ class VerifyCLICommand(CLICommand):
         Assumes the network is already bootstrapped.""")
 
     @override
-    def run(self, network: Network) -> None:
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
         import chutney.network_tests.verify
 
         chutney.network_tests.verify.run_test(network)
@@ -1909,7 +1916,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args = _parse_args(argv)
     network = _network_from_args(args)
     cmd = check_type(args.cmd, CLICommand)
-    cmd.run(network)
+    cmd.run(network, args)
 
 
 def __main__() -> None:
