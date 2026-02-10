@@ -335,7 +335,6 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
     @override
     def postConfig(self, net: TorNet.Network) -> None:
-        # self.net.addNode(self)
         pass
 
     @override

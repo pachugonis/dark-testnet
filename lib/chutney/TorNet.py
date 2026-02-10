@@ -553,6 +553,7 @@ class Node(ToCustomJsonable):
             hs_targetport=self.hs_targetport.as_optional(),
             hs_hostname=self.hs_hostname.as_optional(),
             _config=self._config,
+            _nodenum=self.nodenum,
         )
 
 
@@ -1094,8 +1095,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             _THE_NETWORK._addRequirement(feature)
 
         def ConfigureNodes(nodelist: list[NodeConfig]) -> None:
-            for n in nodelist:
-                _THE_NETWORK.addNode(n)
+            _THE_NETWORK.addNodes(nodelist)
 
         def NodeWrapper(
             parent: Optional[NodeConfig] = None, **kwargs: Any
@@ -1138,21 +1138,24 @@ class Network(ToCustomJsonable, FromDecodedJson):
         contents = network_cfg_path.read_text()
         return Network.from_network_script_contents(contents)
 
-    def addNode(self, config: NodeConfig) -> Node:
-        """Create a node with the given config, add it to the network, and return it."""
-        node = Node(self, config, self._nextnodenum)
-        self._nextnodenum += 1
+    def _add_node(self, config: NodeConfig, nodenum: int) -> None:
+        """Create a node with the given config, add it to the network"""
+        node = Node(self, config, nodenum)
         self._nodes.append(node)
         if node._config.bridgeauthority:
             self.hasbridgeauth = True
         for family_name in node._config.families:
             self.family_members.setdefault(family_name, []).append(node)
 
-        return node
-
-    def addNodes(self, configs: List[NodeConfig]) -> List[Node]:
-        """Add `nodes` to the network. `nodes` must have been created with this `Network`."""
-        return [self.addNode(c) for c in configs]
+    def addNodes(self, configs: List[NodeConfig]) -> None:
+        """Create nodes from `configs` and add them to the network."""
+        if self._nodes:
+            next_num = max(map(lambda n: n.nodenum, self._nodes)) + 1
+        else:
+            next_num = 0
+        for c in configs:
+            self._add_node(c, next_num)
+            next_num += 1
 
     def _addRequirement(self, requirement: str) -> None:
         requirement = requirement.upper()
@@ -1405,7 +1408,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
         d = check_type(obj, dict)
         for json_node in check_type(d["nodes"], list[dict[str, object]]):
             node_config = NodeConfig.from_decoded_json(json_node["_config"])
-            net.addNode(node_config)
+            nodenum = check_type(json_node["_nodenum"], int)
+            net._add_node(node_config, nodenum)
         for requirement in check_type(d["requirements"], list[str]):
             net._addRequirement(requirement)
 
