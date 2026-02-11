@@ -23,7 +23,7 @@ network_names.sort()
 # us something like what we expect.
 assert "basic-min" in network_names
 
-base_data_dir=os.environ.get("CHUTNEY_DATA_DIR", "net")
+base_data_dir = os.environ.get("CHUTNEY_DATA_DIR", "net")
 
 for network_name in network_names:
     subprocess.check_call(["./tests/network-config-test", network_name])

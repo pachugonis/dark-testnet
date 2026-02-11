@@ -17,6 +17,7 @@ import sys
 
 from pathlib import Path
 
+
 def max_config_phase(network_name: str) -> int:
     prefix = "CHUTNEY_CONFIG_PHASES="
     output = subprocess.check_output(
@@ -28,14 +29,16 @@ def max_config_phase(network_name: str) -> int:
     print("Couldn't parse print_phases output: ", output)
     sys.exit(1)
 
+
 parser = argparse.ArgumentParser(
-    prog='network-config-test',
-    description='Generate and validate config files for a chutney network')
-parser.add_argument('network')
+    prog="network-config-test",
+    description="Generate and validate config files for a chutney network",
+)
+parser.add_argument("network")
 args = parser.parse_args()
 network_name = args.network
 
-base_data_dir=os.environ.get("CHUTNEY_DATA_DIR", "net")
+base_data_dir = os.environ.get("CHUTNEY_DATA_DIR", "net")
 
 print("Testing network:", network_name)
 

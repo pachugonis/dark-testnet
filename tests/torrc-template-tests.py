@@ -82,8 +82,7 @@ configs = [
         tag="c",
         client=True,
         use_microdescriptors=False,
-        extra_raw_torrc=textwrap.dedent(
-            """
+        extra_raw_torrc=textwrap.dedent("""
             UseEntryGuards 0
             FetchDirInfoEarly 1
             FetchDirInfoExtraEarly 1
@@ -93,8 +92,7 @@ configs = [
             ConnectionPadding 0
             __DisablePredictedCircuits 1
             __LeaveStreamsUnattached 1
-            """
-        )
+            """),
     ),
     # Was: client-only-v6-md.tmpl
     NodeConfig(
@@ -146,21 +144,17 @@ configs = [
     NodeConfig(
         tag="relayMAB",
         relay=True,
-        extra_raw_torrc=textwrap.dedent(
-            """
+        extra_raw_torrc=textwrap.dedent("""
             MaxAdvertisedBandwidth 1 MBytes
-            """
-        )
+            """),
     ),
     # Was: "relay-MBR.tmpl"
     NodeConfig(
         tag="relayMBR",
         relay=True,
-        extra_raw_torrc=textwrap.dedent(
-            """
+        extra_raw_torrc=textwrap.dedent("""
             RelayBandwidthRate 1 MBytes
-            """
-        )
+            """),
     ),
     # Was: "relay-non-dir.tmpl"
     NodeConfig(
