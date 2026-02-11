@@ -15,9 +15,6 @@ export CHUTNEY_ROUNDS="${CHUTNEY_ROUNDS:-1}"
 export CHUTNEY_WARNINGS_IGNORE_EXPECTED="${CHUTNEY_WARNINGS_IGNORE_EXPECTED:-true}"
 export CHUTNEY_WARNINGS_SUMMARY="${CHUTNEY_WARNINGS_SUMMARY:-true}"
 
-# default to exiting when this script exits
-export CHUTNEY_CONTROLLING_PID="${CHUTNEY_CONTROLLING_PID:-$$}"
-
 # default to allowing zero failures
 export CHUTNEY_ALLOW_FAILURES="${CHUTNEY_ALLOW_FAILURES:-0}"
 
@@ -238,6 +235,15 @@ do
     esac
     shift
 done
+
+if [ -z "${CHUTNEY_CONTROLLING_PID+x}" ]; then
+    if [ "${CHUTNEY_START_TIME:-1}" -ge 0 ] \
+       && [ "${CHUTNEY_BOOTSTRAP_TIME:-1}" -ge 0 ] \
+       && [ "${CHUTNEY_STOP_TIME:-1}" -ge 0 ]; then
+        # exit when this script exits
+        export CHUTNEY_CONTROLLING_PID="$$"
+    fi
+fi
 
 if [ "$CHUTNEY_WARNINGS_ONLY" = true ] || \
    [ "$CHUTNEY_DIAGNOSTICS_ONLY" = true ]; then

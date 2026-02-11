@@ -931,12 +931,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         ocp_line = "__OwningControllerProcess %d" % (cpid)
         # if we want to leave the network running, or controlling_pid is 1
         # (or invalid)
-        if (
-            envvars.START_TIME.get() < 0
-            or envvars.BOOTSTRAP_TIME.get() < 0
-            or getenv_int("CHUTNEY_STOP_TIME", 0) < 0
-            or cpid <= 1
-        ):
+        if cpid <= 1:
             return "#" + ocp_line
         else:
             return ocp_line
