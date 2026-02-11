@@ -232,6 +232,23 @@ def getenv_int(env_var: str, default: int) -> int:
     return getenv_type(env_var, default, int, type_name="an int")
 
 
+def parse_boolenv(x: str) -> bool:
+    """
+    Parses a string to a boolean, following conventions for environment variables.
+
+    * 0, "false", "no", "n" -> False
+    * 1, "true", "yes", "y" -> True
+
+    Raise ValueError if the string is unrecognized
+    """
+    low = x.lower()
+    if low in ["0", "false", "no", "n"]:
+        return False
+    if low in ["1", "true", "yes", "y"]:
+        return True
+    raise ValueError(f"invalid bool string: {x}")
+
+
 def getenv_bool(env_var: str, default: bool) -> bool:
     """
     Return the value of the environment variable 'envar' as a bool,
@@ -241,22 +258,7 @@ def getenv_bool(env_var: str, default: bool) -> bool:
 
     Raise ValueError if the environment variable is set, but is not a bool.
     """
-    # TODO: consider simplifying this and:
-    # * rejecting ints other than 0 or 1
-    # * accepting 'yes' for True
-    try:
-        # Handle integer values
-        return bool(getenv_int(env_var, int(default)))
-    except ValueError:
-        # Handle values that the user probably expects to be False
-        strval = os.environ.get(env_var)
-        # If the env var weren't set, the int path above would have succeeded,
-        # returning the default.
-        assert strval is not None
-        if strval.lower() in ["false", "no"]:
-            return False
-        else:
-            return getenv_type(env_var, default, bool, type_name="a bool")
+    return getenv_type(env_var, default, parse_boolenv, type_name="bool")
 
 
 def find_executable_on_path(
