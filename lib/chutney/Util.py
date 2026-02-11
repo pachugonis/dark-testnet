@@ -237,15 +237,7 @@ def getenv_type(
         )
 
 
-@overload
-def getenv_int(env_var: str, default: None) -> Optional[int]: ...
-
-
-@overload
-def getenv_int(env_var: str, default: int) -> int: ...
-
-
-def getenv_int(env_var: str, default: Optional[int]) -> Optional[int]:
+def getenv_int(env_var: str, default: int) -> int:
     """
     Return the value of the environment variable 'envar' as an int,
     or 'default' if no such variable exists.
