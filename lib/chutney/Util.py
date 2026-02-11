@@ -14,7 +14,7 @@ import stat
 
 from collections.abc import Iterable, Collection
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, TypeAlias
+from typing import Callable, TypeVar, Any, Optional, Generic, Union, TypeAlias
 from typing_extensions import ParamSpec, override
 
 from chutney.jsonable import ToCustomJsonable, CustomJsonable
@@ -192,27 +192,12 @@ class OptionalConversionDescriptor(Generic[T]):
         setattr(obj, self._name, value)
 
 
-@overload
 def getenv_type(
     env_var: str,
-    default: None,
+    default: T,
     type_: Callable[[str], T],
     type_name: Optional[str] = None,
-) -> Optional[T]: ...
-
-
-@overload
-def getenv_type(
-    env_var: str, default: T, type_: Callable[[str], T], type_name: Optional[str] = None
-) -> T: ...
-
-
-def getenv_type(
-    env_var: str,
-    default: Optional[T],
-    type_: Callable[[str], T],
-    type_name: Optional[str] = None,
-) -> Optional[T]:
+) -> T:
     """
     Return the value of the environment variable 'envar' as type_,
     or 'default' if no such variable exists.
