@@ -932,7 +932,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         # if we want to leave the network running, or controlling_pid is 1
         # (or invalid)
         if (
-            getenv_int("CHUTNEY_START_TIME", 0) < 0
+            envvars.START_TIME.get() < 0
             or envvars.BOOTSTRAP_TIME.get() < 0
             or getenv_int("CHUTNEY_STOP_TIME", 0) < 0
             or cpid <= 1
@@ -1589,9 +1589,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         # User overrode the dynamic time
         return envvars.MIN_START_TIME.get()
 
-    def wait_for_bootstrap(
-        self, limit_secs: int = getenv_int("CHUTNEY_START_TIME", 300)
-    ) -> None:
+    def wait_for_bootstrap(self, limit_secs: int = envvars.START_TIME.get()) -> None:
         """
         Wait for the network to bootstrap. Raises `TimeoutException` on timeout.
         """

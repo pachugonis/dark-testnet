@@ -129,3 +129,10 @@ BOOTSTRAP_TIME = EnvVarInt(
     60,
     "How long in seconds should verify (and similar commands) wait for success",
 )
+START_TIME = EnvVarInt(
+    "CHUTNEY_START_TIME",
+    300,
+    # You'd think *this* would be CHUTNEY_BOOTSTRAP_TIME. Maybe consolidate/fix
+    # these sometime.
+    "How long to wait for a launch-phase to bootstrap, e.g. in wait_for_bootstrap",
+)
