@@ -920,7 +920,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     @property
     def tor_gencert(self) -> str:
         """name or path of the tor-gencert binary (if present)"""
-        return os.getenv(TorGenCertBin().config_envvar(), self.tor + "-gencert")
+        return os.getenv(TorGenCertBin().config_envvar(), "tor-gencert")
 
     # XXX Move template logic into template
     @property
