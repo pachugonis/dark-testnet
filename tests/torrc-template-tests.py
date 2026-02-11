@@ -213,7 +213,7 @@ configs = [
 ]
 
 # Add the configs to the network, getting their corresponding Nodes.
-nodes = network.addNodes(configs)
+network.addNodes(configs)
 # Configure the network, generating the torrc files, and validating that they are well-formed.
 network.configure()
 
