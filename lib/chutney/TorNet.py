@@ -51,6 +51,7 @@ import tomli_w
 import json
 
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
+from chutney import envvars
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 from chutney.errors import (
     ChutneyError,
@@ -776,8 +777,8 @@ class NodeController(ABC):
 
 # TODO: Consider getting rid of these globals, particularly since they're not
 # contants; e.g. we change them at runtime in `Network.bootstrap`.
-CUR_CONFIG_PHASE: int = getenv_int("CHUTNEY_CONFIG_PHASE", 1)
-CUR_LAUNCH_PHASE: int = getenv_int("CHUTNEY_LAUNCH_PHASE", 1)
+CUR_CONFIG_PHASE: int = envvars.CONFIG_PHASE.get()
+CUR_LAUNCH_PHASE: int = envvars.LAUNCH_PHASE.get()
 
 
 @dataclasses.dataclass
