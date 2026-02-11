@@ -136,3 +136,8 @@ START_TIME = EnvVarInt(
     # these sometime.
     "How long to wait for a launch-phase to bootstrap, e.g. in wait_for_bootstrap",
 )
+DATA_BYTES = EnvVarInt(
+    "CHUTNEY_DATA_BYTES",
+    5_000_000,
+    "The amount of data to send between each source-sink pair in `verify`",
+)
