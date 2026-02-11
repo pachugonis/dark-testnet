@@ -93,3 +93,8 @@ LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase
 DISABLE_IPV6 = EnvVarBool(
     "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
 )
+CONTROLLING_PID = EnvVarInt(
+    "CHUTNEY_CONTROLLING_PID",
+    0,
+    "PID of controlling script (for __OwningControllerProcess)",
+)

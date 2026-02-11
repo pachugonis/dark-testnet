@@ -881,7 +881,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     poll_launch_time_default: float = 0.1
     # The PID of the controlling script
     # (for __OwningControllerProcess)
-    controlling_pid: int = getenv_int("CHUTNEY_CONTROLLING_PID", 0)
+    controlling_pid: int = envvars.CONTROLLING_PID.get()
     # The path to a DNS config file for Tor Exits. If this file
     # is empty or unreadable, Tor will try 127.0.0.1:53.
     #
