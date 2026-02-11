@@ -124,3 +124,8 @@ ARTI = EnvVarStr("CHUTNEY_ARTI", "arti", "Path to the arti executable.")
 MIN_START_TIME = EnvVarInt(
     "CHUTNEY_MIN_START_TIME", 0, "Minimum start time before verifying"
 )
+BOOTSTRAP_TIME = EnvVarInt(
+    "CHUTNEY_BOOTSTRAP_TIME",
+    60,
+    "How long in seconds should verify (and similar commands) wait for success",
+)

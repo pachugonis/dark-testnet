@@ -933,7 +933,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         # (or invalid)
         if (
             getenv_int("CHUTNEY_START_TIME", 0) < 0
-            or getenv_int("CHUTNEY_BOOTSTRAP_TIME", 0) < 0
+            or envvars.BOOTSTRAP_TIME.get() < 0
             or getenv_int("CHUTNEY_STOP_TIME", 0) < 0
             or cpid <= 1
         ):
@@ -1084,7 +1084,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         # bootstrap_time: How long in seconds we should verify (and similar
         # commands) wait for a successful outcome.
-        self.bootstrap_time: int = getenv_int("CHUTNEY_BOOTSTRAP_TIME", 60)
+        self.bootstrap_time: int = envvars.BOOTSTRAP_TIME.get()
 
         # orport_base, dirport_base, controlport_base, socksport_base,
         # extorport_base, ptport_base: the initial port numbers used by nodenum 0.
