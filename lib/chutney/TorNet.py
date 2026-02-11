@@ -883,11 +883,10 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     controlling_pid: int = getenv_int("CHUTNEY_CONTROLLING_PID", 0)
     # The path to a DNS config file for Tor Exits. If this file
     # is empty or unreadable, Tor will try 127.0.0.1:53.
-    dns_conf: Optional[str] = (
-        os.environ.get("CHUTNEY_DNS_CONF", "/etc/resolv.conf")
-        if "CHUTNEY_DNS_CONF" in os.environ
-        else None
-    )
+    #
+    # the default resolv.conf path is set at compile time
+    # there's no easy way to get it out of tor, so we use the typical value
+    dns_conf: str = os.environ.get("CHUTNEY_DNS_CONF", "/etc/resolv.conf")
     # The phase at which this instance needs to be configured.
     config_phase: int = 1
     # The phase at which this instance needs to be launched.
@@ -941,9 +940,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         else:
             return ocp_line
 
-    # the default resolv.conf path is set at compile time
-    # there's no easy way to get it out of tor, so we use the typical value
-    DEFAULT_DNS_RESOLV_CONF = Path("/etc/resolv.conf")
     # if we can't find the specified file, use this one as a substitute
     OFFLINE_DNS_RESOLV_CONF = Path("/dev/null")
 
@@ -961,14 +957,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         if my_dns_conf == "":
             # if the user asked for tor's default
             return "#ServerDNSResolvConfFile using tor's compile-time default"
-        elif my_dns_conf is None:
-            # if there is no DNS conf file set
-            logger.debug(
-                "CHUTNEY_DNS_CONF not specified, using '{}'.".format(
-                    NodeConfig.DEFAULT_DNS_RESOLV_CONF
-                )
-            )
-            dns_conf = NodeConfig.DEFAULT_DNS_RESOLV_CONF
         else:
             dns_conf = Path(my_dns_conf)
         dns_conf = dns_conf.resolve()
