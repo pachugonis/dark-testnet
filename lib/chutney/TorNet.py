@@ -1083,11 +1083,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.family_members: dict[str, list[Node]] = dict()
 
         # bootstrap_time: How long in seconds we should verify (and similar
-        # commands) wait for a successful outcome. We check BOOTSTRAP_TIME for
-        # compatibility with old versions of test-network.sh
-        self.bootstrap_time: int = getenv_int(
-            "CHUTNEY_BOOTSTRAP_TIME", getenv_int("BOOTSTRAP_TIME", 60)
-        )
+        # commands) wait for a successful outcome.
+        self.bootstrap_time: int = getenv_int("CHUTNEY_BOOTSTRAP_TIME", 60)
 
         # orport_base, dirport_base, controlport_base, socksport_base,
         # extorport_base, ptport_base: the initial port numbers used by nodenum 0.
