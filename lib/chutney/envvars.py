@@ -86,5 +86,10 @@ def getenv_type(
 
     return chutney.Util.getenv_type(env_var, default, type_, type_name)
 
+
 CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
 LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
+
+DISABLE_IPV6 = EnvVarBool(
+    "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
+)

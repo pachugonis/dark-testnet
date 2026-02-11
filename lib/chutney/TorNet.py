@@ -869,7 +869,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         default=Option(os.environ.get("CHUTNEY_LISTEN_ADDRESS_V6", None))
     )
     # Whether to disable all ipv6 functionality
-    disableipv6: bool = getenv_bool("CHUTNEY_DISABLE_IPV6", False)
+    disableipv6: bool = envvars.DISABLE_IPV6.get()
     # Directory server flags. Used only if authority=True
     dirserver_flags: str = "no-v2"
     # None means wait on launch (requires RunAsDaemon),
