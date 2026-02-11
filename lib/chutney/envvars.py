@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import platform
+
 from abc import ABC, abstractmethod
 from typing import Callable, TypeVar, Optional, Generic
 from typing_extensions import override
@@ -103,4 +105,9 @@ DNS_CONF = EnvVarStr(
     "/etc/resolv.conf",
     "Path to resolver config file; e.g. for ServerDNSResolvConfFile."
     + " Set to empty-string to not set explicitly.",
+)
+TOR_SANDBOX = EnvVarBool(
+    "CHUTNEY_TOR_SANDBOX",
+    platform.system() == "Linux",
+    "Whether to enable tor's sandbox",
 )
