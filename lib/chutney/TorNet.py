@@ -887,7 +887,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     #
     # the default resolv.conf path is set at compile time
     # there's no easy way to get it out of tor, so we use the typical value
-    dns_conf: str = os.environ.get("CHUTNEY_DNS_CONF", "/etc/resolv.conf")
+    dns_conf: str = envvars.DNS_CONF.get()
     # The phase at which this instance needs to be configured.
     config_phase: int = 1
     # The phase at which this instance needs to be launched.

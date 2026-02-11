@@ -98,3 +98,9 @@ CONTROLLING_PID = EnvVarInt(
     0,
     "PID of controlling script (for __OwningControllerProcess)",
 )
+DNS_CONF = EnvVarStr(
+    "CHUTNEY_DNS_CONF",
+    "/etc/resolv.conf",
+    "Path to resolver config file; e.g. for ServerDNSResolvConfFile."
+    + " Set to empty-string to not set explicitly.",
+)
