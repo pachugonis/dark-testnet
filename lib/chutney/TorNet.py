@@ -1921,7 +1921,11 @@ def getNetworks() -> list[str]:
 def _parse_args(
     argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
 ) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="chutney")
+    parser = argparse.ArgumentParser(
+        prog="chutney",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=envvars.EnvVar.help_all(),
+    )
     subparsers = parser.add_subparsers(dest="cmd")
 
     def add_cli_command(
