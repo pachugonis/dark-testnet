@@ -1569,9 +1569,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
     PRINT_NETWORK_STATUS_DELAY = V3_AUTH_VOTING_INTERVAL / 2.0
     CHECKS_PER_PRINT = PRINT_NETWORK_STATUS_DELAY / CHECK_NETWORK_STATUS_DELAY
 
-    # By default, there is no minimum start time.
-    MIN_START_TIME_DEFAULT = 0
-
     # There are 7 v3 directory document types, but some networks only use 6,
     # because they don't have a bridge authority
     DOC_TYPE_DISPLAY_LIMIT_BRIDGEAUTH = 7
@@ -1593,10 +1590,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         var.
         """
         # User overrode the dynamic time
-        env_min_time = getenv_int("CHUTNEY_MIN_START_TIME", None)
-        if env_min_time is not None:
-            return env_min_time
-        return Network.MIN_START_TIME_DEFAULT
+        return getenv_int("CHUTNEY_MIN_START_TIME", 0)
 
     def wait_for_bootstrap(
         self, limit_secs: int = getenv_int("CHUTNEY_START_TIME", 300)
