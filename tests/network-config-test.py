@@ -15,8 +15,6 @@ import os
 import subprocess
 import sys
 
-from pathlib import Path
-
 
 def max_config_phase(network_name: str) -> int:
     prefix = "CHUTNEY_CONFIG_PHASES="

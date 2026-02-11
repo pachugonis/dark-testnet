@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 
-import glob
-import subprocess
-import sys
 import textwrap
 
 from chutney import TorNet
 from chutney.TorNet import NodeConfig
-from pathlib import Path
 
 network = TorNet.Network()
 
