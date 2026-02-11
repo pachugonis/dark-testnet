@@ -62,8 +62,6 @@ from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     addr_and_port_str,
-    getenv_int,
-    getenv_bool,
     mkdir_p,
     IPAddress,
     IPNetwork,
