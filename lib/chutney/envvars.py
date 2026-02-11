@@ -111,3 +111,8 @@ TOR_SANDBOX = EnvVarBool(
     platform.system() == "Linux",
     "Whether to enable tor's sandbox",
 )
+ENABLE_CONTROLSOCKET = EnvVarBool(
+    "CHUTNEY_ENABLE_CONTROLSOCKET",
+    True,
+    "Whether to enable a unix control socket (via ControlSocket in torrc)",
+)

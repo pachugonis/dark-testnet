@@ -899,7 +899,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # if it doesn't work on their version of glibc.
     sandbox: bool = envvars.TOR_SANDBOX.get()
     # Whether to enable a unix control socket (via ControlSocket in torrc)
-    enable_controlsocket: bool = getenv_bool("CHUTNEY_ENABLE_CONTROLSOCKET", True)
+    enable_controlsocket: bool = envvars.ENABLE_CONTROLSOCKET.get()
     # Whether to use microdescriptors (via UseMicrodescriptors in torrc).
     use_microdescriptors: bool = True
 
