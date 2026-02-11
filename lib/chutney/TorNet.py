@@ -837,9 +837,9 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
-    tor: str = os.environ.get(TorBin().config_envvar(), "tor")
+    tor: str = TorBin().config_envvar().get()
     # path of the arti binary (for backend = NodeBackend.ARTI)
-    arti: str = os.environ.get(ArtiBin().config_envvar(), "arti")
+    arti: str = ArtiBin().config_envvar().get()
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
@@ -920,7 +920,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     @property
     def tor_gencert(self) -> str:
         """name or path of the tor-gencert binary (if present)"""
-        return os.getenv(TorGenCertBin().config_envvar(), "tor-gencert")
+        return TorGenCertBin().config_envvar().get()
 
     # XXX Move template logic into template
     @property
@@ -1265,7 +1265,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 all_family_ids.update(n._config.families)
         for fid in all_family_ids:
             cmdline = [
-                os.environ.get(TorBin().config_envvar(), "tor"),
+                TorBin().config_envvar().get(),
                 "--keygen-family",
                 str(get_familykey_path(fid, ext=False)),
             ]
