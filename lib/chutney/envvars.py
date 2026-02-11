@@ -121,3 +121,6 @@ TOR_GENCERT = EnvVarStr(
     "CHUTNEY_TOR_GENCERT", "tor-gencert", "Path to the tor-gencert executable."
 )
 ARTI = EnvVarStr("CHUTNEY_ARTI", "arti", "Path to the arti executable.")
+MIN_START_TIME = EnvVarInt(
+    "CHUTNEY_MIN_START_TIME", 0, "Minimum start time before verifying"
+)

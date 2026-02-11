@@ -1590,7 +1590,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         var.
         """
         # User overrode the dynamic time
-        return getenv_int("CHUTNEY_MIN_START_TIME", 0)
+        return envvars.MIN_START_TIME.get()
 
     def wait_for_bootstrap(
         self, limit_secs: int = getenv_int("CHUTNEY_START_TIME", 300)
