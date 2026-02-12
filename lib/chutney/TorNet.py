@@ -40,8 +40,6 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
-import os
-import platform
 import re
 import signal
 import sys
