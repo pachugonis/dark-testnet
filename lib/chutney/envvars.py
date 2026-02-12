@@ -5,7 +5,7 @@ import platform
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Callable, TypeVar, Optional, Generic
+from typing import TypeVar, Generic
 from typing_extensions import override
 
 C = TypeVar("C", covariant=True)
@@ -23,9 +23,15 @@ class EnvVar(Generic[C], ABC):
         self._all_instances.append(self)
 
     def get(self) -> C:
-        return getenv_type(
-            self._varname, self._default, self.parse, str(type(self._default))
-        )
+        strval = os.environ.get(self._varname)
+        if strval is None:
+            return self._default
+        try:
+            return self.parse(strval)
+        except ValueError:
+            raise ValueError(
+                f"Invalid value '{strval}' for environment variable '{self._varname}'"
+            )
 
     def varname(self) -> str:
         return self._varname
@@ -50,7 +56,12 @@ class EnvVarBool(EnvVar[bool]):
     @staticmethod
     @override
     def parse(x: str) -> bool:
-        return parse_boolenv(x)
+        low = x.lower()
+        if low in ["0", "false", "no", "n"]:
+            return False
+        if low in ["1", "true", "yes", "y"]:
+            return True
+        raise ValueError(f"invalid bool string: {x}")
 
 
 class EnvVarInt(EnvVar[int]):
@@ -72,30 +83,6 @@ class EnvVarPath(EnvVar[Path]):
     @override
     def parse(x: str) -> Path:
         return Path(x)
-
-
-# XXX wrapper to break circular import.
-# Will be moved from chutney.Util.
-def parse_boolenv(x: str) -> bool:
-    import chutney.Util
-
-    return chutney.Util.parse_boolenv(x)
-
-
-T = TypeVar("T")
-
-
-# XXX wrapper to break circular import.
-# Will be moved from chutney.Util.
-def getenv_type(
-    env_var: str,
-    default: T,
-    type_: Callable[[str], T],
-    type_name: Optional[str] = None,
-) -> T:
-    import chutney.Util
-
-    return chutney.Util.getenv_type(env_var, default, type_, type_name)
 
 
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
