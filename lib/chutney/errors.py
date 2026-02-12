@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from typing import List, Optional
-from chutney.known_bins import KnownBin
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Imports needed only for type-checking.
+    # Conditional to break dependency-cycles.
+    from chutney.known_bins import KnownBin
 
 
 class ChutneyError(Exception):

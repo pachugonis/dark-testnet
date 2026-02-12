@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import os
 import platform
 
@@ -7,6 +8,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TypeVar, Generic
 from typing_extensions import override
+
+from chutney.Util import IPNetwork
 
 C = TypeVar("C", covariant=True)
 
@@ -85,6 +88,15 @@ class EnvVarPath(EnvVar[Path]):
         return Path(x)
 
 
+class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):
+    @staticmethod
+    @override
+    def parse(x: str) -> list[IPNetwork]:
+        if not x:
+            return []
+        return [ipaddress.ip_network(n) for n in x.split(",")]
+
+
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
 CHUTNEY_PATH = EnvVarPath(
     "CHUTNEY_PATH",
@@ -102,9 +114,9 @@ DATA_DIR = EnvVarPath(
 CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
 LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
 
-TRUSTED_NETWORKS = EnvVarStr(
+TRUSTED_NETWORKS = EnvVarIPNetworkList(
     "CHUTNEY_TRUSTED_NETWORKS",
-    "",
+    [],
     "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
     + " Nodes with IPs on these will bind unsecured services to those IPs.",
 )
