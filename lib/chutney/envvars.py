@@ -141,3 +141,13 @@ DATA_BYTES = EnvVarInt(
     5_000_000,
     "The amount of data to send between each source-sink pair in `verify`",
 )
+CONNECTIONS = EnvVarInt(
+    "CHUTNEY_CONNECTIONS",
+    1,
+    "The number of times each client will connect in `verify`",
+)
+HS_MULTI_CLIENT = EnvVarBool(
+    "CHUTNEY_HS_MULTI_CLIENT",
+    False,
+    "Whether *every* client connects to each HS in `verify`",
+)
