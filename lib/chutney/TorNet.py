@@ -171,7 +171,7 @@ def get_absolute_net_path() -> Path:
     Finally, return the path relative to the current working directory,
     regardless of whether the path actually exists.
     """
-    data_dir = Path(os.environ.get("CHUTNEY_DATA_DIR", "net"))
+    data_dir = envvars.DATA_DIR.get()
     if data_dir.is_absolute():
         # if we are given an absolute path, we should use it
         # regardless of whether the directory exists

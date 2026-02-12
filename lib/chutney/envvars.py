@@ -106,6 +106,11 @@ CHUTNEY_PATH = EnvVarPath(
     + " Used as base of CHUTNEY_DATA_DIR if not already absolute."
     + " Default is current working dir.",
 )
+DATA_DIR = EnvVarPath(
+    "CHUTNEY_DATA_DIR",
+    Path("net"),
+    "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
+)
 
 CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
 LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
