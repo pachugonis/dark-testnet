@@ -151,7 +151,7 @@ def get_absolute_chutney_path() -> Path:
     # (./chutney already sets CHUTNEY_PATH using the path to the script)
     # use tools/test-network.sh if you want chutney to try really hard to find
     # itself
-    relative_chutney_path = Path(os.environ.get("CHUTNEY_PATH", os.getcwd()))
+    relative_chutney_path = envvars.CHUTNEY_PATH.get()
     return relative_chutney_path.resolve()
 
 

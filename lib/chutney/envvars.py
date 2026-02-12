@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import platform
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Callable, TypeVar, Optional, Generic
 from typing_extensions import override
 
@@ -65,6 +67,13 @@ class EnvVarStr(EnvVar[str]):
         return x
 
 
+class EnvVarPath(EnvVar[Path]):
+    @staticmethod
+    @override
+    def parse(x: str) -> Path:
+        return Path(x)
+
+
 # XXX wrapper to break circular import.
 # Will be moved from chutney.Util.
 def parse_boolenv(x: str) -> bool:
@@ -90,6 +99,13 @@ def getenv_type(
 
 
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
+CHUTNEY_PATH = EnvVarPath(
+    "CHUTNEY_PATH",
+    Path(os.getcwd()),
+    "Path to the chutney source directory."
+    + " Used as base of CHUTNEY_DATA_DIR if not already absolute."
+    + " Default is current working dir.",
+)
 
 CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
 LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
