@@ -13,7 +13,7 @@ from ipaddress import ip_address
 from typing import Union
 
 from . import NetworkTestFailure
-from chutney.Util import getenv_int, getenv_bool, IPAddress
+from chutney.Util import IPAddress
 from chutney.errors import ChutneyInternalError
 from chutney import envvars
 
