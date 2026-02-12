@@ -14,7 +14,7 @@ import stat
 
 from collections.abc import Iterable, Collection
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, overload, Generic, Union, TypeAlias
+from typing import Callable, TypeVar, Any, Optional, Generic, Union, TypeAlias
 from typing_extensions import ParamSpec, override
 
 from chutney.jsonable import ToCustomJsonable, CustomJsonable
@@ -190,96 +190,6 @@ class OptionalConversionDescriptor(Generic[T]):
         if not isinstance(value, Option):
             value = Option(value)
         setattr(obj, self._name, value)
-
-
-@overload
-def getenv_type(
-    env_var: str,
-    default: None,
-    type_: Callable[[str], T],
-    type_name: Optional[str] = None,
-) -> Optional[T]: ...
-
-
-@overload
-def getenv_type(
-    env_var: str, default: T, type_: Callable[[str], T], type_name: Optional[str] = None
-) -> T: ...
-
-
-def getenv_type(
-    env_var: str,
-    default: Optional[T],
-    type_: Callable[[str], T],
-    type_name: Optional[str] = None,
-) -> Optional[T]:
-    """
-    Return the value of the environment variable 'envar' as type_,
-    or 'default' if no such variable exists.
-
-    Raise ValueError using type_name if the environment variable is set,
-    but type_() raises a ValueError on its value. (If type_name is None
-    or empty, the ValueError uses type_'s string representation instead.)
-    """
-    strval = os.environ.get(env_var)
-    if strval is None:
-        return default
-    try:
-        return type_(strval)
-    except ValueError:
-        if not type_name:
-            type_name = str(type_)
-        raise ValueError(
-            (
-                "Invalid value for environment variable '{}': "
-                "expected {}, but got '{}'"
-            ).format(env_var, type_name, strval)
-        )
-
-
-@overload
-def getenv_int(env_var: str, default: None) -> Optional[int]: ...
-
-
-@overload
-def getenv_int(env_var: str, default: int) -> int: ...
-
-
-def getenv_int(env_var: str, default: Optional[int]) -> Optional[int]:
-    """
-    Return the value of the environment variable 'envar' as an int,
-    or 'default' if no such variable exists.
-
-    Raise ValueError if the environment variable is set, but is not an int.
-    """
-    return getenv_type(env_var, default, int, type_name="an int")
-
-
-def getenv_bool(env_var: str, default: bool) -> bool:
-    """
-    Return the value of the environment variable 'envar' as a bool,
-    or 'default' if no such variable exists.
-
-    Unlike bool(), converts 0, "False", and "No" to False.
-
-    Raise ValueError if the environment variable is set, but is not a bool.
-    """
-    # TODO: consider simplifying this and:
-    # * rejecting ints other than 0 or 1
-    # * accepting 'yes' for True
-    try:
-        # Handle integer values
-        return bool(getenv_int(env_var, int(default)))
-    except ValueError:
-        # Handle values that the user probably expects to be False
-        strval = os.environ.get(env_var)
-        # If the env var weren't set, the int path above would have succeeded,
-        # returning the default.
-        assert strval is not None
-        if strval.lower() in ["false", "no"]:
-            return False
-        else:
-            return getenv_type(env_var, default, bool, type_name="a bool")
 
 
 def find_executable_on_path(

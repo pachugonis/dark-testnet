@@ -13,8 +13,9 @@ from ipaddress import ip_address
 from typing import Union
 
 from . import NetworkTestFailure
-from chutney.Util import getenv_int, getenv_bool, IPAddress
+from chutney.Util import IPAddress
 from chutney.errors import ChutneyInternalError
+from chutney import envvars
 
 # Try to verify twice each consensus, but don't verify too fast
 V3_AUTH_VOTING_INTERVAL = chutney.TorNet.V3_AUTH_VOTING_INTERVAL
@@ -65,12 +66,12 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     # and a source-sink pair for a (bridge) client to each hidden service.
     #
     # Default value of 5 MB should be large enough to exercise SENDMEs.
-    DATALEN: int = getenv_int("CHUTNEY_DATA_BYTES", 5_000_000)
+    DATALEN: int = envvars.DATA_BYTES.get()
     # Calculate the amount of random data we should use
     randomlen = _calculate_randomlen(DATALEN)
     reps = _calculate_reps(DATALEN, randomlen)
     # connection_count: the number of times each client will connect
-    connection_count = getenv_int("CHUTNEY_CONNECTIONS", 1)
+    connection_count = envvars.CONNECTIONS.get()
     # sanity check
     if reps == 0:
         DATALEN = 0
@@ -129,7 +130,7 @@ def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bo
     )
     # If 1, every client connects to every HS. If 0, one client connects to each
     # HS. (Clients choose an exit at random, so this doesn't apply to exits.)
-    hs_multi_client = getenv_bool("CHUTNEY_HS_MULTI_CLIENT", False)
+    hs_multi_client = envvars.HS_MULTI_CLIENT.get()
     total_path_node_count += _configure_hs(
         tt,
         tmpdata,

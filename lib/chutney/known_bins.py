@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from typing_extensions import override
 
+from chutney import envvars
+
 _logger = logging.getLogger(__name__)
 
 
@@ -21,7 +23,7 @@ class KnownBin(ABC):
         ...
 
     @abstractmethod
-    def config_envvar(self) -> str:
+    def config_envvar(self) -> envvars.EnvVar[str]:
         """Environment variable that can be set to location of this bin"""
         ...
 
@@ -37,8 +39,8 @@ class TorBin(KnownBin):
         return "tor"
 
     @override
-    def config_envvar(self) -> str:
-        return "CHUTNEY_TOR"
+    def config_envvar(self) -> envvars.EnvVar[str]:
+        return envvars.TOR
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:
@@ -51,8 +53,8 @@ class TorGenCertBin(KnownBin):
         return "tor-gencert"
 
     @override
-    def config_envvar(self) -> str:
-        return "CHUTNEY_TOR_GENCERT"
+    def config_envvar(self) -> envvars.EnvVar[str]:
+        return envvars.TOR_GENCERT
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:
@@ -65,8 +67,8 @@ class ArtiBin(KnownBin):
         return "arti"
 
     @override
-    def config_envvar(self) -> str:
-        return "CHUTNEY_ARTI"
+    def config_envvar(self) -> envvars.EnvVar[str]:
+        return envvars.ARTI
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:

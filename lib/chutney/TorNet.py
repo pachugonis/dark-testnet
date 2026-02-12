@@ -40,8 +40,6 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
-import os
-import platform
 import re
 import signal
 import sys
@@ -51,6 +49,7 @@ import tomli_w
 import json
 
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
+from chutney import envvars
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
 from chutney.errors import (
     ChutneyError,
@@ -61,8 +60,6 @@ from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher
 from chutney.Util import (
     addr_and_port_str,
-    getenv_int,
-    getenv_bool,
     mkdir_p,
     IPAddress,
     IPNetwork,
@@ -152,7 +149,7 @@ def get_absolute_chutney_path() -> Path:
     # (./chutney already sets CHUTNEY_PATH using the path to the script)
     # use tools/test-network.sh if you want chutney to try really hard to find
     # itself
-    relative_chutney_path = Path(os.environ.get("CHUTNEY_PATH", os.getcwd()))
+    relative_chutney_path = envvars.CHUTNEY_PATH.get()
     return relative_chutney_path.resolve()
 
 
@@ -172,7 +169,7 @@ def get_absolute_net_path() -> Path:
     Finally, return the path relative to the current working directory,
     regardless of whether the path actually exists.
     """
-    data_dir = Path(os.environ.get("CHUTNEY_DATA_DIR", "net"))
+    data_dir = envvars.DATA_DIR.get()
     if data_dir.is_absolute():
         # if we are given an absolute path, we should use it
         # regardless of whether the directory exists
@@ -776,8 +773,8 @@ class NodeController(ABC):
 
 # TODO: Consider getting rid of these globals, particularly since they're not
 # contants; e.g. we change them at runtime in `Network.bootstrap`.
-CUR_CONFIG_PHASE: int = getenv_int("CHUTNEY_CONFIG_PHASE", 1)
-CUR_LAUNCH_PHASE: int = getenv_int("CHUTNEY_LAUNCH_PHASE", 1)
+CUR_CONFIG_PHASE: int = envvars.CONFIG_PHASE.get()
+CUR_LAUNCH_PHASE: int = envvars.LAUNCH_PHASE.get()
 
 
 @dataclasses.dataclass
@@ -836,9 +833,9 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
-    tor: str = os.environ.get(TorBin().config_envvar(), "tor")
+    tor: str = TorBin().config_envvar().get()
     # path of the arti binary (for backend = NodeBackend.ARTI)
-    arti: str = os.environ.get(ArtiBin().config_envvar(), "arti")
+    arti: str = ArtiBin().config_envvar().get()
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
@@ -850,14 +847,12 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # controlport, will be bound to the node's assigned IP addresses if they
     # fall within one of these (in addition to binding them to localhost).
     trusted_networks: list[IPNetwork] = dataclasses.field(
-        default_factory=lambda: Option(os.environ.get("CHUTNEY_TRUSTED_NETWORKS"))
-        .map(lambda s: [ipaddress.ip_network(a) for a in s.split(",")])
-        .unwrap_or([])
+        default_factory=lambda: envvars.TRUSTED_NETWORKS.get()
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(os.environ.get("CHUTNEY_LISTEN_ADDRESS", "127.0.0.1"))
+        default=Option(envvars.LISTEN_ADDRESS.get() or None)
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
@@ -865,10 +860,10 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # enforcement for our internal usage, but allow callers to initialize and
     # assign as if it were `Optional[str]`.
     ipv6_addr: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(os.environ.get("CHUTNEY_LISTEN_ADDRESS_V6", None))
+        default=Option(envvars.LISTEN_ADDRESS_V6.get() or None)
     )
     # Whether to disable all ipv6 functionality
-    disableipv6: bool = getenv_bool("CHUTNEY_DISABLE_IPV6", False)
+    disableipv6: bool = envvars.DISABLE_IPV6.get()
     # Directory server flags. Used only if authority=True
     dirserver_flags: str = "no-v2"
     # None means wait on launch (requires RunAsDaemon),
@@ -880,14 +875,13 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     poll_launch_time_default: float = 0.1
     # The PID of the controlling script
     # (for __OwningControllerProcess)
-    controlling_pid: int = getenv_int("CHUTNEY_CONTROLLING_PID", 0)
+    controlling_pid: int = envvars.CONTROLLING_PID.get()
     # The path to a DNS config file for Tor Exits. If this file
     # is empty or unreadable, Tor will try 127.0.0.1:53.
-    dns_conf: Optional[str] = (
-        os.environ.get("CHUTNEY_DNS_CONF", "/etc/resolv.conf")
-        if "CHUTNEY_DNS_CONF" in os.environ
-        else None
-    )
+    #
+    # the default resolv.conf path is set at compile time
+    # there's no easy way to get it out of tor, so we use the typical value
+    dns_conf: str = envvars.DNS_CONF.get()
     # The phase at which this instance needs to be configured.
     config_phase: int = 1
     # The phase at which this instance needs to be launched.
@@ -897,9 +891,9 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # Chutney users can disable the sandbox using:
     #    export CHUTNEY_TOR_SANDBOX=0
     # if it doesn't work on their version of glibc.
-    sandbox: bool = getenv_bool("CHUTNEY_TOR_SANDBOX", platform.system() == "Linux")
+    sandbox: bool = envvars.TOR_SANDBOX.get()
     # Whether to enable a unix control socket (via ControlSocket in torrc)
-    enable_controlsocket: bool = getenv_bool("CHUTNEY_ENABLE_CONTROLSOCKET", True)
+    enable_controlsocket: bool = envvars.ENABLE_CONTROLSOCKET.get()
     # Whether to use microdescriptors (via UseMicrodescriptors in torrc).
     use_microdescriptors: bool = True
 
@@ -920,7 +914,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     @property
     def tor_gencert(self) -> str:
         """name or path of the tor-gencert binary (if present)"""
-        return os.getenv(TorGenCertBin().config_envvar(), self.tor + "-gencert")
+        return TorGenCertBin().config_envvar().get()
 
     # XXX Move template logic into template
     @property
@@ -931,19 +925,11 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         ocp_line = "__OwningControllerProcess %d" % (cpid)
         # if we want to leave the network running, or controlling_pid is 1
         # (or invalid)
-        if (
-            getenv_int("CHUTNEY_START_TIME", 0) < 0
-            or getenv_int("CHUTNEY_BOOTSTRAP_TIME", 0) < 0
-            or getenv_int("CHUTNEY_STOP_TIME", 0) < 0
-            or cpid <= 1
-        ):
+        if cpid <= 1:
             return "#" + ocp_line
         else:
             return ocp_line
 
-    # the default resolv.conf path is set at compile time
-    # there's no easy way to get it out of tor, so we use the typical value
-    DEFAULT_DNS_RESOLV_CONF = Path("/etc/resolv.conf")
     # if we can't find the specified file, use this one as a substitute
     OFFLINE_DNS_RESOLV_CONF = Path("/dev/null")
 
@@ -961,14 +947,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         if my_dns_conf == "":
             # if the user asked for tor's default
             return "#ServerDNSResolvConfFile using tor's compile-time default"
-        elif my_dns_conf is None:
-            # if there is no DNS conf file set
-            logger.debug(
-                "CHUTNEY_DNS_CONF not specified, using '{}'.".format(
-                    NodeConfig.DEFAULT_DNS_RESOLV_CONF
-                )
-            )
-            dns_conf = NodeConfig.DEFAULT_DNS_RESOLV_CONF
         else:
             dns_conf = Path(my_dns_conf)
         dns_conf = dns_conf.resolve()
@@ -1094,11 +1072,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.family_members: dict[str, list[Node]] = dict()
 
         # bootstrap_time: How long in seconds we should verify (and similar
-        # commands) wait for a successful outcome. We check BOOTSTRAP_TIME for
-        # compatibility with old versions of test-network.sh
-        self.bootstrap_time: int = getenv_int(
-            "CHUTNEY_BOOTSTRAP_TIME", getenv_int("BOOTSTRAP_TIME", 60)
-        )
+        # commands) wait for a successful outcome.
+        self.bootstrap_time: int = envvars.BOOTSTRAP_TIME.get()
 
         # orport_base, dirport_base, controlport_base, socksport_base,
         # extorport_base, ptport_base: the initial port numbers used by nodenum 0.
@@ -1276,7 +1251,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 all_family_ids.update(n._config.families)
         for fid in all_family_ids:
             cmdline = [
-                os.environ.get(TorBin().config_envvar(), "tor"),
+                TorBin().config_envvar().get(),
                 "--keygen-family",
                 str(get_familykey_path(fid, ext=False)),
             ]
@@ -1580,9 +1555,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
     PRINT_NETWORK_STATUS_DELAY = V3_AUTH_VOTING_INTERVAL / 2.0
     CHECKS_PER_PRINT = PRINT_NETWORK_STATUS_DELAY / CHECK_NETWORK_STATUS_DELAY
 
-    # By default, there is no minimum start time.
-    MIN_START_TIME_DEFAULT = 0
-
     # There are 7 v3 directory document types, but some networks only use 6,
     # because they don't have a bridge authority
     DOC_TYPE_DISPLAY_LIMIT_BRIDGEAUTH = 7
@@ -1604,14 +1576,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         var.
         """
         # User overrode the dynamic time
-        env_min_time = getenv_int("CHUTNEY_MIN_START_TIME", None)
-        if env_min_time is not None:
-            return env_min_time
-        return Network.MIN_START_TIME_DEFAULT
+        return envvars.MIN_START_TIME.get()
 
-    def wait_for_bootstrap(
-        self, limit_secs: int = getenv_int("CHUTNEY_START_TIME", 300)
-    ) -> None:
+    def wait_for_bootstrap(self, limit_secs: int = envvars.START_TIME.get()) -> None:
         """
         Wait for the network to bootstrap. Raises `TimeoutException` on timeout.
         """
@@ -1933,7 +1900,11 @@ def getNetworks() -> list[str]:
 def _parse_args(
     argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
 ) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="chutney")
+    parser = argparse.ArgumentParser(
+        prog="chutney",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=envvars.EnvVar.help_all(),
+    )
     subparsers = parser.add_subparsers(dest="cmd")
 
     def add_cli_command(
@@ -2025,7 +1996,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     Raises an exception derived from `ChutneyError` on failure.
     """
-    level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
+    level = logging.DEBUG if envvars.DEBUG.get() else logging.INFO
     logging.basicConfig(level=level)
 
     args = _parse_args(argv)
