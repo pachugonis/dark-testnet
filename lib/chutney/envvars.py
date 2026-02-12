@@ -126,6 +126,11 @@ LISTEN_ADDRESS = EnvVarStr(
     "127.0.0.1",
     "IPv4 address to listen on, if any.",
 )
+LISTEN_ADDRESS_V6 = EnvVarStr(
+    "CHUTNEY_LISTEN_ADDRESS_V6",
+    "",
+    "IPv6 address to listen on, if any.",
+)
 DISABLE_IPV6 = EnvVarBool(
     "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
 )

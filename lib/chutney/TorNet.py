@@ -866,7 +866,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # enforcement for our internal usage, but allow callers to initialize and
     # assign as if it were `Optional[str]`.
     ipv6_addr: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(os.environ.get("CHUTNEY_LISTEN_ADDRESS_V6", None))
+        default=Option(envvars.LISTEN_ADDRESS_V6.get() or None)
     )
     # Whether to disable all ipv6 functionality
     disableipv6: bool = envvars.DISABLE_IPV6.get()
