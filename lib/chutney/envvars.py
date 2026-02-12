@@ -121,6 +121,11 @@ TRUSTED_NETWORKS = EnvVarStr(
     "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
     + " Nodes with IPs on these will bind unsecured services to those IPs.",
 )
+LISTEN_ADDRESS = EnvVarStr(
+    "CHUTNEY_LISTEN_ADDRESS",
+    "127.0.0.1",
+    "IPv4 address to listen on, if any.",
+)
 DISABLE_IPV6 = EnvVarBool(
     "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
 )

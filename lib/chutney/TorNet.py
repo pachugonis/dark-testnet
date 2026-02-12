@@ -858,7 +858,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
     ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(os.environ.get("CHUTNEY_LISTEN_ADDRESS", "127.0.0.1"))
+        default=Option(envvars.LISTEN_ADDRESS.get() or None)
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
