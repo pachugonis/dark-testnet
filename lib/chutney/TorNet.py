@@ -1999,7 +1999,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     Raises an exception derived from `ChutneyError` on failure.
     """
-    level = logging.DEBUG if os.environ.get("CHUTNEY_DEBUG", "") != "" else logging.INFO
+    level = logging.DEBUG if envvars.DEBUG.get() else logging.INFO
     logging.basicConfig(level=level)
 
     args = _parse_args(argv)
