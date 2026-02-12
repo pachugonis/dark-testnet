@@ -115,6 +115,12 @@ DATA_DIR = EnvVarPath(
 CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
 LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
 
+TRUSTED_NETWORKS = EnvVarStr(
+    "CHUTNEY_TRUSTED_NETWORKS",
+    "",
+    "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
+    + " Nodes with IPs on these will bind unsecured services to those IPs.",
+)
 DISABLE_IPV6 = EnvVarBool(
     "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
 )

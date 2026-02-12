@@ -849,9 +849,11 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # controlport, will be bound to the node's assigned IP addresses if they
     # fall within one of these (in addition to binding them to localhost).
     trusted_networks: list[IPNetwork] = dataclasses.field(
-        default_factory=lambda: Option(os.environ.get("CHUTNEY_TRUSTED_NETWORKS"))
-        .map(lambda s: [ipaddress.ip_network(a) for a in s.split(",")])
-        .unwrap_or([])
+        default_factory=lambda: (
+            [ipaddress.ip_network(a) for a in x.split(",")]
+            if (x := envvars.TRUSTED_NETWORKS.get())
+            else []
+        )
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
