@@ -64,7 +64,7 @@ if [ -z "$NETWORK_ARG" ]; then
 fi
 
 # Get a working chutney
-if [ -n "$CHUTNEY_PATH" ]; then
+if [ -n "${CHUTNEY_PATH:+x}" ]; then
   # CHUTNEY_PATH is set; use the corresponding chutney bin
   CHUTNEY="$CHUTNEY_PATH/chutney"
   if [ ! -x "$CHUTNEY" ]; then
