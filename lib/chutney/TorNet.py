@@ -145,34 +145,10 @@ def get_absolute_net_path() -> Path:
     Returns the absolute path of the "net" directory that chutney should
     use to store "node*" directories containing torrcs and tor runtime data.
 
-    If the CHUTNEY_DATA_DIR environmental variable is an absolute path, it
-    is returned unmodified, regardless of whether the path actually exists.
-    (Chutney creates any directories that do not exist.)
-
-    Otherwise, if it is a relative path, and there is an existing directory
-    with that name in the directory containing the chutney executable
-    script, return that path (this check exists for legacy reasons).
-
-    Finally, return the path relative to the current working directory,
-    regardless of whether the path actually exists.
+    This is the resolved version of CHUTNEY_DATA_DIR, which defaults to the
+    current-working-directory.
     """
-    data_dir = envvars.DATA_DIR.get()
-    if data_dir.is_absolute():
-        # if we are given an absolute path, we should use it
-        # regardless of whether the directory exists
-        return data_dir
-    # use the chutney path as the default
-    absolute_chutney_path = envvars.CHUTNEY_PATH.get().resolve()
-    relative_net_path = Path(data_dir)
-    # but what is it relative to?
-    # let's check if there's an existing directory with this name in
-    # CHUTNEY_PATH first, to preserve backwards-compatible behaviour
-    chutney_net_path = Path(absolute_chutney_path, relative_net_path)
-    if chutney_net_path.is_dir():
-        return chutney_net_path
-    # ok, it's relative to the current directory, whatever that is, and whether
-    # or not the path actually exists
-    return relative_net_path.resolve()
+    return envvars.DATA_DIR.get().resolve()
 
 
 def get_absolute_nodes_path() -> Path:

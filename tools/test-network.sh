@@ -33,7 +33,6 @@ export CHUTNEY_DNS_CONF="${CHUTNEY_DNS_CONF:-/dev/null}"
 : "${NETWORK_DRY_RUN:=false}"
 : "${USE_COVERAGE_BINARY:=false}"
 : "${CHUTNEY_DIAGNOSTICS:=false}"
-: "${CHUTNEY_DATA_DIR:=}"
 : "${TOR_DIR:=}"
 : "${TOR_APP_DIR:=}"
 : "${CHUTNEY_PATH:=}"
@@ -353,6 +352,12 @@ fi
 # make chutney path absolute
 if [ -d "$PWD/$CHUTNEY_PATH" ] && [ -x "$PWD/$CHUTNEY_PATH/chutney" ]; then
     export CHUTNEY_PATH="$PWD/$CHUTNEY_PATH"
+fi
+
+# set CHUTNEY_DATA_DIR if user hasn't.
+if [ -z "${CHUTNEY_DATA_DIR:+x}" ]; then
+    # We ensured above that CHUTNEY_PATH is set
+    export CHUTNEY_DATA_DIR="$CHUTNEY_PATH"/net
 fi
 
 # For picking up the right tor binaries
