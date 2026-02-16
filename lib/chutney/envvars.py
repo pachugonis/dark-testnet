@@ -19,7 +19,12 @@ class EnvVar(Generic[C], ABC):
     # environment variables.
     _all_instances: list[EnvVar[object]] = []
 
+    # Mandatory prefix. We require the caller to include this rather than
+    # adding it ourselves to make the individual env-var names grep-able.
+    _PREFIX = "CHUTNEY_"
+
     def __init__(self, varname: str, default: C, help: str) -> None:
+        assert varname.startswith(EnvVar._PREFIX)
         self._varname = varname
         self._default = default
         self._help = help
