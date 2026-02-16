@@ -140,19 +140,6 @@ class AddressAssignmentStrategy(FromDecodedJson, Enum):
         return AddressAssignmentStrategy[check_type(o, str)]
 
 
-def get_absolute_chutney_path() -> Path:
-    """
-    Returns the absolute path of the directory containing the chutney
-    executable script.
-    """
-    # use the current directory as the default
-    # (./chutney already sets CHUTNEY_PATH using the path to the script)
-    # use tools/test-network.sh if you want chutney to try really hard to find
-    # itself
-    relative_chutney_path = envvars.CHUTNEY_PATH.get()
-    return relative_chutney_path.resolve()
-
-
 def get_absolute_net_path() -> Path:
     """
     Returns the absolute path of the "net" directory that chutney should
@@ -175,7 +162,7 @@ def get_absolute_net_path() -> Path:
         # regardless of whether the directory exists
         return data_dir
     # use the chutney path as the default
-    absolute_chutney_path = get_absolute_chutney_path()
+    absolute_chutney_path = envvars.CHUTNEY_PATH.get().resolve()
     relative_net_path = Path(data_dir)
     # but what is it relative to?
     # let's check if there's an existing directory with this name in
