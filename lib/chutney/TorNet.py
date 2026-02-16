@@ -140,17 +140,6 @@ class AddressAssignmentStrategy(FromDecodedJson, Enum):
         return AddressAssignmentStrategy[check_type(o, str)]
 
 
-def get_absolute_net_path() -> Path:
-    """
-    Returns the absolute path of the "net" directory that chutney should
-    use to store "node*" directories containing torrcs and tor runtime data.
-
-    This is the resolved version of CHUTNEY_DATA_DIR, which defaults to the
-    current-working-directory.
-    """
-    return envvars.DATA_DIR.get().resolve()
-
-
 def get_absolute_nodes_path() -> Path:
     """
     Returns the absolute path of the "nodes" symlink that points to the
@@ -162,7 +151,7 @@ def get_absolute_nodes_path() -> Path:
 
     See get_new_absolute_nodes_path() for more details.
     """
-    return Path(get_absolute_net_path(), "nodes")
+    return Path(envvars.DATA_DIR.get().resolve(), "nodes")
 
 
 def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
