@@ -157,6 +157,12 @@ DATA_DIR = EnvVarPath(
     Path("net"),
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
+
+# TODO: it might be nice to register these with the command-line parser.
+# Since they're relevant for multiple subcommands though, it's a little bit of
+# work to scope them appropriately, ensure any command-line overrides are propagated
+# correctly, etc. Leaving these for the moment.
+
 MIN_START_TIME = EnvVarInt(
     "CHUTNEY_MIN_START_TIME", 0, "Minimum start time before verifying"
 )
