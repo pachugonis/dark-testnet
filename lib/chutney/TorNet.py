@@ -46,6 +46,8 @@ import time
 import tomli_w
 import json
 
+import chutney.network_tests.verify
+
 from chutney.node_builder import NodeBuilder
 from chutney.node_controller import NodeController
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
@@ -387,8 +389,6 @@ class Node(ToCustomJsonable):
         if self._config.hs:
             # Currently all hidden services redirect to the same port,
             # for compatibility with the test in `network_tests/verify.py`
-            import chutney.network_tests.verify
-
             return Option(chutney.network_tests.verify.LISTEN_PORT)
         else:
             return Option(None)
@@ -1872,6 +1872,17 @@ class BootstrapCLICommand(CLICommand):
 
 
 class VerifyCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        chutney.network_tests.verify.VerifyConfig.register_argparser(
+            self._get_subparser()
+        )
+
     @staticmethod
     @override
     def name() -> str:
@@ -1886,9 +1897,10 @@ class VerifyCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        import chutney.network_tests.verify
-
-        chutney.network_tests.verify.run_test(network)
+        chutney.network_tests.verify.run_test(
+            network,
+            config=chutney.network_tests.verify.VerifyConfig.from_envargs(ns=ns),
+        )
 
 
 _NETWORKS: Traversable = (
