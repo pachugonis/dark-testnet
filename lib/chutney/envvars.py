@@ -98,13 +98,6 @@ class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):
 
 
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
-CHUTNEY_PATH = EnvVarPath(
-    "CHUTNEY_PATH",
-    Path(os.getcwd()),
-    "Path to the chutney source directory."
-    + " Used as base of CHUTNEY_DATA_DIR if not already absolute."
-    + " Default is current working dir.",
-)
 DATA_DIR = EnvVarPath(
     "CHUTNEY_DATA_DIR",
     Path("net"),

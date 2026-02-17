@@ -28,7 +28,6 @@ EOF
 : "${NETWORK_DRY_RUN:=false}"
 : "${USE_COVERAGE_BINARY:=false}"
 : "${CHUTNEY_DIAGNOSTICS:=false}"
-: "${CHUTNEY_DATA_DIR:=}"
 : "${ECHO:=echo}"
 : "${DIAGNOSTICS:=$(dirname "$0")/diagnostics.sh}"
 myname=$(basename "$0")
@@ -64,7 +63,7 @@ if [ -z "$NETWORK_ARG" ]; then
 fi
 
 # Get a working chutney
-if [ -n "$CHUTNEY_PATH" ]; then
+if [ -n "${CHUTNEY_PATH:+x}" ]; then
   # CHUTNEY_PATH is set; use the corresponding chutney bin
   CHUTNEY="$CHUTNEY_PATH/chutney"
   if [ ! -x "$CHUTNEY" ]; then
@@ -79,6 +78,11 @@ else
     echo "$myname: No chutney executable found at $CHUTNEY. Try setting $CHUTNEY_PATH."
     exit 1
   fi
+fi
+
+# if CHUTNEY_DATA_DIR is not set, but CHUTNEY_PATH is, use the latter to set CHUTNEY_DATA_DIR
+if [ -z "${CHUTNEY_DATA_DIR:+x}" ] && [ -n "${CHUTNEY_PATH:+x}" ]; then
+    export CHUTNEY_DATA_DIR="$CHUTNEY_PATH"/net
 fi
 
 if ! "$CHUTNEY" supported "$NETWORK_ARG"; then

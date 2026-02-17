@@ -140,54 +140,6 @@ class AddressAssignmentStrategy(FromDecodedJson, Enum):
         return AddressAssignmentStrategy[check_type(o, str)]
 
 
-def get_absolute_chutney_path() -> Path:
-    """
-    Returns the absolute path of the directory containing the chutney
-    executable script.
-    """
-    # use the current directory as the default
-    # (./chutney already sets CHUTNEY_PATH using the path to the script)
-    # use tools/test-network.sh if you want chutney to try really hard to find
-    # itself
-    relative_chutney_path = envvars.CHUTNEY_PATH.get()
-    return relative_chutney_path.resolve()
-
-
-def get_absolute_net_path() -> Path:
-    """
-    Returns the absolute path of the "net" directory that chutney should
-    use to store "node*" directories containing torrcs and tor runtime data.
-
-    If the CHUTNEY_DATA_DIR environmental variable is an absolute path, it
-    is returned unmodified, regardless of whether the path actually exists.
-    (Chutney creates any directories that do not exist.)
-
-    Otherwise, if it is a relative path, and there is an existing directory
-    with that name in the directory containing the chutney executable
-    script, return that path (this check exists for legacy reasons).
-
-    Finally, return the path relative to the current working directory,
-    regardless of whether the path actually exists.
-    """
-    data_dir = envvars.DATA_DIR.get()
-    if data_dir.is_absolute():
-        # if we are given an absolute path, we should use it
-        # regardless of whether the directory exists
-        return data_dir
-    # use the chutney path as the default
-    absolute_chutney_path = get_absolute_chutney_path()
-    relative_net_path = Path(data_dir)
-    # but what is it relative to?
-    # let's check if there's an existing directory with this name in
-    # CHUTNEY_PATH first, to preserve backwards-compatible behaviour
-    chutney_net_path = Path(absolute_chutney_path, relative_net_path)
-    if chutney_net_path.is_dir():
-        return chutney_net_path
-    # ok, it's relative to the current directory, whatever that is, and whether
-    # or not the path actually exists
-    return relative_net_path.resolve()
-
-
 def get_absolute_nodes_path() -> Path:
     """
     Returns the absolute path of the "nodes" symlink that points to the
@@ -199,7 +151,7 @@ def get_absolute_nodes_path() -> Path:
 
     See get_new_absolute_nodes_path() for more details.
     """
-    return Path(get_absolute_net_path(), "nodes")
+    return Path(envvars.DATA_DIR.get().resolve(), "nodes")
 
 
 def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
