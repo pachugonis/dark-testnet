@@ -72,7 +72,6 @@ from chutney.Util import (
     IPAddress,
     IPNetwork,
     Option,
-    OptionalConversionDescriptor,
 )
 from collections.abc import Collection
 
@@ -266,9 +265,9 @@ class Node(ToCustomJsonable):
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
-        if self._config.ipv6_addr.is_none():
+        base_str = self._config.ipv6_addr
+        if base_str is None:
             return Option(None)
-        base_str = self._config.ipv6_addr.unwrap()
         # The IPv6Address constructor doesn't recognize addresses enclosed in
         # brackets (e.g. `[::1]`), and indeed they aren't really part of the
         # address. We used to expect them though, so for now strip them out for
@@ -608,11 +607,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
-    # We use OptionalConversionDescriptor here to get `Option[str]`'s
-    # enforcement for our internal usage, but allow callers to initialize and
-    # assign as if it were `Optional[str]`.
-    ipv6_addr: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(envvars.LISTEN_ADDRESS_V6.get() or None)
+    ipv6_addr: Optional[str] = dataclasses.field(
+        default_factory=lambda: envvars.LISTEN_ADDRESS_V6.get() or None
     )
     # Whether to disable all ipv6 functionality
     disableipv6: bool = envvars.DISABLE_IPV6.get()

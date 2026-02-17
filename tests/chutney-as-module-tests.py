@@ -14,7 +14,6 @@ from typing_extensions import override
 
 from chutney import TorNet
 from chutney.TorNet import NodeConfig, AddressAssignmentStrategy
-from chutney.Util import Option
 from chutney.network_tests import verify
 
 _LOOPBACK_IPV4_NET = ipaddress.IPv4Network("127.0.0.0/8")
@@ -106,7 +105,7 @@ class Tests(unittest.TestCase):
             controlling_pid=os.getpid(),
             # ipv6 only has a single loopback address; use a private address
             # range instead.
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
         )
         self.network.addNodes(basic_net_configs(base))
 
@@ -127,7 +126,7 @@ class Tests(unittest.TestCase):
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
             ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
         )
         self.network.addNodes(basic_net_configs(base))
         for node in self.network.nodes:
@@ -151,7 +150,7 @@ class Tests(unittest.TestCase):
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
             ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
             trusted_networks=[_PRIVATE_IPV4_NET, _PRIVATE_IPV6_NET],
         )
         self.network.addNodes(basic_net_configs(base))
