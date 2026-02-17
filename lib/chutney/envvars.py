@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import os
-import platform
 
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -159,11 +158,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-TOR_SANDBOX = EnvVarBool(
-    "CHUTNEY_TOR_SANDBOX",
-    platform.system() == "Linux",
-    "Whether to enable tor's sandbox",
-)
 ENABLE_CONTROLSOCKET = EnvVarBool(
     "CHUTNEY_ENABLE_CONTROLSOCKET",
     True,

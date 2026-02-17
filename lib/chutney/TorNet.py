@@ -39,6 +39,7 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
+import platform
 import re
 import signal
 import sys
@@ -669,7 +670,14 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # Chutney users can disable the sandbox using:
     #    export CHUTNEY_TOR_SANDBOX=0
     # if it doesn't work on their version of glibc.
-    sandbox: bool = envvars.TOR_SANDBOX.get()
+    _TOR_SANDBOX_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_TOR_SANDBOX",
+        platform.system() == "Linux",
+        "Whether to enable tor's sandbox",
+    )
+    sandbox: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._TOR_SANDBOX_ENV.get()
+    )
     # Whether to enable a unix control socket (via ControlSocket in torrc)
     enable_controlsocket: bool = envvars.ENABLE_CONTROLSOCKET.get()
     # Whether to use microdescriptors (via UseMicrodescriptors in torrc).
@@ -810,6 +818,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
         NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
         NodeConfig._DNS_CONF_ENV.register_argparser(parser)
+        NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -825,6 +834,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
             controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
             dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
+            sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
         )
 
 
