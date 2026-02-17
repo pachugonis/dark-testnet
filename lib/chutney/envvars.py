@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import ipaddress
 import os
 import platform
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Optional, cast
 from typing_extensions import override
 
 from chutney.Util import IPNetwork
@@ -39,16 +40,55 @@ class EnvVar(Generic[C], ABC):
         # Register this instance
         EnvVar._all_instances.append(self)
 
-    def get(self) -> C:
-        strval = os.environ.get(self._varname)
-        if strval is None:
-            return self._default
-        try:
-            return self.parse(strval)
-        except ValueError:
-            raise ValueError(
-                f"Invalid value '{strval}' for environment variable '{self._varname}'"
-            )
+        # Initialized in `register_argparser`
+        self._flag_name: Optional[str] = None
+        self._ns_name: Optional[str] = None
+
+    def register_argparser(self, parser: argparse.ArgumentParser) -> None:
+        """Register this environment variable with an argparse.ArgumentParser
+
+        This registers a command-line flag to support overriding the environment
+        variable. Pass the namespace resulting from parsing the command-line
+        parameters to `get` to actually do so.
+        """
+        self._flag_name = "--" + self._varname.removeprefix(
+            EnvVar._PREFIX
+        ).lower().replace("_", "-")
+        parser.add_argument(
+            self._flag_name,
+            type=self.parse,
+            help=self.help() + f" (overrides {self._varname})",
+        )
+        # The name of the attribute where we expect the parser to store the
+        # provided argument, if any.
+        self._ns_name = self._flag_name.removeprefix("--").replace("-", "_")
+
+    def get(self, ns: Optional[argparse.Namespace] = None) -> C:
+        """Retrieve the effective value.
+
+        `ns` should only be provided if `register_argparser` was previously
+        called, in which case `ns` is expected to be the resulting namespace
+        after parsing the arguments. If `ns` has a value for this variable, it
+        takes precedence over the environment variable.
+        """
+        if (ns_name := self._ns_name) is not None and (
+            val := getattr(ns, ns_name, None)
+        ) is not None:
+            # Tell mypy to trust that val is of type `C`.
+            # It *should* be, *assuming* that the namespace provided to us was
+            # actually generated from a parser previously passed to
+            # `register_argparser`.  It'd be nice to use `isinstance` or
+            # `check_type` to validate it, but those don't support using a type
+            # variable.
+            return cast("C", val)
+        if (strval := os.environ.get(self._varname)) is not None:
+            try:
+                return self.parse(strval)
+            except ValueError:
+                raise ValueError(
+                    f"Invalid value '{strval}' for environment variable '{self._varname}'"
+                )
+        return self._default
 
     def varname(self) -> str:
         return self._varname
