@@ -158,11 +158,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-ENABLE_CONTROLSOCKET = EnvVarBool(
-    "CHUTNEY_ENABLE_CONTROLSOCKET",
-    True,
-    "Whether to enable a unix control socket (via ControlSocket in torrc)",
-)
 TOR = EnvVarStr("CHUTNEY_TOR", "tor", "Path to the tor executable.")
 TOR_GENCERT = EnvVarStr(
     "CHUTNEY_TOR_GENCERT", "tor-gencert", "Path to the tor-gencert executable."

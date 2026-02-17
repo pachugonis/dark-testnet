@@ -679,7 +679,14 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         default_factory=lambda: NodeConfig._TOR_SANDBOX_ENV.get()
     )
     # Whether to enable a unix control socket (via ControlSocket in torrc)
-    enable_controlsocket: bool = envvars.ENABLE_CONTROLSOCKET.get()
+    _ENABLE_CONTROLSOCKET_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_ENABLE_CONTROLSOCKET",
+        True,
+        "Whether to enable a unix control socket (via ControlSocket in torrc)",
+    )
+    enable_controlsocket: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._ENABLE_CONTROLSOCKET_ENV.get()
+    )
     # Whether to use microdescriptors (via UseMicrodescriptors in torrc).
     use_microdescriptors: bool = True
 
@@ -819,6 +826,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
         NodeConfig._DNS_CONF_ENV.register_argparser(parser)
         NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
+        NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -835,6 +843,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
             dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
             sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
+            enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV.get(ns=ns),
         )
 
 
