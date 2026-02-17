@@ -210,7 +210,11 @@ configs = [
 
 # Add the configs to the network, getting their corresponding Nodes.
 network.addNodes(configs)
-# Configure the network, generating the torrc files, and validating that they are well-formed.
-network.configure()
+# Configure the first phase of the network, generating the torrc files, and
+# validating that they are well-formed.
+# (It'd be nice to do all phases, but that may require *starting* launch_phase=1 nodes
+# before we could configure config_phase=2 nodes, etc, which is heavier weight than
+# we want this test to be)
+network.configure(config_phase=1)
 
 print("Passed")

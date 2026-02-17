@@ -118,7 +118,7 @@ class Tests(unittest.TestCase):
             self.assertNotIn(ipv6, v6addresses)
             v6addresses.add(ipv6)
 
-        self.network.configure()
+        self.network.configure(config_phase=1)
         # we *don't* attempt to bootstrap or use the network here, since the private
         # address space we're using is probably not set up on the host system.
 

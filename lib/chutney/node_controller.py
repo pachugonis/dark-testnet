@@ -99,6 +99,8 @@ class NodeController(ABC):
     @abstractmethod
     def getNodeDirInfoStatus(
         self,
+        *,
+        launch_phase: int,
     ) -> Optional[tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]]:
         """Return a 3-tuple describing the status of this node's descriptor, in
         all the directory documents of nodes with up through `launch_phase`

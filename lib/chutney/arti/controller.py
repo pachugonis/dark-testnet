@@ -277,6 +277,8 @@ class LocalArtiNodeController(NodeController):
     @override
     def getNodeDirInfoStatus(
         self,
+        *,
+        launch_phase: int,
     ) -> Optional[tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]]:
         if self._node._config.consensus_member:
             raise chutney.errors.ChutneyUnimplementedError(

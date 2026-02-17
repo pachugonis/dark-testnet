@@ -38,7 +38,6 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
-import os
 import re
 import signal
 import sys
@@ -1028,7 +1027,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         if missing_any:
             raise ChutneyError("Missing requirements to run this network")
 
-    def _exchange_restricted_discovery_keys(self) -> None:
+    def _exchange_restricted_discovery_keys(self, *, config_phase: int) -> None:
         """Generate restricted discovery client keys and register the public keys
         with the corresponding hidden services.
         """
@@ -1041,7 +1040,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for hs_client in (
             n
             for n in self._nodes
-            if n._config.config_phase == envvars.CONFIG_PHASE.get()
+            if n._config.config_phase == config_phase
             and n._config.hs_client_restricted_discovery_server_tags
         ):
             for (
@@ -1062,7 +1061,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                             f"{n.nick} can't authorize with {server.nick};"
                             " restricted discovery disabled"
                         )
-                    if server._config.config_phase > envvars.CONFIG_PHASE.get():
+                    if server._config.config_phase > config_phase:
                         raise ChutneyError(
                             f"{n.nick} can't authorize with {server.nick},"
                             " which isn't configured yet"
@@ -1080,11 +1079,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.create_new_nodes_dir()
         self._write_network_json()
 
-    def configure(self) -> None:
-        """Invoked from command line: Configure and prepare the network to be
-        started.
-        """
-        if envvars.CONFIG_PHASE.get() == 1:
+    def configure(self, *, config_phase: int) -> None:
+        """Generate config files, keys, etc for the given `config_phase`."""
+        if config_phase == 1:
             self.create_family_keys()
         else:
             self.load_family_key_ids()
@@ -1093,9 +1090,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         altauthlines = []
         bridgelines = []
         cur_phase_nodes = [
-            n
-            for n in self._nodes
-            if n._config.config_phase == envvars.CONFIG_PHASE.get()
+            n for n in self._nodes if n._config.config_phase == config_phase
         ]
 
         # XXX don't change node names or types or count if anything is
@@ -1142,7 +1137,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
 
-        self._exchange_restricted_discovery_keys()
+        self._exchange_restricted_discovery_keys(config_phase=config_phase)
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
@@ -1175,14 +1170,16 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         return net
 
-    def status(self) -> bool:
-        """Print how many nodes are running and how many are expected, and
-        return True if all nodes are running.
+    def status(self, *, launch_phase: int) -> bool:
+        """Check status of nodes with the given `launch_phase`.
+
+        Print how many nodes are running and how many are expected, and return
+        True if all nodes are running.
         """
         total = 0
         running = 0
         for n in self._nodes:
-            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
+            if n._config.launch_phase != launch_phase:
                 continue
             total += 1
             if not n._controller.isRunning():
@@ -1192,20 +1189,24 @@ class Network(ToCustomJsonable, FromDecodedJson):
         print(f"{running}/{total} nodes are running")
         return running == total
 
-    def restart(self) -> None:
+    def restart(self, *, launch_phase: int) -> None:
         """Invoked from command line: Stop and subsequently start our
         network's nodes.
         """
         self.stop()
-        self.start()
+        # XXX: It probably makes more sense to start all nodes with phase <=
+        # launch_phase, not just launch_phase itself.
+        self.start(launch_phase=launch_phase)
 
-    def start(self) -> None:
-        """Start all our network's nodes. Raises an `ChutneyErrorGroup` on errors"""
+    def start(self, *, launch_phase: int) -> None:
+        """Start network nodes with the given `launch_phase`.
+
+        Raises an `ChutneyErrorGroup` on errors"""
         # format polling correctly - avoid printing a newline
         print("Starting nodes", end="")
         errs = []
         for n in self._nodes:
-            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
+            if n._config.launch_phase != launch_phase:
                 continue
             try:
                 n._controller.start()
@@ -1319,17 +1320,20 @@ class Network(ToCustomJsonable, FromDecodedJson):
         # User overrode the dynamic time
         return envvars.MIN_START_TIME.get()
 
-    def wait_for_bootstrap(self, limit_secs: int = envvars.START_TIME.get()) -> None:
+    def wait_for_bootstrap(
+        self, *, launch_phase: int, limit_secs: int = envvars.START_TIME.get()
+    ) -> None:
         """
-        Wait for the network to bootstrap. Raises `TimeoutException` on timeout.
+        Wait for nodes with up through the given `launch_phase` to bootstrap.
+
+        Raises `TimeoutException` on timeout.
         """
         print("Waiting for nodes to bootstrap...\n")
         start = time.time()
         limit = start + limit_secs
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
-        bootstrap_upto = envvars.LAUNCH_PHASE.get()
 
-        nodes = [n for n in self._nodes if n._config.launch_phase <= bootstrap_upto]
+        nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
         min_time = self.getMinStartTime()
         wait_time_list = [n._controller.getUncheckedDirInfoWaitTime() for n in nodes]
         wait_time = max(wait_time_list)
@@ -1345,7 +1349,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 if not n._controller.isBootstrapped():
                     all_bootstrapped = False
 
-                desc_status = n._controller.getNodeDirInfoStatus()
+                desc_status = n._controller.getNodeDirInfoStatus(
+                    launch_phase=launch_phase
+                )
                 if desc_status:
                     code, desc_nodes, docs = desc_status
                     most_recent_desc_status[n.nick] = (code, desc_nodes, docs)
@@ -1532,15 +1538,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for phase in range(1, phase_max + 1):
             if phase <= cfg_phase_max:
                 print("Starting configure-phase ", phase)
-                # XXX make this a parameter to `configure`
-                os.environ[envvars.CONFIG_PHASE.varname()] = str(phase)
-                self.configure()
+                self.configure(config_phase=phase)
             if phase <= launch_phase_max:
                 print("Starting launch-phase ", phase)
-                # XXX make this a parameter to `start`
-                os.environ[envvars.LAUNCH_PHASE.varname()] = str(phase)
-                self.start()
-                self.wait_for_bootstrap()
+                self.start(launch_phase=phase)
+                self.wait_for_bootstrap(launch_phase=phase)
 
 
 # This is the type returned by `ArgumentParser.add_subparsers`. Unfortunately
@@ -1674,6 +1676,12 @@ class InitCLICommand(CLICommand):
 
 
 class ConfigureCLICommand(CLICommand):
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        envvars.CONFIG_PHASE.register_argparser(self._get_subparser())
+
     @staticmethod
     @override
     def name() -> str:
@@ -1686,10 +1694,16 @@ class ConfigureCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.configure()
+        network.configure(config_phase=envvars.CONFIG_PHASE.get(ns=ns))
 
 
 class StatusCLICommand(CLICommand):
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+
     @staticmethod
     @override
     def name() -> str:
@@ -1706,13 +1720,19 @@ class StatusCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        if not network.status():
+        if not network.status(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns)):
             # TODO: have Network.status raise an informative Exception
             # instead of returning a bool.
             raise ChutneyError("status failed")
 
 
 class RestartCLICommand(CLICommand):
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+
     @staticmethod
     @override
     def name() -> str:
@@ -1725,10 +1745,16 @@ class RestartCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.restart()
+        network.restart(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
 
 
 class StartCLICommand(CLICommand):
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+
     @staticmethod
     @override
     def name() -> str:
@@ -1741,7 +1767,7 @@ class StartCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.start()
+        network.start(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
 
 
 class HupCLICommand(CLICommand):
@@ -1764,6 +1790,12 @@ class HupCLICommand(CLICommand):
 
 
 class WaitForBootstrapCLICommand(CLICommand):
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+
     @staticmethod
     @override
     def name() -> str:
@@ -1776,7 +1808,7 @@ class WaitForBootstrapCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.wait_for_bootstrap()
+        network.wait_for_bootstrap(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
 
 
 class StopCLICommand(CLICommand):

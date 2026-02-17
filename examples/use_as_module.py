@@ -19,11 +19,11 @@ Client = dataclasses.replace(base, tag="c", client=True)
 network.addNodes(Authority.getN(4) + ExitRelay.getN(1) + Client.getN(1))
 
 network.init()
-network.configure()
-network.start()
+network.configure(config_phase=1)
+network.start(launch_phase=1)
 
 # This has a tendency to timeout with the default of 60s.
-network.wait_for_bootstrap(300)
+network.wait_for_bootstrap(launch_phase=1, limit_secs=300)
 
 verify.run_test(network)
 network.stop()
