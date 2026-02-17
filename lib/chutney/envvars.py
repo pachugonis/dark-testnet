@@ -100,6 +100,7 @@ class EnvVar(Generic[C], ABC):
     def help_all() -> str:
         lines = []
         lines.append("Environment Variables:")
+        EnvVar._all_instances.sort(key=EnvVar.varname)
         for x in EnvVar._all_instances:
             lines.append(f"  {x._varname}: {x.help()} (default={x._default})")
         return "\n".join(lines)
