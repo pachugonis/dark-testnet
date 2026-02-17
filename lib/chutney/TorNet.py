@@ -1854,6 +1854,8 @@ def _parse_args(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=envvars.EnvVar.help_all(),
     )
+    envvars.DATA_DIR.register_argparser(parser)
+
     subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
 
     PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
