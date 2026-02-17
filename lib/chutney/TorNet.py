@@ -1403,19 +1403,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
         else:
             return Network.DOC_TYPE_DISPLAY_LIMIT_NO_BRIDGEAUTH
 
-    def getMinStartTime(self) -> int:
-        """Returns the minimum start time before verifying, regardless of
-        whether the network has bootstrapped, or the dir info has been
-        distributed.
-
-        The default can be overridden by the $CHUTNEY_MIN_START_TIME env
-        var.
-        """
-        # User overrode the dynamic time
-        return envvars.MIN_START_TIME.get()
-
     def wait_for_bootstrap(
-        self, *, launch_phase: int, limit_secs: int = envvars.START_TIME.get()
+        self,
+        *,
+        launch_phase: int,
+        limit_secs: int = envvars.START_TIME.get(),
+        min_time: int = envvars.MIN_START_TIME.get(),
     ) -> None:
         """
         Wait for nodes with up through the given `launch_phase` to bootstrap.
@@ -1428,7 +1421,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
-        min_time = self.getMinStartTime()
         wait_time_list = [n._controller.getUncheckedDirInfoWaitTime() for n in nodes]
         wait_time = max(wait_time_list)
 
