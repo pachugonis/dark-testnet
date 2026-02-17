@@ -610,10 +610,15 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     ip: Optional[str] = dataclasses.field(
         default_factory=lambda: NodeConfig._LISTEN_ADDRESS_ENV.get() or None
     )
+    _LISTEN_ADDRESS_V6_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_LISTEN_ADDRESS_V6",
+        "",
+        "IPv6 address to listen on, if any.",
+    )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
     ipv6_addr: Optional[str] = dataclasses.field(
-        default_factory=lambda: envvars.LISTEN_ADDRESS_V6.get() or None
+        default_factory=lambda: NodeConfig._LISTEN_ADDRESS_V6_ENV.get() or None
     )
     # Whether to disable all ipv6 functionality
     disableipv6: bool = envvars.DISABLE_IPV6.get()
@@ -781,6 +786,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         environment-variable defaults."""
         NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
         NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
+        NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -792,6 +798,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         return NodeConfig(
             trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
             ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
+            ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
         )
 
 

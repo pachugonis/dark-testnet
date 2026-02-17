@@ -159,11 +159,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-LISTEN_ADDRESS_V6 = EnvVarStr(
-    "CHUTNEY_LISTEN_ADDRESS_V6",
-    "",
-    "IPv6 address to listen on, if any.",
-)
 DISABLE_IPV6 = EnvVarBool(
     "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
 )
