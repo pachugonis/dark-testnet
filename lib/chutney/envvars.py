@@ -159,11 +159,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-CONTROLLING_PID = EnvVarInt(
-    "CHUTNEY_CONTROLLING_PID",
-    0,
-    "PID of controlling script (for __OwningControllerProcess)",
-)
 DNS_CONF = EnvVarStr(
     "CHUTNEY_DNS_CONF",
     "/etc/resolv.conf",

@@ -638,7 +638,14 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     poll_launch_time_default: float = 0.1
     # The PID of the controlling script
     # (for __OwningControllerProcess)
-    controlling_pid: int = envvars.CONTROLLING_PID.get()
+    _CONTROLLING_PID_ENV: ClassVar[envvars.EnvVarInt] = envvars.EnvVarInt(
+        "CHUTNEY_CONTROLLING_PID",
+        0,
+        "PID of controlling script (for __OwningControllerProcess)",
+    )
+    controlling_pid: int = dataclasses.field(
+        default_factory=lambda: NodeConfig._CONTROLLING_PID_ENV.get()
+    )
     # The path to a DNS config file for Tor Exits. If this file
     # is empty or unreadable, Tor will try 127.0.0.1:53.
     #
@@ -793,6 +800,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
         NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
         NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
+        NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -806,6 +814,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
             ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
             disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
+            controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
         )
 
 
