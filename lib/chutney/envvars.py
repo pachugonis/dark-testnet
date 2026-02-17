@@ -28,7 +28,16 @@ class EnvVar(Generic[C], ABC):
         self._varname = varname
         self._default = default
         self._help = help
-        self._all_instances.append(self)
+
+        # Multiple instances with the same variable name would defeat the
+        # purpose a bit. Especially if they have conflicting types, help
+        # strings, etc.
+        assert not any(
+            (iv._varname == varname for iv in self._all_instances)
+        ), f"{varname} is already registered"
+
+        # Register this instance
+        EnvVar._all_instances.append(self)
 
     def get(self) -> C:
         strval = os.environ.get(self._varname)
