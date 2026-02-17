@@ -38,9 +38,13 @@ class TorBin(KnownBin):
     def name(self) -> str:
         return "tor"
 
+    _TOR_ENV: envvars.EnvVarStr = envvars.EnvVarStr(
+        "CHUTNEY_TOR", "tor", "Path to the tor executable."
+    )
+
     @override
     def config_envvar(self) -> envvars.EnvVar[str]:
-        return envvars.TOR
+        return TorBin._TOR_ENV
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:
@@ -52,9 +56,13 @@ class TorGenCertBin(KnownBin):
     def name(self) -> str:
         return "tor-gencert"
 
+    _TOR_GENCERT_ENV: envvars.EnvVarStr = envvars.EnvVarStr(
+        "CHUTNEY_TOR_GENCERT", "tor-gencert", "Path to the tor-gencert executable."
+    )
+
     @override
     def config_envvar(self) -> envvars.EnvVar[str]:
-        return envvars.TOR_GENCERT
+        return TorGenCertBin._TOR_GENCERT_ENV
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:
@@ -66,9 +74,13 @@ class ArtiBin(KnownBin):
     def name(self) -> str:
         return "arti"
 
+    _ARTI_ENV: envvars.EnvVarStr = envvars.EnvVarStr(
+        "CHUTNEY_ARTI", "arti", "Path to the arti executable."
+    )
+
     @override
     def config_envvar(self) -> envvars.EnvVar[str]:
-        return envvars.ARTI
+        return ArtiBin._ARTI_ENV
 
     @override
     def test_network_sh_hint(self) -> Optional[str]:

@@ -2030,7 +2030,12 @@ def _parse_args(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=envvars.EnvVar.help_all(),
     )
+
+    # Register environment variables to be overridable via command-line.
     envvars.DATA_DIR.register_argparser(parser)
+    TorBin().config_envvar().register_argparser(parser)
+    TorGenCertBin().config_envvar().register_argparser(parser)
+    ArtiBin().config_envvar().register_argparser(parser)
 
     subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
 
