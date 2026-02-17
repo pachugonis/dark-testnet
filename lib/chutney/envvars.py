@@ -159,11 +159,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-LISTEN_ADDRESS = EnvVarStr(
-    "CHUTNEY_LISTEN_ADDRESS",
-    "127.0.0.1",
-    "IPv4 address to listen on, if any.",
-)
 LISTEN_ADDRESS_V6 = EnvVarStr(
     "CHUTNEY_LISTEN_ADDRESS_V6",
     "",

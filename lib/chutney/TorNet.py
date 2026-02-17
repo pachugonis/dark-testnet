@@ -602,8 +602,13 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
+    _LISTEN_ADDRESS_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_LISTEN_ADDRESS",
+        "127.0.0.1",
+        "IPv4 address to listen on, if any.",
+    )
     ip: Optional[str] = dataclasses.field(
-        default_factory=lambda: envvars.LISTEN_ADDRESS.get() or None
+        default_factory=lambda: NodeConfig._LISTEN_ADDRESS_ENV.get() or None
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
@@ -775,6 +780,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         to allow any user-provided command-line options to override the
         environment-variable defaults."""
         NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
+        NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -785,6 +791,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         """
         return NodeConfig(
             trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
+            ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
         )
 
 
