@@ -20,6 +20,7 @@ from chutney.dirinfo import (
     DirInfoStatusCode,
     DirFormat,
 )
+from chutney import envvars
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
     values_for_keys,
@@ -665,7 +666,7 @@ class LocalNodeController(TorNet.NodeController):
             str, tuple[DirInfoStatusCode, Collection[DirFormat]]
         ] = dict()
         for node in self._network._nodes:
-            if node._config.launch_phase > TorNet.CUR_LAUNCH_PHASE:
+            if node._config.launch_phase > envvars.LAUNCH_PHASE.get():
                 continue
             dir_statuses: dict[
                 DirFormat,

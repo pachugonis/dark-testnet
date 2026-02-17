@@ -40,6 +40,7 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
+import os
 import re
 import signal
 import sys
@@ -729,12 +730,6 @@ class NodeController(ABC):
         ...
 
 
-# TODO: Consider getting rid of these globals, particularly since they're not
-# contants; e.g. we change them at runtime in `Network.bootstrap`.
-CUR_CONFIG_PHASE: int = envvars.CONFIG_PHASE.get()
-CUR_LAUNCH_PHASE: int = envvars.LAUNCH_PHASE.get()
-
-
 @dataclasses.dataclass
 class NodeConfig(ToCustomJsonable, FromDecodedJson):
     """Properties of a Tor Node"""
@@ -1236,7 +1231,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for hs_client in (
             n
             for n in self._nodes
-            if n._config.config_phase == CUR_CONFIG_PHASE
+            if n._config.config_phase == envvars.CONFIG_PHASE.get()
             and n._config.hs_client_restricted_discovery_server_tags
         ):
             for (
@@ -1257,7 +1252,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                             f"{n.nick} can't authorize with {server.nick};"
                             " restricted discovery disabled"
                         )
-                    if server._config.config_phase > CUR_CONFIG_PHASE:
+                    if server._config.config_phase > envvars.CONFIG_PHASE.get():
                         raise ChutneyError(
                             f"{n.nick} can't authorize with {server.nick},"
                             " which isn't configured yet"
@@ -1279,7 +1274,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         """Invoked from command line: Configure and prepare the network to be
         started.
         """
-        if CUR_CONFIG_PHASE == 1:
+        if envvars.CONFIG_PHASE.get() == 1:
             self.create_family_keys()
         else:
             self.load_family_key_ids()
@@ -1288,7 +1283,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         altauthlines = []
         bridgelines = []
         cur_phase_nodes = [
-            n for n in self._nodes if n._config.config_phase == CUR_CONFIG_PHASE
+            n
+            for n in self._nodes
+            if n._config.config_phase == envvars.CONFIG_PHASE.get()
         ]
 
         # XXX don't change node names or types or count if anything is
@@ -1375,7 +1372,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         total = 0
         running = 0
         for n in self._nodes:
-            if n._config.launch_phase != CUR_LAUNCH_PHASE:
+            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
                 continue
             total += 1
             if not n._controller.isRunning():
@@ -1398,7 +1395,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         print("Starting nodes", end="")
         errs = []
         for n in self._nodes:
-            if n._config.launch_phase != CUR_LAUNCH_PHASE:
+            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
                 continue
             try:
                 n._controller.start()
@@ -1520,7 +1517,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         start = time.time()
         limit = start + limit_secs
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
-        bootstrap_upto = CUR_LAUNCH_PHASE
+        bootstrap_upto = envvars.LAUNCH_PHASE.get()
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= bootstrap_upto]
         min_time = self.getMinStartTime()
@@ -1725,13 +1722,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for phase in range(1, phase_max + 1):
             if phase <= cfg_phase_max:
                 print("Starting configure-phase ", phase)
-                global CUR_CONFIG_PHASE
-                CUR_CONFIG_PHASE = phase
+                # XXX make this a parameter to `configure`
+                os.environ[envvars.CONFIG_PHASE.varname()] = str(phase)
                 self.configure()
             if phase <= launch_phase_max:
                 print("Starting launch-phase ", phase)
-                global CUR_LAUNCH_PHASE
-                CUR_LAUNCH_PHASE = phase
+                # XXX make this a parameter to `start`
+                os.environ[envvars.LAUNCH_PHASE.varname()] = str(phase)
                 self.start()
                 self.wait_for_bootstrap()
 
