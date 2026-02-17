@@ -621,7 +621,12 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         default_factory=lambda: NodeConfig._LISTEN_ADDRESS_V6_ENV.get() or None
     )
     # Whether to disable all ipv6 functionality
-    disableipv6: bool = envvars.DISABLE_IPV6.get()
+    _DISABLE_IPV6_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
+    )
+    disableipv6: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._DISABLE_IPV6_ENV.get()
+    )
     # Directory server flags. Used only if authority=True
     dirserver_flags: str = "no-v2"
     # None means wait on launch (requires RunAsDaemon),
@@ -787,6 +792,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
         NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
         NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
+        NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -799,6 +805,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
             ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
             ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
+            disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
         )
 
 
