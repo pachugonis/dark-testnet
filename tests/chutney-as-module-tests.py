@@ -76,7 +76,7 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
-            ip=Option(str(next(iter(_LOOPBACK_IPV4_NET.hosts())))),
+            ip=str(next(iter(_LOOPBACK_IPV4_NET.hosts()))),
             trusted_networks=[_LOOPBACK_IPV4_NET],
             controlling_pid=os.getpid(),
         )
@@ -126,7 +126,7 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
+            ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
             ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
         )
         self.network.addNodes(basic_net_configs(base))
@@ -150,7 +150,7 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
+            ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
             ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
             trusted_networks=[_PRIVATE_IPV4_NET, _PRIVATE_IPV6_NET],
         )

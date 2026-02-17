@@ -253,9 +253,9 @@ class Node(ToCustomJsonable):
 
     @property
     def ip(self) -> Option[IPv4Address]:
-        if self._config.ip.is_none():
+        if self._config.ip is None:
             return Option(None)
-        base = IPv4Address(self._config.ip.unwrap())
+        base = IPv4Address(self._config.ip)
         strategy = self._config.address_assignment_strategy
         if strategy == AddressAssignmentStrategy.STATIC:
             return Option(base)
@@ -603,8 +603,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
-    ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(envvars.LISTEN_ADDRESS.get() or None)
+    ip: Optional[str] = dataclasses.field(
+        default_factory=lambda: envvars.LISTEN_ADDRESS.get() or None
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
