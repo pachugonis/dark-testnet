@@ -159,12 +159,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-DNS_CONF = EnvVarStr(
-    "CHUTNEY_DNS_CONF",
-    "/etc/resolv.conf",
-    "Path to resolver config file; e.g. for ServerDNSResolvConfFile."
-    + " Set to empty-string to not set explicitly.",
-)
 TOR_SANDBOX = EnvVarBool(
     "CHUTNEY_TOR_SANDBOX",
     platform.system() == "Linux",

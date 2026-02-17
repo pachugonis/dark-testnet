@@ -651,7 +651,15 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     #
     # the default resolv.conf path is set at compile time
     # there's no easy way to get it out of tor, so we use the typical value
-    dns_conf: str = envvars.DNS_CONF.get()
+    _DNS_CONF_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_DNS_CONF",
+        "/etc/resolv.conf",
+        "Path to resolver config file; e.g. for ServerDNSResolvConfFile."
+        + " Set to empty-string to not set explicitly.",
+    )
+    dns_conf: str = dataclasses.field(
+        default_factory=lambda: NodeConfig._DNS_CONF_ENV.get()
+    )
     # The phase at which this instance needs to be configured.
     config_phase: int = 1
     # The phase at which this instance needs to be launched.
@@ -801,6 +809,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
         NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
         NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
+        NodeConfig._DNS_CONF_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -815,6 +824,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
             disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
             controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
+            dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
         )
 
 
