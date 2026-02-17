@@ -159,12 +159,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-TRUSTED_NETWORKS = EnvVarIPNetworkList(
-    "CHUTNEY_TRUSTED_NETWORKS",
-    [],
-    "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
-    + " Nodes with IPs on these will bind unsecured services to those IPs.",
-)
 LISTEN_ADDRESS = EnvVarStr(
     "CHUTNEY_LISTEN_ADDRESS",
     "127.0.0.1",

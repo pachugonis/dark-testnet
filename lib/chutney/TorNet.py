@@ -19,6 +19,7 @@ from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import (
+    ClassVar,
     List,
     Optional,
     Any,
@@ -589,8 +590,16 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # trusted networks. unsecured services, such as socks, dns, and the tor
     # controlport, will be bound to the node's assigned IP addresses if they
     # fall within one of these (in addition to binding them to localhost).
+    _TRUSTED_NETWORKS_ENV: ClassVar[envvars.EnvVarIPNetworkList] = (
+        envvars.EnvVarIPNetworkList(
+            "CHUTNEY_TRUSTED_NETWORKS",
+            [],
+            "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
+            + " Nodes with IPs on these will bind unsecured services to those IPs.",
+        )
+    )
     trusted_networks: list[IPNetwork] = dataclasses.field(
-        default_factory=lambda: envvars.TRUSTED_NETWORKS.get()
+        default_factory=lambda: NodeConfig._TRUSTED_NETWORKS_ENV.get()
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
@@ -762,6 +771,26 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         d["trusted_networks"] = [ipaddress.ip_network(n) for n in d["trusted_networks"]]
         return NodeConfig(**d)
 
+    @staticmethod
+    def register_argparser(parser: argparse.ArgumentParser) -> None:
+        """Add command-line options to `parser` to override some defaults.
+
+        The subsequent parse result can be provided to `TorNet.from_envargs`
+        to allow any user-provided command-line options to override the
+        environment-variable defaults."""
+        NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
+
+    @staticmethod
+    def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
+        """Create a default NodeConfig, optionally overridden with args from `ns`
+
+        The intent is for `ns` to be the result of parsing command-line arguments,
+        using a parser previously passed to `NodeConfig.register_argparser`.
+        """
+        return NodeConfig(
+            trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
+        )
+
 
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
@@ -821,11 +850,16 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return net
 
     @staticmethod
-    def from_network_script_contents(network_script_contents: str) -> Network:
+    def from_network_script_contents(
+        network_script_contents: str, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using the contents of a chutney network script.
 
         For examples of network scripts, see`chutney/data/networks`.
         """
+
+        # If not provided defaults, generate them from environment
+        non_optional_config_defaults = config_defaults or NodeConfig.from_envargs()
 
         # Wrappers used from network scripts (`data`) that manipulate
         # an implicit network (`_THE_NETWORK`).
@@ -838,12 +872,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
             _THE_NETWORK.addNodes(nodelist)
 
         def NodeWrapper(
-            parent: Optional[NodeConfig] = None, **kwargs: Any
+            parent: NodeConfig = non_optional_config_defaults, **kwargs: Any
         ) -> NodeConfig:
-            if parent is None:
-                return NodeConfig(**kwargs)
-            else:
-                return parent.specialize(**kwargs)
+            return parent.specialize(**kwargs)
 
         _GLOBALS = dict(
             # Note that in the network scripts "Node" is actually a factory function
@@ -862,7 +893,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return _THE_NETWORK
 
     @staticmethod
-    def from_network_script_name(network_cfg_name: str) -> Network:
+    def from_network_script_name(
+        network_cfg_name: str, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using a built-in chutney network script.
 
         Built in networks are located in `chutney/data/networks`, and can be
@@ -870,13 +903,19 @@ class Network(ToCustomJsonable, FromDecodedJson):
         command-line.
         """
         contents = _NETWORKS.joinpath(network_cfg_name).read_text()
-        return Network.from_network_script_contents(contents)
+        return Network.from_network_script_contents(
+            contents, config_defaults=config_defaults
+        )
 
     @staticmethod
-    def from_network_script_path(network_cfg_path: Path) -> Network:
+    def from_network_script_path(
+        network_cfg_path: Path, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using a chutney network script by path."""
         contents = network_cfg_path.read_text()
-        return Network.from_network_script_contents(contents)
+        return Network.from_network_script_contents(
+            contents, config_defaults=config_defaults
+        )
 
     def _add_node(self, config: NodeConfig, nodenum: int) -> None:
         """Create a node with the given config, add it to the network"""
@@ -1566,6 +1605,10 @@ class CLICommand(ABC):
         self._subparser = subparsers.add_parser(self.name(), help=self.help())
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
+
+            # Add support for overriding NodeConfig defaults
+            NodeConfig.register_argparser(self._subparser)
+
             # We add a group of mutually exclusive flags, one for each method of
             # specifying the config.
             method_group = self._subparser.add_mutually_exclusive_group(
@@ -1953,16 +1996,21 @@ def _parse_args(
 
 
 def _network_from_args(ns: argparse.Namespace) -> Network:
+    config_defaults = NodeConfig.from_envargs(ns=ns)
     net_name = check_type(getattr(ns, "net", None), Optional[str])
     if net_name is not None:
         logger.info(f"Loading network config from built-in network name: '{net_name}'")
-        return Network.from_network_script_name(net_name)
+        return Network.from_network_script_name(
+            net_name, config_defaults=config_defaults
+        )
     script_path = check_type(getattr(ns, "net_from_script_path", None), Optional[Path])
     if script_path is not None:
         logger.info(
             f"Loading network config from chutney network script path: '{script_path}'"
         )
-        return Network.from_network_script_path(script_path)
+        return Network.from_network_script_path(
+            script_path, config_defaults=config_defaults
+        )
 
     assert ns.net_from_data_dir
 
