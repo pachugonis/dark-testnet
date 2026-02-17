@@ -1677,10 +1677,15 @@ class InitCLICommand(CLICommand):
 
 class ConfigureCLICommand(CLICommand):
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: _SubParsers,
+        *,
+        config_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
     ) -> None:
         super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
-        envvars.CONFIG_PHASE.register_argparser(self._get_subparser())
+        self._config_phase_env = config_phase_env
+        self._config_phase_env.register_argparser(self._get_subparser())
 
     @staticmethod
     @override
@@ -1694,15 +1699,20 @@ class ConfigureCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.configure(config_phase=envvars.CONFIG_PHASE.get(ns=ns))
+        network.configure(config_phase=self._config_phase_env.get(ns=ns))
 
 
 class StatusCLICommand(CLICommand):
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
     ) -> None:
         super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
-        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
 
     @staticmethod
     @override
@@ -1720,7 +1730,7 @@ class StatusCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        if not network.status(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns)):
+        if not network.status(launch_phase=self._launch_phase_env.get(ns=ns)):
             # TODO: have Network.status raise an informative Exception
             # instead of returning a bool.
             raise ChutneyError("status failed")
@@ -1728,10 +1738,15 @@ class StatusCLICommand(CLICommand):
 
 class RestartCLICommand(CLICommand):
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
     ) -> None:
         super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
-        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
 
     @staticmethod
     @override
@@ -1745,15 +1760,20 @@ class RestartCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.restart(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
+        network.restart(launch_phase=self._launch_phase_env.get(ns=ns))
 
 
 class StartCLICommand(CLICommand):
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
     ) -> None:
         super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
-        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
 
     @staticmethod
     @override
@@ -1767,7 +1787,7 @@ class StartCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.start(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
+        network.start(launch_phase=self._launch_phase_env.get(ns=ns))
 
 
 class HupCLICommand(CLICommand):
@@ -1791,10 +1811,15 @@ class HupCLICommand(CLICommand):
 
 class WaitForBootstrapCLICommand(CLICommand):
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
     ) -> None:
         super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
-        envvars.LAUNCH_PHASE.register_argparser(self._get_subparser())
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
 
     @staticmethod
     @override
@@ -1808,7 +1833,7 @@ class WaitForBootstrapCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.wait_for_bootstrap(launch_phase=envvars.LAUNCH_PHASE.get(ns=ns))
+        network.wait_for_bootstrap(launch_phase=self._launch_phase_env.get(ns=ns))
 
 
 class StopCLICommand(CLICommand):
@@ -1879,7 +1904,16 @@ def getNetworks() -> list[str]:
 
 
 def _parse_args(
-    argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
+    argv: Optional[Sequence[str]],
+    *,
+    # Scoped environment variables that we pass explicitly to the commands that
+    # use them. Implemented as default param values to emulate "static locals".
+    _config_phase_env: envvars.EnvVarInt = envvars.EnvVarInt(
+        "CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase"
+    ),
+    _launch_phase_env: envvars.EnvVarInt = envvars.EnvVarInt(
+        "CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase"
+    ),
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="chutney",
@@ -1893,12 +1927,12 @@ def _parse_args(
     PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
     SupportedCLICommand(subparsers, require_net_spec_group=False)
     InitCLICommand(subparsers, require_net_spec_group=True)
-    ConfigureCLICommand(subparsers)
-    StatusCLICommand(subparsers)
-    RestartCLICommand(subparsers)
-    StartCLICommand(subparsers)
+    ConfigureCLICommand(subparsers, config_phase_env=_config_phase_env)
+    StatusCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    RestartCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    StartCLICommand(subparsers, launch_phase_env=_launch_phase_env)
     HupCLICommand(subparsers)
-    WaitForBootstrapCLICommand(subparsers)
+    WaitForBootstrapCLICommand(subparsers, launch_phase_env=_launch_phase_env)
     StopCLICommand(subparsers)
     BootstrapCLICommand(subparsers)
     VerifyCLICommand(subparsers)

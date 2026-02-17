@@ -158,9 +158,6 @@ DATA_DIR = EnvVarPath(
     "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
 )
 
-CONFIG_PHASE = EnvVarInt("CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase")
-LAUNCH_PHASE = EnvVarInt("CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase")
-
 TRUSTED_NETWORKS = EnvVarIPNetworkList(
     "CHUTNEY_TRUSTED_NETWORKS",
     [],
