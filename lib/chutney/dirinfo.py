@@ -9,6 +9,9 @@ import chutney.errors
 
 from chutney.Util import Option, IPAddress
 
+HSV2_KEYWORD = "hidden service v2"
+HSV3_KEYWORD = "hidden service v3"
+
 
 class DirInfoStatusCode(enum.Enum):
     ONIONDESC_FAILED_TO_PUBLISH = -600

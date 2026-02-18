@@ -97,10 +97,6 @@ _TOR_VERSIONS = None
 _TORRC_OPTIONS = None
 
 
-HSV2_KEYWORD = "hidden service v2"
-HSV3_KEYWORD = "hidden service v3"
-
-
 class LauncherBackend(FromDecodedJson, Enum):
     """Specifies class for launching processes for target node"""
 

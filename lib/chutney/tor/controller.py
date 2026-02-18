@@ -19,6 +19,8 @@ from chutney.dirinfo import (
     DirInfoStatus,
     DirInfoStatusCode,
     DirFormat,
+    HSV2_KEYWORD,
+    HSV3_KEYWORD,
 )
 from chutney import envvars
 from chutney.node_controller import NodeController
@@ -313,7 +315,7 @@ class LocalNodeController(NodeController):
                 if m_v2:
                     status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV2_KEYWORD,
+                        keyword=HSV2_KEYWORD,
                         message=m_v2.groups()[0],
                     )
                     break
@@ -324,7 +326,7 @@ class LocalNodeController(NodeController):
                 if m_v3:
                     status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message=m_v3.groups()[0],
                     )
                     break

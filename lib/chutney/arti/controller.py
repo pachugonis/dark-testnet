@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 from typing_extensions import override
 
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat, HSV3_KEYWORD
 from chutney.node_controller import NodeController
 
 import chutney.errors
@@ -207,7 +207,7 @@ class LocalArtiNodeController(NodeController):
                 if m:
                     self._most_recent_oniondesc_status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message=m.group(0),
                     )
                     continue
@@ -219,7 +219,7 @@ class LocalArtiNodeController(NodeController):
                 if m:
                     self._most_recent_oniondesc_status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_FAILED_TO_PUBLISH,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message="Restricted discovery enabled, but no auth'd clients configured",
                     )
                     continue
