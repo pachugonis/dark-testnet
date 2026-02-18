@@ -261,9 +261,7 @@ class LocalNodeBuilder(NodeBuilder):
             self._generate_hs_state()
         if net.family_ids:
             for fid in self._node._config.families:
-                shutil.copy(
-                    TorNet.get_familykey_path(fid), Path(self._node.dir, "keys")
-                )
+                shutil.copy(net.get_familykey_path(fid), Path(self._node.dir, "keys"))
         if self._node._config.hs_client_restricted_discovery_server_tags:
             mkdir_p(self._client_onion_auth_dir())
 

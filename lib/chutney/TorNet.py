@@ -184,24 +184,6 @@ def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
     return newdir
 
 
-def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
-    """
-    Return the absolute path for the secret family key identified with `ident`.
-
-    If no ident is given, return the directory in which we store family keys.
-
-    If `ext` is false, omit the "secret_family_key" exension.
-    """
-    family_key_dir = get_absolute_nodes_path().joinpath("family_keys")
-    if ident is None:
-        return family_key_dir
-    if ext:
-        fn = f"{ident}.secret_family_key"
-    else:
-        fn = ident
-    return family_key_dir.joinpath(fn)
-
-
 class Node(ToCustomJsonable):
     """A Node represents a Tor node or a set of Tor nodes.  It's created
     in a network configuration file.
@@ -982,10 +964,27 @@ class Network(ToCustomJsonable, FromDecodedJson):
         nodeslink.symlink_to(newnodesdir)
         self.dir = newnodesdir
 
+    def get_familykey_path(self, ident: Optional[str], ext: bool = True) -> Path:
+        """
+        Return the absolute path for the secret family key identified with `ident`.
+
+        If no ident is given, return the directory in which we store family keys.
+
+        If `ext` is false, omit the "secret_family_key" exension.
+        """
+        family_key_dir = self.dir.joinpath("family_keys")
+        if ident is None:
+            return family_key_dir
+        if ext:
+            fn = f"{ident}.secret_family_key"
+        else:
+            fn = ident
+        return family_key_dir.joinpath(fn)
+
     def create_family_keys(self) -> None:
         """Initialize family keys as needed for all of our nodes."""
 
-        mkdir_p(get_familykey_path(None))
+        mkdir_p(self.get_familykey_path(None))
         all_family_ids = set()
         for n in self._nodes:
             if n._config.families:
@@ -994,7 +993,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             cmdline = [
                 TorBin().config_envvar().get(),
                 "--keygen-family",
-                str(get_familykey_path(fid, ext=False)),
+                str(self.get_familykey_path(fid, ext=False)),
             ]
             launcher = chutney.launcher.LocalLauncher()
             output = chutney.tor.util.run_tor(launcher, cmdline, tolerate_error=True)
@@ -1005,12 +1004,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
             if not m:
                 raise ChutneyError("unexpected output from tor --keygen-family")
             self.family_ids[fid] = m.group(1)
-        with get_familykey_path("map.json", ext=False).open("w") as f:
+        with self.get_familykey_path("map.json", ext=False).open("w") as f:
             json.dump(self.family_ids, f)
 
     def load_family_key_ids(self) -> None:
         """Load our family key identifiers from disk."""
-        family_key_dir = get_familykey_path(None)
+        family_key_dir = self.get_familykey_path(None)
         self.family_ids = json.load(family_key_dir.joinpath("map.json").open())
 
     def supported(self) -> None:
