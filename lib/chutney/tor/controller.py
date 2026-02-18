@@ -21,6 +21,7 @@ from chutney.dirinfo import (
     DirFormat,
 )
 from chutney import envvars
+from chutney.node_controller import NodeController
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
     values_for_keys,
@@ -30,10 +31,10 @@ from chutney.Util import (
 logger = logging.getLogger(__name__)
 
 
-class LocalNodeController(TorNet.NodeController):
+class LocalNodeController(NodeController):
 
     def __init__(self, network: TorNet.Network, node: TorNet.Node):
-        TorNet.NodeController.__init__(self)
+        NodeController.__init__(self)
         self._network = network
         self._node = node
         self.most_recent_oniondesc_status: Optional[DirInfoStatus] = None

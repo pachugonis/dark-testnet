@@ -20,6 +20,7 @@ import chutney.TorNet as TorNet
 
 from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import ChutneyError, ChutneyInternalError
+from chutney.node_builder import NodeBuilder
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     mkdir_p,
@@ -141,8 +142,7 @@ def run_tor_gencert(
     return p.stdout
 
 
-class LocalNodeBuilder(TorNet.NodeBuilder):
-
+class LocalNodeBuilder(NodeBuilder):
     # Environment members used:
     # torrc -- which torrc file to use
     # authority -- bool -- are we an authority? (includes bridge authorities)
@@ -169,7 +169,6 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     # nodenum -- int -- set by chutney -- which unique node index is this?
 
     def __init__(self, node: TorNet.Node):
-        TorNet.NodeBuilder.__init__(self)
         self._node = node
 
     @property

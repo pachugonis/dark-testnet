@@ -20,6 +20,7 @@ from chutney.errors import (
     ChutneyInternalError,
 )
 from chutney.known_bins import ArtiBin
+from chutney.node_builder import NodeBuilder
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
@@ -31,9 +32,8 @@ _HS_NICKNAME = "chutney_onion_service"
 logger = logging.getLogger(__name__)
 
 
-class LocalArtiNodeBuilder(TorNet.NodeBuilder):
+class LocalArtiNodeBuilder(NodeBuilder):
     def __init__(self, node: TorNet.Node):
-        TorNet.NodeBuilder.__init__(self)
         self._node = node
 
     @property

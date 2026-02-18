@@ -9,6 +9,8 @@ from typing import Optional
 from typing_extensions import override
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.node_controller import NodeController
+
 import chutney.errors
 import chutney.known_bins
 import chutney.launcher
@@ -26,9 +28,8 @@ logger = logging.getLogger(__name__)
 _HS_NICKNAME = chutney.arti.builder._HS_NICKNAME
 
 
-class LocalArtiNodeController(TorNet.NodeController):
+class LocalArtiNodeController(NodeController):
     def __init__(self, network: TorNet.Network, node: TorNet.Node):
-        TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
         self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None

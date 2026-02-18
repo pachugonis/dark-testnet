@@ -16,7 +16,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
@@ -49,10 +48,11 @@ import time
 import tomli_w
 import json
 
+from chutney.node_builder import NodeBuilder
+from chutney.node_controller import NodeController
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
 from chutney import envvars
 from chutney.dirinfo import (
-    DirInfoStatus,
     DirInfoStatusCode,
     DirFormat,
     BridgeLine,
@@ -544,190 +544,6 @@ class Node(ToCustomJsonable):
             _config=self._config,
             _nodenum=self.nodenum,
         )
-
-
-class NodeBuilder(ABC):
-    """Abstract base class.  A NodeBuilder is responsible for doing all the
-    one-time prep needed to set up a node in a network.
-    """
-
-    @abstractmethod
-    def checkConfig(self, net: Network) -> None:
-        """Try to format our torrc; raise an exception if we can't."""
-        ...
-
-    @abstractmethod
-    def preConfig(self, net: Network) -> None:
-        """Called on all nodes of the current config phase before any nodes configure.
-
-        Intended to generate configuration that doesn't depend on other nodes,
-        particularly anything that *will* be needed in the configuration step of
-        other nodes, such as public keys.
-        """
-        ...
-
-    @abstractmethod
-    def get_fingerprint(self) -> Option[str]:
-        """Return the relay fingerprint, if applicable."""
-        ...
-
-    @abstractmethod
-    def get_fingerprint_ed25519(self) -> Option[str]:
-        """The base64-encoded ed25519 public key fingerprint of this node, if applicable."""
-        ...
-
-    @abstractmethod
-    def config(self, net: Network) -> None:
-        """Called to configure a node: creates a torrc file for it."""
-        ...
-
-    @abstractmethod
-    def postConfig(self, net: Network) -> None:
-        """Called on each nodes after all nodes configure."""
-        ...
-
-    @abstractmethod
-    def isSupported(self, net: Network) -> bool:
-        """Return true if this node appears to have everything it needs;
-        false otherwise."""
-        ...
-
-    @abstractmethod
-    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
-        """Return the information needed to use this node as an authority,
-        if it is configured as one.
-        """
-        ...
-
-    @abstractmethod
-    def getBridgeLines(self) -> list[BridgeLine]:
-        """Return descriptors that a client can use to connect to this bridge.
-        Non-bridge relays return [].
-        """
-        ...
-
-    @abstractmethod
-    def get_hs_hostname(self) -> Option[str]:
-        """Return the hidden service hostname, if any.
-
-        Should be available (non-None) if the node is configured as a hidden
-        service (`Node.is_hs`), after `preConfig` has been called.
-        """
-        ...
-
-    @abstractmethod
-    def get_hs_client_pubkey(self, hs_address: str) -> str:
-        """Get the hidden service "restricted discovery" key for the `hs_address`
-
-        Generates the key, if it doesn't already exist. The returned string
-        is of the form `descriptor:x25519:<base32-encoded-public-key>`.
-        """
-        ...
-
-    @abstractmethod
-    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
-        """Set the hidden service "restricted discovery" pubkey for `client_id`
-
-        `client_pubkey` should be of the form
-        `descriptor:x25519:<base32-encoded-public-key>`.
-        """
-        ...
-
-
-class NodeController(ABC):
-    """Abstract base class.  A NodeController is responsible for running a
-    node on the network.
-    """
-
-    @abstractmethod
-    def isRunning(self) -> bool:
-        """Return true iff this node is running."""
-        ...
-
-    @abstractmethod
-    def start(self) -> None:
-        """Try to start this node, if not already running. Raises `ChutneyError` on failure."""
-        ...
-
-    @abstractmethod
-    def stop(self, sig: int = signal.SIGINT) -> None:
-        """Try to stop this node by sending it the signal 'sig'."""
-        ...
-
-    @abstractmethod
-    def getPtExtra(self) -> Option[str]:
-        """Get extra bridge info to use this node as a PT bridge.
-
-        Returns an empty string if there is no such info (e.g. this isn't a PT bridge).
-        Returns None if we *expect* there to be such info but couldn't locate it (yet).
-        """
-        ...
-
-    @abstractmethod
-    def hup(self) -> bool:
-        """Send a SIGHUP to this node, if it's running."""
-        ...
-
-    @abstractmethod
-    def cleanupRunFiles(self) -> None:
-        """Clean up any left-over run state, assuming the node has exited."""
-        ...
-
-    @abstractmethod
-    def getUncheckedDirInfoWaitTime(self) -> float:
-        """Returns the amount of time to wait before verifying, after the
-        network has bootstrapped, and the dir info has been distributed.
-
-        Based on whether this node has unchecked directory info, or other
-        known timing issues.
-        """
-        ...
-
-    @abstractmethod
-    def updateLastStatus(self) -> None:
-        """Update last messages this node has received, for use with
-        isBootstrapped and the getLast* functions.
-        """
-        ...
-
-    @abstractmethod
-    def getLastBootstrapStatus(self) -> DirInfoStatus:
-        """Return the last bootstrap message fetched by
-        updateLastStatus as a 3-tuple of percentage
-        complete, keyword (optional), and message.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
-        ...
-
-    @abstractmethod
-    def isBootstrapped(self) -> bool:
-        """Return true iff the logfile says that this instance is
-        bootstrapped.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
-        ...
-
-    @abstractmethod
-    def getNodeDirInfoStatus(
-        self,
-    ) -> Optional[tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]]:
-        """Return a 3-tuple describing the status of this node's descriptor,
-        in all the directory documents across the network.
-
-        If this node does not have a descriptor, returns None.
-        """
-        ...
-
-    @abstractmethod
-    def check_node_in_dirinfo(
-        self, dir_fmt: DirFormat, other_node: Node
-    ) -> DirInfoStatusCode:
-        """Check whether `other_node` is present in the specified directory type"""
-        ...
 
 
 @dataclasses.dataclass
