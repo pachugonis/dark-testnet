@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import chutney.TorNet as TorNet
 import textwrap
 
-from typing import Iterable, Iterator, Tuple
+from typing import TYPE_CHECKING, Iterable, Iterator, Tuple
 
 from chutney.errors import ChutneyError
 from chutney.Util import find_executable_on_path, addr_and_port_str, IPAddress
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 
 def _family_member_fps(node: TorNet.Node) -> Iterable[str]:

@@ -1,3 +1,7 @@
+# [pep 0536](https://peps.python.org/pep-0563/) - Lazy annotation eval via
+# stringification.
+from __future__ import annotations
+
 # Future imports for Python 2.7, mandatory in 3.0
 from __future__ import division
 from __future__ import print_function
@@ -6,21 +10,24 @@ from __future__ import unicode_literals
 import time
 
 import chutney
-import chutney.TorNet
 import chutney.Traffic
 
 from ipaddress import ip_address
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from . import NetworkTestFailure
 from chutney.Util import IPAddress
 from chutney.errors import ChutneyInternalError
 from chutney import envvars
 
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
+
+
 LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
 
 
-def run_test(network: chutney.TorNet.Network) -> None:
+def run_test(network: TorNet.Network) -> None:
     # Try to verify twice each consensus, but don't verify too fast
     V3_AUTH_VOTING_INTERVAL = network.V3_AUTH_VOTING_INTERVAL
     VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
@@ -53,7 +60,7 @@ def run_test(network: chutney.TorNet.Network) -> None:
         raise NetworkTestFailure("All attempts failed")
 
 
-def _verify_traffic(network: chutney.TorNet.Network, timeout: float = 5.0) -> bool:
+def _verify_traffic(network: TorNet.Network, timeout: float = 5.0) -> bool:
     """Verify (parts of) the network by sending traffic through it
     and verify what is received."""
     # TODO: IPv6 SOCKSPorts, SOCKSPorts with IPv6Traffic, and IPv6 Exits
@@ -186,8 +193,8 @@ def _configure_exits(
     bind_to: chutney.Traffic.HostPortTuple,
     tmpdata: bytes,
     reps: int,
-    client_list: list[chutney.TorNet.Node],
-    exit_list: list[chutney.TorNet.Node],
+    client_list: list[TorNet.Node],
+    exit_list: list[TorNet.Node],
     LISTEN_ADDR: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,
@@ -216,8 +223,8 @@ def _configure_hs(
     tt: chutney.Traffic.TrafficTester,
     tmpdata: bytes,
     reps: int,
-    client_list: list[chutney.TorNet.Node],
-    hs_list: list[chutney.TorNet.Node],
+    client_list: list[TorNet.Node],
+    hs_list: list[TorNet.Node],
     LISTEN_ADDR: Union[str, IPAddress],
     LISTEN_PORT: int,
     connection_count: int,

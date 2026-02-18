@@ -1,3 +1,7 @@
+# [pep 0536](https://peps.python.org/pep-0563/) - Lazy annotation eval via
+# stringification.
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -7,13 +11,12 @@ import time
 from collections.abc import Collection
 from pathlib import Path
 from typeguard import check_type
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 from typing_extensions import override
 
 import chutney.errors
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
 from chutney.dirinfo import (
     DirInfoStatus,
@@ -31,6 +34,9 @@ from chutney.Util import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 
 class LocalNodeController(NodeController):

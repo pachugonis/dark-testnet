@@ -8,9 +8,8 @@ import tomli_w
 from pathlib import Path
 from typeguard import check_type
 from typing_extensions import override
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import chutney.TorNet as TorNet
 import chutney.arti.config as arti_config
 import chutney.launcher
 
@@ -26,6 +25,9 @@ from chutney.Util import (
     mkdir_p,
     Option,
 )
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 _HS_NICKNAME = "chutney_onion_service"
 

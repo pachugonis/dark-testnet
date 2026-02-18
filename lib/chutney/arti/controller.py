@@ -1,3 +1,7 @@
+# [pep 0536](https://peps.python.org/pep-0563/) - Lazy annotation eval via
+# stringification.
+from __future__ import annotations
+
 import logging
 import re
 import signal
@@ -5,7 +9,7 @@ import sqlite3
 
 from collections.abc import Collection
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from typing_extensions import override
 
 from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat, HSV3_KEYWORD
@@ -14,11 +18,13 @@ from chutney.node_controller import NodeController
 import chutney.errors
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
 from chutney.Util import (
     Option,
 )
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 logger = logging.getLogger(__name__)
 

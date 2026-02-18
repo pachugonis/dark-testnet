@@ -10,13 +10,12 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from pathlib import Path
 from typeguard import check_type
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TYPE_CHECKING
 from typing_extensions import override
 
 import chutney
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
 from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import ChutneyError, ChutneyInternalError
@@ -26,6 +25,9 @@ from chutney.Util import (
     mkdir_p,
     Option,
 )
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 logger = logging.getLogger(__name__)
 
