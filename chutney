@@ -68,4 +68,4 @@ then
 fi
 
 printf "\nLaunching chutney using %s\n" "$("${PYTHON}" --version 2>&1)"
-"${PYTHON}" -m chutney.TorNet "${@}"
+"${PYTHON}" -m chutney.main "${@}"
