@@ -47,19 +47,16 @@ class LocalArtiNodeController(NodeController):
             )
         return Option(None)
 
-    # The extra time after other descriptors have finished, and before
-    # verifying.
-    DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO = 0
-    # We don't check for onion service descriptors before verifying.
-    # See #33609 for details.
-    HS_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL + 10
-
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            return LocalArtiNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for onion service descriptors before verifying.
+            # See #33609 for details.
+            return self._network.V3_AUTH_VOTING_INTERVAL + 10
         else:
-            return LocalArtiNodeController.DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO
+            # The extra time after other descriptors have finished, and before
+            # verifying.
+            return 0
 
     def _get_pid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.

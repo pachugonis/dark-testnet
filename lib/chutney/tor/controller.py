@@ -106,29 +106,23 @@ class LocalNodeController(NodeController):
         else:
             return False
 
-    # The extra time after other descriptors have finished, and before
-    # verifying.
-    DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO = 0
-    # We don't check for onion service descriptors before verifying.
-    # See #33609 for details.
-    HS_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL + 10
-    # We don't check for bridge descriptors before verifying.
-    # See #33581.
-    BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO = 10
-
-    # Let everything propagate for another consensus period before verifying.
-    LEGACY_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL
-
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            return LocalNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for onion service descriptors before verifying.
+            # See #33609 for details.
+            return self._network.V3_AUTH_VOTING_INTERVAL + 10
         elif self._node._config.bridge:
-            return LocalNodeController.BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO
+            # The extra time after other descriptors have finished, and before
+            # verifying.
+            return 0
         elif self.isLegacyTorVersion():
-            return LocalNodeController.LEGACY_WAIT_FOR_UNCHECKED_DIR_INFO
+            # Let everything propagate for another consensus period before verifying.
+            return self._network.V3_AUTH_VOTING_INTERVAL
         else:
-            return LocalNodeController.DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for bridge descriptors before verifying.
+            # See #33581.
+            return 10
 
     def getPid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.

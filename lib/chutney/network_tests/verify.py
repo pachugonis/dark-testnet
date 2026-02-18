@@ -17,15 +17,15 @@ from chutney.Util import IPAddress
 from chutney.errors import ChutneyInternalError
 from chutney import envvars
 
-# Try to verify twice each consensus, but don't verify too fast
-V3_AUTH_VOTING_INTERVAL = chutney.TorNet.V3_AUTH_VOTING_INTERVAL
-VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
-TIMEOUT_INTERVAL = max(VERIFY_ATTEMPT_INTERVAL - 1.0, 5.0)
-
 LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
 
 
 def run_test(network: chutney.TorNet.Network) -> None:
+    # Try to verify twice each consensus, but don't verify too fast
+    V3_AUTH_VOTING_INTERVAL = network.V3_AUTH_VOTING_INTERVAL
+    VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
+    TIMEOUT_INTERVAL = max(VERIFY_ATTEMPT_INTERVAL - 1.0, 5.0)
+
     wait_time = network.bootstrap_time
     start_time = time.time()
     end_time = start_time + wait_time

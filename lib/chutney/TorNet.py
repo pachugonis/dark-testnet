@@ -91,8 +91,6 @@ import chutney.Util
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "chutney")
 
-V3_AUTH_VOTING_INTERVAL = 20.0
-
 _TOR_VERSIONS = None
 _TORRC_OPTIONS = None
 
@@ -790,6 +788,8 @@ KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
 class Network(ToCustomJsonable, FromDecodedJson):
     """A network of Tor nodes, plus functions to manipulate them"""
+
+    V3_AUTH_VOTING_INTERVAL: float = 20.0
 
     def __init__(self) -> None:
         self._nodes: list[Node] = []

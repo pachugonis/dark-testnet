@@ -122,7 +122,7 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
             "hsdir_interval": int(
                 SHARED_RANDOM_N_ROUNDS
                 * SHARED_RANDOM_N_PHASES
-                * TorNet.V3_AUTH_VOTING_INTERVAL
+                * net.V3_AUTH_VOTING_INTERVAL
                 / 60
             ),
         },
