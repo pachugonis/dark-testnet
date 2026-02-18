@@ -10,20 +10,24 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from pathlib import Path
 from typeguard import check_type
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TYPE_CHECKING
 from typing_extensions import override
 
 import chutney
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
+from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import ChutneyError, ChutneyInternalError
+from chutney.node_builder import NodeBuilder
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     mkdir_p,
     Option,
 )
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +144,7 @@ def run_tor_gencert(
     return p.stdout
 
 
-class LocalNodeBuilder(TorNet.NodeBuilder):
-
+class LocalNodeBuilder(NodeBuilder):
     # Environment members used:
     # torrc -- which torrc file to use
     # authority -- bool -- are we an authority? (includes bridge authorities)
@@ -168,7 +171,6 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
     # nodenum -- int -- set by chutney -- which unique node index is this?
 
     def __init__(self, node: TorNet.Node):
-        TorNet.NodeBuilder.__init__(self)
         self._node = node
 
     @property
@@ -259,9 +261,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             self._generate_hs_state()
         if net.family_ids:
             for fid in self._node._config.families:
-                shutil.copy(
-                    TorNet.get_familykey_path(fid), Path(self._node.dir, "keys")
-                )
+                shutil.copy(net.get_familykey_path(fid), Path(self._node.dir, "keys"))
         if self._node._config.hs_client_restricted_discovery_server_tags:
             mkdir_p(self._client_onion_auth_dir())
 
@@ -459,9 +459,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         return Option(m.group(1))
 
     @override
-    def getAltAuthLines(
-        self, hasbridgeauth: bool = False
-    ) -> Optional[TorNet.AuthorityLine]:
+    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
         if not self._node._config.authority:
             return None
 
@@ -476,7 +474,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
         assert v3id is not None
 
-        return TorNet.AuthorityLine(
+        return AuthorityLine(
             nick=self._node.nick,
             ipv4=self._node.ip.unwrap(),
             ipv6=self._node.ipv6_addr,
@@ -491,7 +489,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         )
 
     @override
-    def getBridgeLines(self) -> list[TorNet.BridgeLine]:
+    def getBridgeLines(self) -> list[BridgeLine]:
         if not self._node._config.bridge:
             return []
 
@@ -517,7 +515,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             pt_extra = Option(None)
 
         res = [
-            TorNet.BridgeLine(
+            BridgeLine(
                 ipaddr=self._node.ip.unwrap(),
                 port=port,
                 fingerprint=self._node.fingerprint.unwrap(),
@@ -527,7 +525,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         ]
         if self._node.ipv6_addr.is_some():
             res.append(
-                TorNet.BridgeLine(
+                BridgeLine(
                     ipaddr=self._node.ipv6_addr.unwrap(),
                     port=port,
                     fingerprint=self._node.fingerprint.unwrap(),

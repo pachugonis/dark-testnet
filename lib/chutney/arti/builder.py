@@ -8,31 +8,34 @@ import tomli_w
 from pathlib import Path
 from typeguard import check_type
 from typing_extensions import override
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import chutney.TorNet as TorNet
 import chutney.arti.config as arti_config
 import chutney.launcher
 
+from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import (
     ChutneyError,
     ChutneyInternalError,
 )
 from chutney.known_bins import ArtiBin
+from chutney.node_builder import NodeBuilder
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
     Option,
 )
 
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
+
 _HS_NICKNAME = "chutney_onion_service"
 
 logger = logging.getLogger(__name__)
 
 
-class LocalArtiNodeBuilder(TorNet.NodeBuilder):
+class LocalArtiNodeBuilder(NodeBuilder):
     def __init__(self, node: TorNet.Node):
-        TorNet.NodeBuilder.__init__(self)
         self._node = node
 
     @property
@@ -186,15 +189,13 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         return True
 
     @override
-    def getAltAuthLines(
-        self, hasbridgeauth: bool = False
-    ) -> Optional[TorNet.AuthorityLine]:
+    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
         if self._node._config.authority:
             raise ChutneyInternalError("arti authorities unimplemented")
         return None
 
     @override
-    def getBridgeLines(self) -> list[TorNet.BridgeLine]:
+    def getBridgeLines(self) -> list[BridgeLine]:
         if self._node._config.bridge:
             raise ChutneyInternalError("arti bridges unimplemented")
         return []

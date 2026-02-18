@@ -1,3 +1,7 @@
+# [pep 0536](https://peps.python.org/pep-0563/) - Lazy annotation eval via
+# stringification.
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -7,15 +11,22 @@ import time
 from collections.abc import Collection
 from pathlib import Path
 from typeguard import check_type
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 from typing_extensions import override
 
 import chutney.errors
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import (
+    DirInfoStatus,
+    DirInfoStatusCode,
+    DirFormat,
+    HSV2_KEYWORD,
+    HSV3_KEYWORD,
+)
+from chutney import envvars
+from chutney.node_controller import NodeController
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
     values_for_keys,
@@ -24,11 +35,14 @@ from chutney.Util import (
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
-class LocalNodeController(TorNet.NodeController):
+
+class LocalNodeController(NodeController):
 
     def __init__(self, network: TorNet.Network, node: TorNet.Node):
-        TorNet.NodeController.__init__(self)
+        NodeController.__init__(self)
         self._network = network
         self._node = node
         self.most_recent_oniondesc_status: Optional[DirInfoStatus] = None
@@ -98,29 +112,23 @@ class LocalNodeController(TorNet.NodeController):
         else:
             return False
 
-    # The extra time after other descriptors have finished, and before
-    # verifying.
-    DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO = 0
-    # We don't check for onion service descriptors before verifying.
-    # See #33609 for details.
-    HS_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL + 10
-    # We don't check for bridge descriptors before verifying.
-    # See #33581.
-    BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO = 10
-
-    # Let everything propagate for another consensus period before verifying.
-    LEGACY_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL
-
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            return LocalNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for onion service descriptors before verifying.
+            # See #33609 for details.
+            return self._network.V3_AUTH_VOTING_INTERVAL + 10
         elif self._node._config.bridge:
-            return LocalNodeController.BRIDGE_WAIT_FOR_UNCHECKED_DIR_INFO
+            # The extra time after other descriptors have finished, and before
+            # verifying.
+            return 0
         elif self.isLegacyTorVersion():
-            return LocalNodeController.LEGACY_WAIT_FOR_UNCHECKED_DIR_INFO
+            # Let everything propagate for another consensus period before verifying.
+            return self._network.V3_AUTH_VOTING_INTERVAL
         else:
-            return LocalNodeController.DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for bridge descriptors before verifying.
+            # See #33581.
+            return 10
 
     def getPid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.
@@ -307,7 +315,7 @@ class LocalNodeController(TorNet.NodeController):
                 if m_v2:
                     status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV2_KEYWORD,
+                        keyword=HSV2_KEYWORD,
                         message=m_v2.groups()[0],
                     )
                     break
@@ -318,7 +326,7 @@ class LocalNodeController(TorNet.NodeController):
                 if m_v3:
                     status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message=m_v3.groups()[0],
                     )
                     break
@@ -661,7 +669,7 @@ class LocalNodeController(TorNet.NodeController):
             str, tuple[DirInfoStatusCode, Collection[DirFormat]]
         ] = dict()
         for node in self._network._nodes:
-            if node._config.launch_phase > TorNet.CUR_LAUNCH_PHASE:
+            if node._config.launch_phase > envvars.LAUNCH_PHASE.get():
                 continue
             dir_statuses: dict[
                 DirFormat,

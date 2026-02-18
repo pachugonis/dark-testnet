@@ -11,3 +11,11 @@ extend-ignore =
     # Whitespace before colon in `a[x + 1 :]`
     # (We allow this for clarity, and so does black.)
     E203
+    # "Move (third-party and built-in) imports into a type-checking block."
+    # Not clear that it's worth enforcing this.
+    TC002
+    TC003
+    # "Type alias does not need to be a string literal".
+    # Seems to be incorrect in practice (e.g. in CustomJsonable):
+    # <https://github.com/snok/flake8-type-checking/issues/209>
+    TC008

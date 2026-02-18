@@ -16,7 +16,6 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
@@ -40,6 +39,7 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
+import os
 import re
 import signal
 import sys
@@ -48,9 +48,16 @@ import time
 import tomli_w
 import json
 
+from chutney.node_builder import NodeBuilder
+from chutney.node_controller import NodeController
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
 from chutney import envvars
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import (
+    DirInfoStatusCode,
+    DirFormat,
+    BridgeLine,
+    AuthorityLine,
+)
 from chutney.errors import (
     ChutneyError,
     ChutneyErrorGroup,
@@ -84,14 +91,8 @@ import chutney.Util
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "chutney")
 
-V3_AUTH_VOTING_INTERVAL = 20.0
-
 _TOR_VERSIONS = None
 _TORRC_OPTIONS = None
-
-
-HSV2_KEYWORD = "hidden service v2"
-HSV3_KEYWORD = "hidden service v3"
 
 
 class LauncherBackend(FromDecodedJson, Enum):
@@ -181,24 +182,6 @@ def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
         i += 1
         newdir = Path("%s.%d" % (newdirbase, i))
     return newdir
-
-
-def get_familykey_path(ident: Optional[str], ext: bool = True) -> Path:
-    """
-    Return the absolute path for the secret family key identified with `ident`.
-
-    If no ident is given, return the directory in which we store family keys.
-
-    If `ext` is false, omit the "secret_family_key" exension.
-    """
-    family_key_dir = get_absolute_nodes_path().joinpath("family_keys")
-    if ident is None:
-        return family_key_dir
-    if ext:
-        fn = f"{ident}.secret_family_key"
-    else:
-        fn = ident
-    return family_key_dir.joinpath(fn)
 
 
 class Node(ToCustomJsonable):
@@ -539,196 +522,6 @@ class Node(ToCustomJsonable):
         )
 
 
-class NodeBuilder(ABC):
-    """Abstract base class.  A NodeBuilder is responsible for doing all the
-    one-time prep needed to set up a node in a network.
-    """
-
-    @abstractmethod
-    def checkConfig(self, net: Network) -> None:
-        """Try to format our torrc; raise an exception if we can't."""
-        ...
-
-    @abstractmethod
-    def preConfig(self, net: Network) -> None:
-        """Called on all nodes of the current config phase before any nodes configure.
-
-        Intended to generate configuration that doesn't depend on other nodes,
-        particularly anything that *will* be needed in the configuration step of
-        other nodes, such as public keys.
-        """
-        ...
-
-    @abstractmethod
-    def get_fingerprint(self) -> Option[str]:
-        """Return the relay fingerprint, if applicable."""
-        ...
-
-    @abstractmethod
-    def get_fingerprint_ed25519(self) -> Option[str]:
-        """The base64-encoded ed25519 public key fingerprint of this node, if applicable."""
-        ...
-
-    @abstractmethod
-    def config(self, net: Network) -> None:
-        """Called to configure a node: creates a torrc file for it."""
-        ...
-
-    @abstractmethod
-    def postConfig(self, net: Network) -> None:
-        """Called on each nodes after all nodes configure."""
-        ...
-
-    @abstractmethod
-    def isSupported(self, net: Network) -> bool:
-        """Return true if this node appears to have everything it needs;
-        false otherwise."""
-        ...
-
-    @abstractmethod
-    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
-        """Return the information needed to use this node as an authority,
-        if it is configured as one.
-        """
-        ...
-
-    @abstractmethod
-    def getBridgeLines(self) -> list[BridgeLine]:
-        """Return descriptors that a client can use to connect to this bridge.
-        Non-bridge relays return [].
-        """
-        ...
-
-    @abstractmethod
-    def get_hs_hostname(self) -> Option[str]:
-        """Return the hidden service hostname, if any.
-
-        Should be available (non-None) if the node is configured as a hidden
-        service (`Node.is_hs`), after `preConfig` has been called.
-        """
-        ...
-
-    @abstractmethod
-    def get_hs_client_pubkey(self, hs_address: str) -> str:
-        """Get the hidden service "restricted discovery" key for the `hs_address`
-
-        Generates the key, if it doesn't already exist. The returned string
-        is of the form `descriptor:x25519:<base32-encoded-public-key>`.
-        """
-        ...
-
-    @abstractmethod
-    def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
-        """Set the hidden service "restricted discovery" pubkey for `client_id`
-
-        `client_pubkey` should be of the form
-        `descriptor:x25519:<base32-encoded-public-key>`.
-        """
-        ...
-
-
-class NodeController(ABC):
-    """Abstract base class.  A NodeController is responsible for running a
-    node on the network.
-    """
-
-    @abstractmethod
-    def isRunning(self) -> bool:
-        """Return true iff this node is running."""
-        ...
-
-    @abstractmethod
-    def start(self) -> None:
-        """Try to start this node, if not already running. Raises `ChutneyError` on failure."""
-        ...
-
-    @abstractmethod
-    def stop(self, sig: int = signal.SIGINT) -> None:
-        """Try to stop this node by sending it the signal 'sig'."""
-        ...
-
-    @abstractmethod
-    def getPtExtra(self) -> Option[str]:
-        """Get extra bridge info to use this node as a PT bridge.
-
-        Returns an empty string if there is no such info (e.g. this isn't a PT bridge).
-        Returns None if we *expect* there to be such info but couldn't locate it (yet).
-        """
-        ...
-
-    @abstractmethod
-    def hup(self) -> bool:
-        """Send a SIGHUP to this node, if it's running."""
-        ...
-
-    @abstractmethod
-    def cleanupRunFiles(self) -> None:
-        """Clean up any left-over run state, assuming the node has exited."""
-        ...
-
-    @abstractmethod
-    def getUncheckedDirInfoWaitTime(self) -> float:
-        """Returns the amount of time to wait before verifying, after the
-        network has bootstrapped, and the dir info has been distributed.
-
-        Based on whether this node has unchecked directory info, or other
-        known timing issues.
-        """
-        ...
-
-    @abstractmethod
-    def updateLastStatus(self) -> None:
-        """Update last messages this node has received, for use with
-        isBootstrapped and the getLast* functions.
-        """
-        ...
-
-    @abstractmethod
-    def getLastBootstrapStatus(self) -> DirInfoStatus:
-        """Return the last bootstrap message fetched by
-        updateLastStatus as a 3-tuple of percentage
-        complete, keyword (optional), and message.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
-        ...
-
-    @abstractmethod
-    def isBootstrapped(self) -> bool:
-        """Return true iff the logfile says that this instance is
-        bootstrapped.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
-        ...
-
-    @abstractmethod
-    def getNodeDirInfoStatus(
-        self,
-    ) -> Optional[tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]]:
-        """Return a 3-tuple describing the status of this node's descriptor,
-        in all the directory documents across the network.
-
-        If this node does not have a descriptor, returns None.
-        """
-        ...
-
-    @abstractmethod
-    def check_node_in_dirinfo(
-        self, dir_fmt: DirFormat, other_node: Node
-    ) -> DirInfoStatusCode:
-        """Check whether `other_node` is present in the specified directory type"""
-        ...
-
-
-# TODO: Consider getting rid of these globals, particularly since they're not
-# contants; e.g. we change them at runtime in `Network.bootstrap`.
-CUR_CONFIG_PHASE: int = envvars.CONFIG_PHASE.get()
-CUR_LAUNCH_PHASE: int = envvars.LAUNCH_PHASE.get()
-
-
 @dataclasses.dataclass
 class NodeConfig(ToCustomJsonable, FromDecodedJson):
     """Properties of a Tor Node"""
@@ -972,35 +765,13 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         return NodeConfig(**d)
 
 
-@dataclasses.dataclass
-class BridgeLine:
-    ipaddr: IPAddress
-    port: int
-    fingerprint: str
-    pt_transport: Option[str] = Option(None)
-    pt_extra: Option[str] = Option(None)
-
-
-@dataclasses.dataclass
-class AuthorityLine:
-    nick: str
-    ipv4: IPv4Address
-    ipv6: Option[IPv6Address]
-    orport: int
-    dirport: int
-    v3id: str
-    fingerprint: str
-    fingerprint_ed25519: str
-    extra_flags: list[str]
-    alt_bridge_auth: bool = False
-    alt_dir_auth: bool = False
-
-
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
 
 class Network(ToCustomJsonable, FromDecodedJson):
     """A network of Tor nodes, plus functions to manipulate them"""
+
+    V3_AUTH_VOTING_INTERVAL: float = 20.0
 
     def __init__(self) -> None:
         self._nodes: list[Node] = []
@@ -1193,10 +964,27 @@ class Network(ToCustomJsonable, FromDecodedJson):
         nodeslink.symlink_to(newnodesdir)
         self.dir = newnodesdir
 
+    def get_familykey_path(self, ident: Optional[str], ext: bool = True) -> Path:
+        """
+        Return the absolute path for the secret family key identified with `ident`.
+
+        If no ident is given, return the directory in which we store family keys.
+
+        If `ext` is false, omit the "secret_family_key" exension.
+        """
+        family_key_dir = self.dir.joinpath("family_keys")
+        if ident is None:
+            return family_key_dir
+        if ext:
+            fn = f"{ident}.secret_family_key"
+        else:
+            fn = ident
+        return family_key_dir.joinpath(fn)
+
     def create_family_keys(self) -> None:
         """Initialize family keys as needed for all of our nodes."""
 
-        mkdir_p(get_familykey_path(None))
+        mkdir_p(self.get_familykey_path(None))
         all_family_ids = set()
         for n in self._nodes:
             if n._config.families:
@@ -1205,7 +993,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             cmdline = [
                 TorBin().config_envvar().get(),
                 "--keygen-family",
-                str(get_familykey_path(fid, ext=False)),
+                str(self.get_familykey_path(fid, ext=False)),
             ]
             launcher = chutney.launcher.LocalLauncher()
             output = chutney.tor.util.run_tor(launcher, cmdline, tolerate_error=True)
@@ -1216,12 +1004,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
             if not m:
                 raise ChutneyError("unexpected output from tor --keygen-family")
             self.family_ids[fid] = m.group(1)
-        with get_familykey_path("map.json", ext=False).open("w") as f:
+        with self.get_familykey_path("map.json", ext=False).open("w") as f:
             json.dump(self.family_ids, f)
 
     def load_family_key_ids(self) -> None:
         """Load our family key identifiers from disk."""
-        family_key_dir = get_familykey_path(None)
+        family_key_dir = self.get_familykey_path(None)
         self.family_ids = json.load(family_key_dir.joinpath("map.json").open())
 
     def supported(self) -> None:
@@ -1254,7 +1042,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for hs_client in (
             n
             for n in self._nodes
-            if n._config.config_phase == CUR_CONFIG_PHASE
+            if n._config.config_phase == envvars.CONFIG_PHASE.get()
             and n._config.hs_client_restricted_discovery_server_tags
         ):
             for (
@@ -1275,7 +1063,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                             f"{n.nick} can't authorize with {server.nick};"
                             " restricted discovery disabled"
                         )
-                    if server._config.config_phase > CUR_CONFIG_PHASE:
+                    if server._config.config_phase > envvars.CONFIG_PHASE.get():
                         raise ChutneyError(
                             f"{n.nick} can't authorize with {server.nick},"
                             " which isn't configured yet"
@@ -1297,7 +1085,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         """Invoked from command line: Configure and prepare the network to be
         started.
         """
-        if CUR_CONFIG_PHASE == 1:
+        if envvars.CONFIG_PHASE.get() == 1:
             self.create_family_keys()
         else:
             self.load_family_key_ids()
@@ -1306,7 +1094,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         altauthlines = []
         bridgelines = []
         cur_phase_nodes = [
-            n for n in self._nodes if n._config.config_phase == CUR_CONFIG_PHASE
+            n
+            for n in self._nodes
+            if n._config.config_phase == envvars.CONFIG_PHASE.get()
         ]
 
         # XXX don't change node names or types or count if anything is
@@ -1393,7 +1183,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         total = 0
         running = 0
         for n in self._nodes:
-            if n._config.launch_phase != CUR_LAUNCH_PHASE:
+            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
                 continue
             total += 1
             if not n._controller.isRunning():
@@ -1416,7 +1206,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         print("Starting nodes", end="")
         errs = []
         for n in self._nodes:
-            if n._config.launch_phase != CUR_LAUNCH_PHASE:
+            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
                 continue
             try:
                 n._controller.start()
@@ -1538,7 +1328,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         start = time.time()
         limit = start + limit_secs
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
-        bootstrap_upto = CUR_LAUNCH_PHASE
+        bootstrap_upto = envvars.LAUNCH_PHASE.get()
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= bootstrap_upto]
         min_time = self.getMinStartTime()
@@ -1743,13 +1533,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for phase in range(1, phase_max + 1):
             if phase <= cfg_phase_max:
                 print("Starting configure-phase ", phase)
-                global CUR_CONFIG_PHASE
-                CUR_CONFIG_PHASE = phase
+                # XXX make this a parameter to `configure`
+                os.environ[envvars.CONFIG_PHASE.varname()] = str(phase)
                 self.configure()
             if phase <= launch_phase_max:
                 print("Starting launch-phase ", phase)
-                global CUR_LAUNCH_PHASE
-                CUR_LAUNCH_PHASE = phase
+                # XXX make this a parameter to `start`
+                os.environ[envvars.LAUNCH_PHASE.varname()] = str(phase)
                 self.start()
                 self.wait_for_bootstrap()
 

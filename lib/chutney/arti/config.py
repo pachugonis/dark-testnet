@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-import chutney.TorNet as TorNet
+from typing import TYPE_CHECKING
 
 from chutney.errors import ChutneyError
 from chutney.Util import addr_and_port_str
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 
 def tor_config(net: TorNet.Network) -> dict[str, object]:
@@ -122,7 +125,7 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
             "hsdir_interval": int(
                 SHARED_RANDOM_N_ROUNDS
                 * SHARED_RANDOM_N_PHASES
-                * TorNet.V3_AUTH_VOTING_INTERVAL
+                * net.V3_AUTH_VOTING_INTERVAL
                 / 60
             ),
         },

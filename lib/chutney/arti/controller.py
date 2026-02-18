@@ -1,3 +1,7 @@
+# [pep 0536](https://peps.python.org/pep-0563/) - Lazy annotation eval via
+# stringification.
+from __future__ import annotations
+
 import logging
 import re
 import signal
@@ -5,18 +9,22 @@ import sqlite3
 
 from collections.abc import Collection
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from typing_extensions import override
 
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat, HSV3_KEYWORD
+from chutney.node_controller import NodeController
+
 import chutney.errors
 import chutney.known_bins
 import chutney.launcher
-import chutney.TorNet as TorNet
 
 from chutney.Util import (
     Option,
 )
+
+if TYPE_CHECKING:
+    import chutney.TorNet as TorNet
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +34,8 @@ logger = logging.getLogger(__name__)
 _HS_NICKNAME = chutney.arti.builder._HS_NICKNAME
 
 
-class LocalArtiNodeController(TorNet.NodeController):
+class LocalArtiNodeController(NodeController):
     def __init__(self, network: TorNet.Network, node: TorNet.Node):
-        TorNet.NodeController.__init__(self)
         self._network = network
         self._node = node
         self._most_recent_bootstrap_status: Optional[DirInfoStatus] = None
@@ -46,19 +53,16 @@ class LocalArtiNodeController(TorNet.NodeController):
             )
         return Option(None)
 
-    # The extra time after other descriptors have finished, and before
-    # verifying.
-    DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO = 0
-    # We don't check for onion service descriptors before verifying.
-    # See #33609 for details.
-    HS_WAIT_FOR_UNCHECKED_DIR_INFO = TorNet.V3_AUTH_VOTING_INTERVAL + 10
-
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            return LocalArtiNodeController.HS_WAIT_FOR_UNCHECKED_DIR_INFO
+            # We don't check for onion service descriptors before verifying.
+            # See #33609 for details.
+            return self._network.V3_AUTH_VOTING_INTERVAL + 10
         else:
-            return LocalArtiNodeController.DEFAULT_WAIT_FOR_UNCHECKED_DIR_INFO
+            # The extra time after other descriptors have finished, and before
+            # verifying.
+            return 0
 
     def _get_pid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.
@@ -206,7 +210,7 @@ class LocalArtiNodeController(TorNet.NodeController):
                 if m:
                     self._most_recent_oniondesc_status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message=m.group(0),
                     )
                     continue
@@ -218,7 +222,7 @@ class LocalArtiNodeController(TorNet.NodeController):
                 if m:
                     self._most_recent_oniondesc_status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_FAILED_TO_PUBLISH,
-                        keyword=TorNet.HSV3_KEYWORD,
+                        keyword=HSV3_KEYWORD,
                         message="Restricted discovery enabled, but no auth'd clients configured",
                     )
                     continue
