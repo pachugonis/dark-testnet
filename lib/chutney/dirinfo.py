@@ -2,11 +2,12 @@ import dataclasses
 import enum
 import re
 
+from ipaddress import IPv4Address, IPv6Address
 from typing import Optional, Union
 
 import chutney.errors
 
-from chutney.Util import Option
+from chutney.Util import Option, IPAddress
 
 
 class DirInfoStatusCode(enum.Enum):
@@ -99,3 +100,27 @@ class DirFormat(enum.Enum):
             raise chutney.errors.ChutneyError(
                 f"status_pattern unimplemented for {self}"
             )
+
+
+@dataclasses.dataclass
+class BridgeLine:
+    ipaddr: IPAddress
+    port: int
+    fingerprint: str
+    pt_transport: Option[str] = Option(None)
+    pt_extra: Option[str] = Option(None)
+
+
+@dataclasses.dataclass
+class AuthorityLine:
+    nick: str
+    ipv4: IPv4Address
+    ipv6: Option[IPv6Address]
+    orport: int
+    dirport: int
+    v3id: str
+    fingerprint: str
+    fingerprint_ed25519: str
+    extra_flags: list[str]
+    alt_bridge_auth: bool = False
+    alt_dir_auth: bool = False

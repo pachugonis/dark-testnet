@@ -50,7 +50,13 @@ import json
 
 from chutney.known_bins import TorBin, TorGenCertBin, ArtiBin
 from chutney import envvars
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import (
+    DirInfoStatus,
+    DirInfoStatusCode,
+    DirFormat,
+    BridgeLine,
+    AuthorityLine,
+)
 from chutney.errors import (
     ChutneyError,
     ChutneyErrorGroup,
@@ -970,30 +976,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         )
         d["trusted_networks"] = [ipaddress.ip_network(n) for n in d["trusted_networks"]]
         return NodeConfig(**d)
-
-
-@dataclasses.dataclass
-class BridgeLine:
-    ipaddr: IPAddress
-    port: int
-    fingerprint: str
-    pt_transport: Option[str] = Option(None)
-    pt_extra: Option[str] = Option(None)
-
-
-@dataclasses.dataclass
-class AuthorityLine:
-    nick: str
-    ipv4: IPv4Address
-    ipv6: Option[IPv6Address]
-    orport: int
-    dirport: int
-    v3id: str
-    fingerprint: str
-    fingerprint_ed25519: str
-    extra_flags: list[str]
-    alt_bridge_auth: bool = False
-    alt_dir_auth: bool = False
 
 
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}

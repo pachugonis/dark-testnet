@@ -18,6 +18,7 @@ import chutney.known_bins
 import chutney.launcher
 import chutney.TorNet as TorNet
 
+from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import ChutneyError, ChutneyInternalError
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
@@ -459,9 +460,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         return Option(m.group(1))
 
     @override
-    def getAltAuthLines(
-        self, hasbridgeauth: bool = False
-    ) -> Optional[TorNet.AuthorityLine]:
+    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
         if not self._node._config.authority:
             return None
 
@@ -476,7 +475,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
 
         assert v3id is not None
 
-        return TorNet.AuthorityLine(
+        return AuthorityLine(
             nick=self._node.nick,
             ipv4=self._node.ip.unwrap(),
             ipv6=self._node.ipv6_addr,
@@ -491,7 +490,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         )
 
     @override
-    def getBridgeLines(self) -> list[TorNet.BridgeLine]:
+    def getBridgeLines(self) -> list[BridgeLine]:
         if not self._node._config.bridge:
             return []
 
@@ -517,7 +516,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
             pt_extra = Option(None)
 
         res = [
-            TorNet.BridgeLine(
+            BridgeLine(
                 ipaddr=self._node.ip.unwrap(),
                 port=port,
                 fingerprint=self._node.fingerprint.unwrap(),
@@ -527,7 +526,7 @@ class LocalNodeBuilder(TorNet.NodeBuilder):
         ]
         if self._node.ipv6_addr.is_some():
             res.append(
-                TorNet.BridgeLine(
+                BridgeLine(
                     ipaddr=self._node.ipv6_addr.unwrap(),
                     port=port,
                     fingerprint=self._node.fingerprint.unwrap(),

@@ -14,6 +14,7 @@ import chutney.TorNet as TorNet
 import chutney.arti.config as arti_config
 import chutney.launcher
 
+from chutney.dirinfo import AuthorityLine, BridgeLine
 from chutney.errors import (
     ChutneyError,
     ChutneyInternalError,
@@ -186,15 +187,13 @@ class LocalArtiNodeBuilder(TorNet.NodeBuilder):
         return True
 
     @override
-    def getAltAuthLines(
-        self, hasbridgeauth: bool = False
-    ) -> Optional[TorNet.AuthorityLine]:
+    def getAltAuthLines(self, hasbridgeauth: bool = False) -> Optional[AuthorityLine]:
         if self._node._config.authority:
             raise ChutneyInternalError("arti authorities unimplemented")
         return None
 
     @override
-    def getBridgeLines(self) -> list[TorNet.BridgeLine]:
+    def getBridgeLines(self) -> list[BridgeLine]:
         if self._node._config.bridge:
             raise ChutneyInternalError("arti bridges unimplemented")
         return []

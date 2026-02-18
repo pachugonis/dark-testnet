@@ -15,7 +15,11 @@ import chutney.known_bins
 import chutney.launcher
 import chutney.TorNet as TorNet
 
-from chutney.dirinfo import DirInfoStatus, DirInfoStatusCode, DirFormat
+from chutney.dirinfo import (
+    DirInfoStatus,
+    DirInfoStatusCode,
+    DirFormat,
+)
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
     values_for_keys,
