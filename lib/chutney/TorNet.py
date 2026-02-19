@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#
 # Copyright 2011 Nick Mathewson, Michael Stone
 # Copyright 2013 The Tor Project
 #
@@ -1757,7 +1755,3 @@ def __main__() -> None:
         traceback.print_exception(None, value=e, tb=None, limit=0)
         sys.exit(1)
     sys.exit(0)
-
-
-if __name__ == "__main__":
-    __main__()
