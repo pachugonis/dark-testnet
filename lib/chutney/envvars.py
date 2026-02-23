@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import enum
 import ipaddress
 import os
 
@@ -145,6 +146,24 @@ class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):
         if not x:
             return []
         return [ipaddress.ip_network(n) for n in x.split(",")]
+
+
+ENUM = TypeVar("ENUM", bound=enum.Enum)
+
+
+class EnvVarEnum(Generic[ENUM], EnvVar[ENUM]):
+    @override
+    def help(self) -> str:
+        t = type(self.default())
+        return super().help() + " (choices: " + ",".join(x.name for x in t) + ")"
+
+    @override
+    def parse(self, x: str) -> ENUM:
+        t = type(self.default())
+        try:
+            return t[x]
+        except KeyError as ke:
+            raise ValueError from ke
 
 
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
