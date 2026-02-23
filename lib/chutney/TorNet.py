@@ -528,7 +528,16 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # Which backend to use to run the node.
     backend: NodeBackend = NodeBackend.TOR
     # Which process-launcher to use.
-    launcher_backend: LauncherBackend = LauncherBackend.LOCAL
+    _LAUNCHER_BACKEND_ENV: ClassVar[envvars.EnvVarEnum[LauncherBackend]] = (
+        envvars.EnvVarEnum(
+            "CHUTNEY_LAUNCHER_BACKEND",
+            LauncherBackend.LOCAL,
+            "Which process-launcher to use",
+        )
+    )
+    launcher_backend: LauncherBackend = dataclasses.field(
+        default_factory=lambda: NodeConfig._LAUNCHER_BACKEND_ENV.get()
+    )
     # a short text string that represents the type of node.
     # Some special tag prefixes:
     # * 'h' configures it to run an onion service.
@@ -827,6 +836,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._DNS_CONF_ENV.register_argparser(parser)
         NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
         NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
+        NodeConfig._LAUNCHER_BACKEND_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -844,6 +854,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
             sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
             enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV.get(ns=ns),
+            launcher_backend=NodeConfig._LAUNCHER_BACKEND_ENV.get(ns=ns),
         )
 
 
