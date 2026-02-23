@@ -14,7 +14,6 @@ from typing_extensions import override
 
 from chutney import TorNet
 from chutney.TorNet import NodeConfig, AddressAssignmentStrategy
-from chutney.Util import Option
 from chutney.network_tests import verify
 
 _LOOPBACK_IPV4_NET = ipaddress.IPv4Network("127.0.0.0/8")
@@ -76,7 +75,7 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             # Override default of STATIC
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
-            ip=Option(str(next(iter(_LOOPBACK_IPV4_NET.hosts())))),
+            ip=str(next(iter(_LOOPBACK_IPV4_NET.hosts()))),
             trusted_networks=[_LOOPBACK_IPV4_NET],
             controlling_pid=os.getpid(),
         )
@@ -106,7 +105,7 @@ class Tests(unittest.TestCase):
             controlling_pid=os.getpid(),
             # ipv6 only has a single loopback address; use a private address
             # range instead.
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
         )
         self.network.addNodes(basic_net_configs(base))
 
@@ -118,7 +117,7 @@ class Tests(unittest.TestCase):
             self.assertNotIn(ipv6, v6addresses)
             v6addresses.add(ipv6)
 
-        self.network.configure()
+        self.network.configure(config_phase=1)
         # we *don't* attempt to bootstrap or use the network here, since the private
         # address space we're using is probably not set up on the host system.
 
@@ -126,8 +125,8 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
         )
         self.network.addNodes(basic_net_configs(base))
         for node in self.network.nodes:
@@ -150,8 +149,8 @@ class Tests(unittest.TestCase):
         base = NodeConfig(
             address_assignment_strategy=AddressAssignmentStrategy.OFFSET,
             controlling_pid=os.getpid(),
-            ip=Option(str(next(iter(_PRIVATE_IPV4_NET.hosts())))),
-            ipv6_addr=Option(str(next(iter(_PRIVATE_IPV6_NET.hosts())))),
+            ip=str(next(iter(_PRIVATE_IPV4_NET.hosts()))),
+            ipv6_addr=str(next(iter(_PRIVATE_IPV6_NET.hosts()))),
             trusted_networks=[_PRIVATE_IPV4_NET, _PRIVATE_IPV6_NET],
         )
         self.network.addNodes(basic_net_configs(base))

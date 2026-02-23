@@ -25,7 +25,6 @@ from chutney.dirinfo import (
     HSV2_KEYWORD,
     HSV3_KEYWORD,
 )
-from chutney import envvars
 from chutney.node_controller import NodeController
 from chutney.tor.util import get_tor_version
 from chutney.Util import (
@@ -642,7 +641,7 @@ class LocalNodeController(NodeController):
         return node_dir
 
     def getNodeDirInfoStatusList(
-        self,
+        self, *, launch_phase: int
     ) -> Optional[dict[str, tuple[DirInfoStatusCode, Collection[DirFormat]]]]:
         """Look through the directories on each node, and work out if
         this node is in that directory.
@@ -669,7 +668,7 @@ class LocalNodeController(NodeController):
             str, tuple[DirInfoStatusCode, Collection[DirFormat]]
         ] = dict()
         for node in self._network._nodes:
-            if node._config.launch_phase > envvars.LAUNCH_PHASE.get():
+            if node._config.launch_phase > launch_phase:
                 continue
             dir_statuses: dict[
                 DirFormat,
@@ -784,8 +783,10 @@ class LocalNodeController(NodeController):
     @override
     def getNodeDirInfoStatus(
         self,
+        *,
+        launch_phase: int,
     ) -> Optional[tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]]:
-        dir_status = self.getNodeDirInfoStatusList()
+        dir_status = self.getNodeDirInfoStatusList(launch_phase=launch_phase)
         if dir_status:
             summary = self.summariseNodeDirInfoStatus(dir_status)
             if summary:
@@ -801,13 +802,13 @@ class LocalNodeController(NodeController):
         assert not bridge_member
         return None
 
-    def isInExpectedDirInfoDocs(self) -> Optional[bool]:
+    def isInExpectedDirInfoDocs(self, *, launch_phase: int) -> Optional[bool]:
         """Return True if the descriptors for this node are in all expected
         directory documents.
 
         Return None if this node does not publish descriptors.
         """
-        node_status = self.getNodeDirInfoStatus()
+        node_status = self.getNodeDirInfoStatus(launch_phase=launch_phase)
         if node_status:
             status_code, _, _ = node_status
             return status_code == DirInfoStatusCode.SUCCESS

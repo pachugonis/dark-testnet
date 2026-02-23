@@ -14,17 +14,19 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from abc import ABC, abstractmethod
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import (
-    Callable,
+    ClassVar,
     List,
     Optional,
     Any,
     Iterable,
     Sequence,
     Iterator,
+    Protocol,
     Tuple,
 )
 from typing_extensions import assert_never, override
@@ -37,7 +39,7 @@ import importlib
 import importlib.resources
 import ipaddress
 import logging
-import os
+import platform
 import re
 import signal
 import sys
@@ -45,6 +47,8 @@ import textwrap
 import time
 import tomli_w
 import json
+
+import chutney.network_tests.verify
 
 from chutney.node_builder import NodeBuilder
 from chutney.node_controller import NodeController
@@ -69,7 +73,6 @@ from chutney.Util import (
     IPAddress,
     IPNetwork,
     Option,
-    OptionalConversionDescriptor,
 )
 from collections.abc import Collection
 
@@ -250,9 +253,9 @@ class Node(ToCustomJsonable):
 
     @property
     def ip(self) -> Option[IPv4Address]:
-        if self._config.ip.is_none():
+        if self._config.ip is None:
             return Option(None)
-        base = IPv4Address(self._config.ip.unwrap())
+        base = IPv4Address(self._config.ip)
         strategy = self._config.address_assignment_strategy
         if strategy == AddressAssignmentStrategy.STATIC:
             return Option(base)
@@ -263,9 +266,9 @@ class Node(ToCustomJsonable):
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
-        if self._config.ipv6_addr.is_none():
+        base_str = self._config.ipv6_addr
+        if base_str is None:
             return Option(None)
-        base_str = self._config.ipv6_addr.unwrap()
         # The IPv6Address constructor doesn't recognize addresses enclosed in
         # brackets (e.g. `[::1]`), and indeed they aren't really part of the
         # address. We used to expect them though, so for now strip them out for
@@ -387,8 +390,6 @@ class Node(ToCustomJsonable):
         if self._config.hs:
             # Currently all hidden services redirect to the same port,
             # for compatibility with the test in `network_tests/verify.py`
-            import chutney.network_tests.verify
-
             return Option(chutney.network_tests.verify.LISTEN_PORT)
         else:
             return Option(None)
@@ -589,24 +590,44 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # trusted networks. unsecured services, such as socks, dns, and the tor
     # controlport, will be bound to the node's assigned IP addresses if they
     # fall within one of these (in addition to binding them to localhost).
+    _TRUSTED_NETWORKS_ENV: ClassVar[envvars.EnvVarIPNetworkList] = (
+        envvars.EnvVarIPNetworkList(
+            "CHUTNEY_TRUSTED_NETWORKS",
+            [],
+            "Comma-separated list of trusted subnets. e.g. '192.168.0.0/24,fc00::/8'"
+            + " Nodes with IPs on these will bind unsecured services to those IPs.",
+        )
+    )
     trusted_networks: list[IPNetwork] = dataclasses.field(
-        default_factory=lambda: envvars.TRUSTED_NETWORKS.get()
+        default_factory=lambda: NodeConfig._TRUSTED_NETWORKS_ENV.get()
     )
     # primary IP address (usually IPv4) to listen on.
     # Setting to None disables ipv4.
-    ip: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(envvars.LISTEN_ADDRESS.get() or None)
+    _LISTEN_ADDRESS_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_LISTEN_ADDRESS",
+        "127.0.0.1",
+        "IPv4 address to listen on, if any.",
+    )
+    ip: Optional[str] = dataclasses.field(
+        default_factory=lambda: NodeConfig._LISTEN_ADDRESS_ENV.get() or None
+    )
+    _LISTEN_ADDRESS_V6_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_LISTEN_ADDRESS_V6",
+        "",
+        "IPv6 address to listen on, if any.",
     )
     # secondary IP address (usually IPv6) to listen on. we default to
     # ipv6_addr=None to support IPv4-only systems.
-    # We use OptionalConversionDescriptor here to get `Option[str]`'s
-    # enforcement for our internal usage, but allow callers to initialize and
-    # assign as if it were `Optional[str]`.
-    ipv6_addr: OptionalConversionDescriptor[str] = OptionalConversionDescriptor(
-        default=Option(envvars.LISTEN_ADDRESS_V6.get() or None)
+    ipv6_addr: Optional[str] = dataclasses.field(
+        default_factory=lambda: NodeConfig._LISTEN_ADDRESS_V6_ENV.get() or None
     )
     # Whether to disable all ipv6 functionality
-    disableipv6: bool = envvars.DISABLE_IPV6.get()
+    _DISABLE_IPV6_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_DISABLE_IPV6", False, "Whether to disable ipv6 support"
+    )
+    disableipv6: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._DISABLE_IPV6_ENV.get()
+    )
     # Directory server flags. Used only if authority=True
     dirserver_flags: str = "no-v2"
     # None means wait on launch (requires RunAsDaemon),
@@ -618,13 +639,28 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     poll_launch_time_default: float = 0.1
     # The PID of the controlling script
     # (for __OwningControllerProcess)
-    controlling_pid: int = envvars.CONTROLLING_PID.get()
+    _CONTROLLING_PID_ENV: ClassVar[envvars.EnvVarInt] = envvars.EnvVarInt(
+        "CHUTNEY_CONTROLLING_PID",
+        0,
+        "PID of controlling script (for __OwningControllerProcess)",
+    )
+    controlling_pid: int = dataclasses.field(
+        default_factory=lambda: NodeConfig._CONTROLLING_PID_ENV.get()
+    )
     # The path to a DNS config file for Tor Exits. If this file
     # is empty or unreadable, Tor will try 127.0.0.1:53.
     #
     # the default resolv.conf path is set at compile time
     # there's no easy way to get it out of tor, so we use the typical value
-    dns_conf: str = envvars.DNS_CONF.get()
+    _DNS_CONF_ENV: ClassVar[envvars.EnvVarStr] = envvars.EnvVarStr(
+        "CHUTNEY_DNS_CONF",
+        "/etc/resolv.conf",
+        "Path to resolver config file; e.g. for ServerDNSResolvConfFile."
+        + " Set to empty-string to not set explicitly.",
+    )
+    dns_conf: str = dataclasses.field(
+        default_factory=lambda: NodeConfig._DNS_CONF_ENV.get()
+    )
     # The phase at which this instance needs to be configured.
     config_phase: int = 1
     # The phase at which this instance needs to be launched.
@@ -634,9 +670,23 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # Chutney users can disable the sandbox using:
     #    export CHUTNEY_TOR_SANDBOX=0
     # if it doesn't work on their version of glibc.
-    sandbox: bool = envvars.TOR_SANDBOX.get()
+    _TOR_SANDBOX_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_TOR_SANDBOX",
+        platform.system() == "Linux",
+        "Whether to enable tor's sandbox",
+    )
+    sandbox: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._TOR_SANDBOX_ENV.get()
+    )
     # Whether to enable a unix control socket (via ControlSocket in torrc)
-    enable_controlsocket: bool = envvars.ENABLE_CONTROLSOCKET.get()
+    _ENABLE_CONTROLSOCKET_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_ENABLE_CONTROLSOCKET",
+        True,
+        "Whether to enable a unix control socket (via ControlSocket in torrc)",
+    )
+    enable_controlsocket: bool = dataclasses.field(
+        default_factory=lambda: NodeConfig._ENABLE_CONTROLSOCKET_ENV.get()
+    )
     # Whether to use microdescriptors (via UseMicrodescriptors in torrc).
     use_microdescriptors: bool = True
 
@@ -762,6 +812,40 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         d["trusted_networks"] = [ipaddress.ip_network(n) for n in d["trusted_networks"]]
         return NodeConfig(**d)
 
+    @staticmethod
+    def register_argparser(parser: argparse.ArgumentParser) -> None:
+        """Add command-line options to `parser` to override some defaults.
+
+        The subsequent parse result can be provided to `TorNet.from_envargs`
+        to allow any user-provided command-line options to override the
+        environment-variable defaults."""
+        NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
+        NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
+        NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
+        NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
+        NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
+        NodeConfig._DNS_CONF_ENV.register_argparser(parser)
+        NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
+        NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
+
+    @staticmethod
+    def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
+        """Create a default NodeConfig, optionally overridden with args from `ns`
+
+        The intent is for `ns` to be the result of parsing command-line arguments,
+        using a parser previously passed to `NodeConfig.register_argparser`.
+        """
+        return NodeConfig(
+            trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
+            ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
+            ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
+            disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
+            controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
+            dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
+            sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
+            enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV.get(ns=ns),
+        )
+
 
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
 
@@ -821,11 +905,16 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return net
 
     @staticmethod
-    def from_network_script_contents(network_script_contents: str) -> Network:
+    def from_network_script_contents(
+        network_script_contents: str, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using the contents of a chutney network script.
 
         For examples of network scripts, see`chutney/data/networks`.
         """
+
+        # If not provided defaults, generate them from environment
+        non_optional_config_defaults = config_defaults or NodeConfig.from_envargs()
 
         # Wrappers used from network scripts (`data`) that manipulate
         # an implicit network (`_THE_NETWORK`).
@@ -838,12 +927,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
             _THE_NETWORK.addNodes(nodelist)
 
         def NodeWrapper(
-            parent: Optional[NodeConfig] = None, **kwargs: Any
+            parent: NodeConfig = non_optional_config_defaults, **kwargs: Any
         ) -> NodeConfig:
-            if parent is None:
-                return NodeConfig(**kwargs)
-            else:
-                return parent.specialize(**kwargs)
+            return parent.specialize(**kwargs)
 
         _GLOBALS = dict(
             # Note that in the network scripts "Node" is actually a factory function
@@ -862,7 +948,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return _THE_NETWORK
 
     @staticmethod
-    def from_network_script_name(network_cfg_name: str) -> Network:
+    def from_network_script_name(
+        network_cfg_name: str, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using a built-in chutney network script.
 
         Built in networks are located in `chutney/data/networks`, and can be
@@ -870,13 +958,19 @@ class Network(ToCustomJsonable, FromDecodedJson):
         command-line.
         """
         contents = _NETWORKS.joinpath(network_cfg_name).read_text()
-        return Network.from_network_script_contents(contents)
+        return Network.from_network_script_contents(
+            contents, config_defaults=config_defaults
+        )
 
     @staticmethod
-    def from_network_script_path(network_cfg_path: Path) -> Network:
+    def from_network_script_path(
+        network_cfg_path: Path, *, config_defaults: Optional[NodeConfig] = None
+    ) -> Network:
         """Create a Network object using a chutney network script by path."""
         contents = network_cfg_path.read_text()
-        return Network.from_network_script_contents(contents)
+        return Network.from_network_script_contents(
+            contents, config_defaults=config_defaults
+        )
 
     def _add_node(self, config: NodeConfig, nodenum: int) -> None:
         """Create a node with the given config, add it to the network"""
@@ -1027,7 +1121,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         if missing_any:
             raise ChutneyError("Missing requirements to run this network")
 
-    def _exchange_restricted_discovery_keys(self) -> None:
+    def _exchange_restricted_discovery_keys(self, *, config_phase: int) -> None:
         """Generate restricted discovery client keys and register the public keys
         with the corresponding hidden services.
         """
@@ -1040,7 +1134,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for hs_client in (
             n
             for n in self._nodes
-            if n._config.config_phase == envvars.CONFIG_PHASE.get()
+            if n._config.config_phase == config_phase
             and n._config.hs_client_restricted_discovery_server_tags
         ):
             for (
@@ -1061,7 +1155,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                             f"{n.nick} can't authorize with {server.nick};"
                             " restricted discovery disabled"
                         )
-                    if server._config.config_phase > envvars.CONFIG_PHASE.get():
+                    if server._config.config_phase > config_phase:
                         raise ChutneyError(
                             f"{n.nick} can't authorize with {server.nick},"
                             " which isn't configured yet"
@@ -1079,11 +1173,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.create_new_nodes_dir()
         self._write_network_json()
 
-    def configure(self) -> None:
-        """Invoked from command line: Configure and prepare the network to be
-        started.
-        """
-        if envvars.CONFIG_PHASE.get() == 1:
+    def configure(self, *, config_phase: int) -> None:
+        """Generate config files, keys, etc for the given `config_phase`."""
+        if config_phase == 1:
             self.create_family_keys()
         else:
             self.load_family_key_ids()
@@ -1092,9 +1184,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         altauthlines = []
         bridgelines = []
         cur_phase_nodes = [
-            n
-            for n in self._nodes
-            if n._config.config_phase == envvars.CONFIG_PHASE.get()
+            n for n in self._nodes if n._config.config_phase == config_phase
         ]
 
         # XXX don't change node names or types or count if anything is
@@ -1141,7 +1231,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for n in cur_phase_nodes:
             n._builder.postConfig(network)
 
-        self._exchange_restricted_discovery_keys()
+        self._exchange_restricted_discovery_keys(config_phase=config_phase)
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
@@ -1174,14 +1264,16 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         return net
 
-    def status(self) -> bool:
-        """Print how many nodes are running and how many are expected, and
-        return True if all nodes are running.
+    def status(self, *, launch_phase: int) -> bool:
+        """Check status of nodes with the given `launch_phase`.
+
+        Print how many nodes are running and how many are expected, and return
+        True if all nodes are running.
         """
         total = 0
         running = 0
         for n in self._nodes:
-            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
+            if n._config.launch_phase != launch_phase:
                 continue
             total += 1
             if not n._controller.isRunning():
@@ -1191,20 +1283,24 @@ class Network(ToCustomJsonable, FromDecodedJson):
         print(f"{running}/{total} nodes are running")
         return running == total
 
-    def restart(self) -> None:
+    def restart(self, *, launch_phase: int) -> None:
         """Invoked from command line: Stop and subsequently start our
         network's nodes.
         """
         self.stop()
-        self.start()
+        # XXX: It probably makes more sense to start all nodes with phase <=
+        # launch_phase, not just launch_phase itself.
+        self.start(launch_phase=launch_phase)
 
-    def start(self) -> None:
-        """Start all our network's nodes. Raises an `ChutneyErrorGroup` on errors"""
+    def start(self, *, launch_phase: int) -> None:
+        """Start network nodes with the given `launch_phase`.
+
+        Raises an `ChutneyErrorGroup` on errors"""
         # format polling correctly - avoid printing a newline
         print("Starting nodes", end="")
         errs = []
         for n in self._nodes:
-            if n._config.launch_phase != envvars.LAUNCH_PHASE.get():
+            if n._config.launch_phase != launch_phase:
                 continue
             try:
                 n._controller.start()
@@ -1307,29 +1403,24 @@ class Network(ToCustomJsonable, FromDecodedJson):
         else:
             return Network.DOC_TYPE_DISPLAY_LIMIT_NO_BRIDGEAUTH
 
-    def getMinStartTime(self) -> int:
-        """Returns the minimum start time before verifying, regardless of
-        whether the network has bootstrapped, or the dir info has been
-        distributed.
-
-        The default can be overridden by the $CHUTNEY_MIN_START_TIME env
-        var.
+    def wait_for_bootstrap(
+        self,
+        *,
+        launch_phase: int,
+        limit_secs: int = envvars.START_TIME.get(),
+        min_time: int = envvars.MIN_START_TIME.get(),
+    ) -> None:
         """
-        # User overrode the dynamic time
-        return envvars.MIN_START_TIME.get()
+        Wait for nodes with up through the given `launch_phase` to bootstrap.
 
-    def wait_for_bootstrap(self, limit_secs: int = envvars.START_TIME.get()) -> None:
-        """
-        Wait for the network to bootstrap. Raises `TimeoutException` on timeout.
+        Raises `TimeoutException` on timeout.
         """
         print("Waiting for nodes to bootstrap...\n")
         start = time.time()
         limit = start + limit_secs
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
-        bootstrap_upto = envvars.LAUNCH_PHASE.get()
 
-        nodes = [n for n in self._nodes if n._config.launch_phase <= bootstrap_upto]
-        min_time = self.getMinStartTime()
+        nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
         wait_time_list = [n._controller.getUncheckedDirInfoWaitTime() for n in nodes]
         wait_time = max(wait_time_list)
 
@@ -1344,7 +1435,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 if not n._controller.isBootstrapped():
                     all_bootstrapped = False
 
-                desc_status = n._controller.getNodeDirInfoStatus()
+                desc_status = n._controller.getNodeDirInfoStatus(
+                    launch_phase=launch_phase
+                )
                 if desc_status:
                     code, desc_nodes, docs = desc_status
                     most_recent_desc_status[n.nick] = (code, desc_nodes, docs)
@@ -1531,133 +1624,41 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for phase in range(1, phase_max + 1):
             if phase <= cfg_phase_max:
                 print("Starting configure-phase ", phase)
-                # XXX make this a parameter to `configure`
-                os.environ[envvars.CONFIG_PHASE.varname()] = str(phase)
-                self.configure()
+                self.configure(config_phase=phase)
             if phase <= launch_phase_max:
                 print("Starting launch-phase ", phase)
-                # XXX make this a parameter to `start`
-                os.environ[envvars.LAUNCH_PHASE.varname()] = str(phase)
-                self.start()
-                self.wait_for_bootstrap()
+                self.start(launch_phase=phase)
+                self.wait_for_bootstrap(launch_phase=phase)
 
 
-class CLICommands:
-    """
-    Methods invokable from CLI.
-
-    All methods that don't start with `_` are invocable from the command-line.
-    """
-
-    def __init__(self, network: Network):
-        self._net = network
-
-    def print_phases(self) -> None:
-        """Print the total number of phases in which the network is
-        initialized, configured, or bootstrapped."""
-
-        cfg_max = max(n._config.config_phase for n in self._net._nodes)
-        launch_max = max(n._config.launch_phase for n in self._net._nodes)
-        print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
-        print("CHUTNEY_LAUNCH_PHASES={}".format(launch_max))
-
-    def supported(self) -> None:
-        """Check whether this network is supported by the set of binaries
-        and host information we have, and prints the result.
-        """
-        self._net.supported()
-
-    def init(self) -> None:
-        """Save the network configuration to a fresh nodes directory."""
-        self._net.init()
-
-    def configure(self) -> None:
-        """Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."""
-        self._net.configure()
-
-    def status(self) -> None:
-        """Print how many nodes are running and how many are expected for
-        CHUTNEY_LAUNCH_PHASE. Fails if not all expected nodes are running.
-        """
-        if not self._net.status():
-            # TODO: have Network.status raise an informative Exception
-            # instead of returning a bool.
-            raise ChutneyError("status failed")
-
-    def restart(self) -> None:
-        """Invoked from command line: Stop and subsequently start our
-        network's nodes.
-        """
-        self._net.restart()
-
-    def start(self) -> None:
-        """Start all our network's nodes and return True on no errors."""
-        return self._net.start()
-
-    def hup(self) -> None:
-        """Send SIGHUP to all our network's running nodes."""
-        if not self._net.hup():
-            # TODO: have controller.hup raise an informative Exception
-            # instead of returning a bool.
-            raise ChutneyError("hup failed")
-
-    def wait_for_bootstrap(self) -> None:
-        """Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."""
-        self._net.wait_for_bootstrap()
-
-    def stop(self) -> None:
-        """Stop the network's running processes."""
-        self._net.stop()
-
-    def bootstrap(self) -> None:
-        """Bootstrap the network.
-
-        Configures, starts, and waits for bootstrap, for all of the network
-        nodes' configure and launch phases."""
-        self._net.bootstrap()
-
-    def verify(self) -> None:
-        """Run the "verify" connectivity test.
-
-        Assumes the network is already bootstrapped."""
-        import chutney.network_tests.verify
-
-        chutney.network_tests.verify.run_test(self._net)
+# This is the type returned by `ArgumentParser.add_subparsers`. Unfortunately
+# the argparse module doesn't expose a public named type. We refer to it using
+# the internal _SubParsersAction type that it gets, encapsulating that bit of
+# ugliness into this alias.
+class _SubParsers(Protocol):
+    # Since we can't name a lot of the kwarg types either, we just use Any.
+    # This means mypy etc. won't statically catch type errors when calling this
+    # method via this type. In practice such errors will be found on any run of
+    # the chutney CLI though, so will be found quickly.
+    def add_parser(self, name: str, **kwargs: Any) -> argparse.ArgumentParser: ...
 
 
-_NETWORKS: Traversable = (
-    importlib.resources.files("chutney").joinpath("data").joinpath("networks")
-)
+class CLICommand(ABC):
+    """A CLI command"""
 
-
-def getNetworks() -> list[str]:
-    """Get names of built-in networks."""
-    networks = [s.name for s in _NETWORKS.iterdir()]
-    networks.sort()
-    return networks
-
-
-def _parse_args(
-    argv: Optional[Sequence[str]], require_net_spec_group: Optional[bool] = None
-) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="chutney",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=envvars.EnvVar.help_all(),
-    )
-    subparsers = parser.add_subparsers(dest="cmd")
-
-    def add_cli_command(
-        f: Callable[[CLICommands], None],
-        *,
-        require_net_spec_group: Optional[bool] = None,
+    def __init__(
+        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
     ) -> None:
-        subparser = subparsers.add_parser(f.__name__, help=f.__doc__)
+        self._subparser = subparsers.add_parser(self.name(), help=self.help())
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
+
+            # Add support for overriding NodeConfig defaults
+            NodeConfig.register_argparser(self._subparser)
+
             # We add a group of mutually exclusive flags, one for each method of
             # specifying the config.
-            method_group = subparser.add_mutually_exclusive_group(
+            method_group = self._subparser.add_mutually_exclusive_group(
                 required=require_net_spec_group
             )
             method_group.add_argument(
@@ -1679,36 +1680,389 @@ def _parse_args(
             )
         else:
             # User isn't permitted to specify; always get from data dir.
-            subparser.set_defaults(net_from_data_dir=True)
-        subparser.set_defaults(func=f)
+            self._subparser.set_defaults(net_from_data_dir=True)
+        self._subparser.set_defaults(cmd=self)
 
-    add_cli_command(CLICommands.print_phases, require_net_spec_group=False)
-    add_cli_command(CLICommands.supported, require_net_spec_group=False)
-    add_cli_command(CLICommands.init, require_net_spec_group=True)
-    add_cli_command(CLICommands.configure)
-    add_cli_command(CLICommands.status)
-    add_cli_command(CLICommands.restart)
-    add_cli_command(CLICommands.start)
-    add_cli_command(CLICommands.hup)
-    add_cli_command(CLICommands.wait_for_bootstrap)
-    add_cli_command(CLICommands.stop)
-    add_cli_command(CLICommands.bootstrap)
-    add_cli_command(CLICommands.verify)
+    @staticmethod
+    @abstractmethod
+    def name() -> str:
+        """Name of the command"""
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def help() -> str:
+        """Help string of the command"""
+        ...
+
+    @abstractmethod
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        """Run the command"""
+        ...
+
+    def _get_subparser(self) -> argparse.ArgumentParser:
+        """Return the subparser registered for this command.
+
+        Intended for usage by child classes, to register additional arguments.
+        """
+        return self._subparser
+
+
+class PrintPhasesCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "print_phases"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""
+            Print the total number of phases in which the network is
+            initialized, configured, or bootstrapped.
+            """)
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        cfg_max = max(n._config.config_phase for n in network._nodes)
+        launch_max = max(n._config.launch_phase for n in network._nodes)
+        print("CHUTNEY_CONFIG_PHASES={}".format(cfg_max))
+        print("CHUTNEY_LAUNCH_PHASES={}".format(launch_max))
+
+
+class SupportedCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "supported"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent(
+            """Check whether this network is supported by the set of binaries
+        and host information we have, and prints the result."""
+        )
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.supported()
+
+
+class InitCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "init"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Save the network configuration to a fresh nodes directory."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.init()
+
+
+class ConfigureCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        config_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        self._config_phase_env = config_phase_env
+        self._config_phase_env.register_argparser(self._get_subparser())
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "configure"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Generate node config files etc for phase CHUTNEY_CONFIG_PHASE."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.configure(config_phase=self._config_phase_env.get(ns=ns))
+
+
+class StatusCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "status"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent(
+            """Print how many nodes are running and how many are expected for
+        CHUTNEY_LAUNCH_PHASE. Fails if not all expected nodes are running.
+        """
+        )
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        if not network.status(launch_phase=self._launch_phase_env.get(ns=ns)):
+            # TODO: have Network.status raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("status failed")
+
+
+class RestartCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "restart"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Stop and subsequently start our network's nodes."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.restart(launch_phase=self._launch_phase_env.get(ns=ns))
+
+
+class StartCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "start"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Start all our network's nodes and return True on no errors."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.start(launch_phase=self._launch_phase_env.get(ns=ns))
+
+
+class HupCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "hup"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Send SIGHUP to all our network's running nodes."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        if not network.hup():
+            # TODO: have controller.hup raise an informative Exception
+            # instead of returning a bool.
+            raise ChutneyError("hup failed")
+
+
+class WaitForBootstrapCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        launch_phase_env: envvars.EnvVarInt,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        self._launch_phase_env = launch_phase_env
+        self._launch_phase_env.register_argparser(self._get_subparser())
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "wait_for_bootstrap"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Wait for CHUTNEY_LAUNCH_PHASE of the network to bootstrap."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.wait_for_bootstrap(launch_phase=self._launch_phase_env.get(ns=ns))
+
+
+class StopCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "stop"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return "Stop the network's running processes."
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.stop()
+
+
+class BootstrapCLICommand(CLICommand):
+    @staticmethod
+    @override
+    def name() -> str:
+        return "bootstrap"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""Bootstrap the network.
+
+        Configures, starts, and waits for bootstrap, for all of the network
+        nodes' configure and launch phases.""")
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        network.bootstrap()
+
+
+class VerifyCLICommand(CLICommand):
+    def __init__(
+        self,
+        subparsers: _SubParsers,
+        *,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        super().__init__(subparsers, require_net_spec_group=require_net_spec_group)
+        chutney.network_tests.verify.VerifyConfig.register_argparser(
+            self._get_subparser()
+        )
+
+    @staticmethod
+    @override
+    def name() -> str:
+        return "verify"
+
+    @staticmethod
+    @override
+    def help() -> str:
+        return textwrap.dedent("""Run the "verify" connectivity test.
+
+        Assumes the network is already bootstrapped.""")
+
+    @override
+    def run(self, network: Network, ns: argparse.Namespace) -> None:
+        chutney.network_tests.verify.run_test(
+            network,
+            config=chutney.network_tests.verify.VerifyConfig.from_envargs(ns=ns),
+        )
+
+
+_NETWORKS: Traversable = (
+    importlib.resources.files("chutney").joinpath("data").joinpath("networks")
+)
+
+
+def getNetworks() -> list[str]:
+    """Get names of built-in networks."""
+    networks = [s.name for s in _NETWORKS.iterdir()]
+    networks.sort()
+    return networks
+
+
+def _parse_args(
+    argv: Optional[Sequence[str]],
+    *,
+    # Scoped environment variables that we pass explicitly to the commands that
+    # use them. Implemented as default param values to emulate "static locals".
+    _config_phase_env: envvars.EnvVarInt = envvars.EnvVarInt(
+        "CHUTNEY_CONFIG_PHASE", 1, "(initial) node config phase"
+    ),
+    _launch_phase_env: envvars.EnvVarInt = envvars.EnvVarInt(
+        "CHUTNEY_LAUNCH_PHASE", 1, "(initial) node launch phase"
+    ),
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="chutney",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=envvars.EnvVar.help_all(),
+    )
+
+    # Register environment variables to be overridable via command-line.
+    envvars.DATA_DIR.register_argparser(parser)
+    TorBin().config_envvar().register_argparser(parser)
+    TorGenCertBin().config_envvar().register_argparser(parser)
+    ArtiBin().config_envvar().register_argparser(parser)
+
+    subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
+
+    PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
+    SupportedCLICommand(subparsers, require_net_spec_group=False)
+    InitCLICommand(subparsers, require_net_spec_group=True)
+    ConfigureCLICommand(subparsers, config_phase_env=_config_phase_env)
+    StatusCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    RestartCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    StartCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    HupCLICommand(subparsers)
+    WaitForBootstrapCLICommand(subparsers, launch_phase_env=_launch_phase_env)
+    StopCLICommand(subparsers)
+    BootstrapCLICommand(subparsers)
+    VerifyCLICommand(subparsers)
 
     return parser.parse_args(argv)
 
 
 def _network_from_args(ns: argparse.Namespace) -> Network:
+    config_defaults = NodeConfig.from_envargs(ns=ns)
     net_name = check_type(getattr(ns, "net", None), Optional[str])
     if net_name is not None:
         logger.info(f"Loading network config from built-in network name: '{net_name}'")
-        return Network.from_network_script_name(net_name)
+        return Network.from_network_script_name(
+            net_name, config_defaults=config_defaults
+        )
     script_path = check_type(getattr(ns, "net_from_script_path", None), Optional[Path])
     if script_path is not None:
         logger.info(
             f"Loading network config from chutney network script path: '{script_path}'"
         )
-        return Network.from_network_script_path(script_path)
+        return Network.from_network_script_path(
+            script_path, config_defaults=config_defaults
+        )
 
     assert ns.net_from_data_dir
 
@@ -1741,8 +2095,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     args = _parse_args(argv)
     network = _network_from_args(args)
-    action = check_type(args.func, Callable[[CLICommands], None])
-    action(CLICommands(network))
+    cmd = check_type(args.cmd, CLICommand)
+    cmd.run(network, args)
 
 
 def __main__() -> None:

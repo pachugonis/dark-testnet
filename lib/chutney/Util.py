@@ -143,55 +143,6 @@ class Option(Generic[T], ToCustomJsonable):
         )
 
 
-class OptionalConversionDescriptor(Generic[T]):
-    """A Conversion Descriptor for Option-type fields
-
-    A field of this type is *read* as `Option[T]`, but may be *assigned*
-    from an `Option[T]`, `T`, or `None`.
-
-    Will not work as expected with `T=Option[]`.
-
-    Based on an example in the dataclasses documentation:
-    <https://docs.python.org/3/library/dataclasses.html#descriptor-typed-fields>
-
-    See also the more general documentation about such field descriptors:
-    <https://docs.python.org/3/reference/datamodel.html#implementing-descriptors>
-    """
-
-    def __init__(self, *, default: Option[T]):
-        self._default = default
-
-    def __set_name__(self, owner: Any, name: str) -> None:
-        # `name` is the name of this field, of type
-        # `OptionalConversionDescriptor`, on the `owner`. We use this to derive
-        # a `_name`, which we'll use to store the actual value of type
-        # `Option[T]`.
-        self._name = "_" + name
-
-    def __get__(
-        self, instance: Optional[Any], owner: Optional[Any] = None
-    ) -> Option[T]:
-        if instance is None:
-            # This is a class-access, not an instance-access.
-            # Return the default value.
-            return self._default
-
-        return getattr(instance, self._name, self._default)
-
-    def __set__(self, obj: Any, value: Union[Option[T], Optional[T]]) -> None:
-        # We need the conversion implemented by this function to be idempotent;
-        # e.g. `obj.f = obj.f` shouldn't change the value of `f`.
-        #
-        # For that reason we can't unconditionally wrap with `Option`; we need to check
-        # whether it's already been wrapped and not wrap it again.
-        #
-        # Unfortunately this means that using `T=Option[_]` won't work as
-        # expected. (This is documented in the class doc).
-        if not isinstance(value, Option):
-            value = Option(value)
-        setattr(obj, self._name, value)
-
-
 def find_executable_on_path(
     basename: Union[str, Path], path: Optional[Iterable[Path]] = None
 ) -> Optional[Path]:

@@ -7,18 +7,20 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import argparse
+import dataclasses
 import time
 
 import chutney
 import chutney.Traffic
 
 from ipaddress import ip_address
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Union, ClassVar, Optional
 
 from . import NetworkTestFailure
+from chutney import envvars
 from chutney.Util import IPAddress
 from chutney.errors import ChutneyInternalError
-from chutney import envvars
 
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet
@@ -27,7 +29,57 @@ if TYPE_CHECKING:
 LISTEN_PORT = 4747  # FIXME: Do better! Note the default exit policy.
 
 
-def run_test(network: TorNet.Network) -> None:
+@dataclasses.dataclass
+class VerifyConfig:
+    # The amount of data to send between each source-sink pair,
+    # each time the source connects.
+    # We create a source-sink pair for each (bridge) client to an exit,
+    # and a source-sink pair for a (bridge) client to each hidden service.
+    #
+    # Default value of 5 MB should be large enough to exercise SENDMEs.
+    _DATA_BYTES_ENV: ClassVar[envvars.EnvVarInt] = envvars.EnvVarInt(
+        "CHUTNEY_DATA_BYTES",
+        5_000_000,
+        "The amount of data to send between each source-sink pair in `verify`",
+    )
+    data_bytes: int
+
+    _CONNECTIONS_ENV: ClassVar[envvars.EnvVarInt] = envvars.EnvVarInt(
+        "CHUTNEY_CONNECTIONS",
+        1,
+        "The number of times each client will connect in `verify`",
+    )
+    connections: int
+
+    _HS_MULTI_CLIENT_ENV: ClassVar[envvars.EnvVarBool] = envvars.EnvVarBool(
+        "CHUTNEY_HS_MULTI_CLIENT",
+        False,
+        "Whether *every* client connects to each HS in `verify`",
+    )
+    hs_multi_client: bool
+
+    @staticmethod
+    def register_argparser(parser: argparse.ArgumentParser) -> None:
+        VerifyConfig._DATA_BYTES_ENV.register_argparser(parser)
+        VerifyConfig._CONNECTIONS_ENV.register_argparser(parser)
+        VerifyConfig._HS_MULTI_CLIENT_ENV.register_argparser(parser)
+
+    @staticmethod
+    def from_envargs(ns: Optional[argparse.Namespace] = None) -> VerifyConfig:
+        return VerifyConfig(
+            data_bytes=VerifyConfig._DATA_BYTES_ENV.get(ns=ns),
+            connections=VerifyConfig._CONNECTIONS_ENV.get(ns=ns),
+            hs_multi_client=VerifyConfig._HS_MULTI_CLIENT_ENV.get(ns=ns),
+        )
+
+
+def run_test(
+    network: TorNet.Network,
+    *,
+    config: Optional[VerifyConfig] = None,
+) -> None:
+
+    config = config or VerifyConfig.from_envargs()
     # Try to verify twice each consensus, but don't verify too fast
     V3_AUTH_VOTING_INTERVAL = network.V3_AUTH_VOTING_INTERVAL
     VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
@@ -44,7 +96,13 @@ def run_test(network: TorNet.Network) -> None:
         # TrafficTester connections time out after ~3 seconds
         # a TrafficTester times out after ~6 seconds if no data is being sent
         last_attempt_time = now
-        status = _verify_traffic(network, timeout=TIMEOUT_INTERVAL)
+        status = _verify_traffic(
+            network,
+            timeout=TIMEOUT_INTERVAL,
+            data_bytes=config.data_bytes,
+            connections=config.connections,
+            hs_multi_client=config.hs_multi_client,
+        )
         now = time.time()
         elapsed_attempt_time = now - last_attempt_time
         # Avoid madly spewing output if we fail immediately each time
@@ -60,28 +118,28 @@ def run_test(network: TorNet.Network) -> None:
         raise NetworkTestFailure("All attempts failed")
 
 
-def _verify_traffic(network: TorNet.Network, timeout: float = 5.0) -> bool:
+def _verify_traffic(
+    network: TorNet.Network,
+    *,
+    timeout: float = 5.0,
+    data_bytes: int,
+    connections: int,
+    hs_multi_client: bool,
+) -> bool:
     """Verify (parts of) the network by sending traffic through it
     and verify what is received."""
     # TODO: IPv6 SOCKSPorts, SOCKSPorts with IPv6Traffic, and IPv6 Exits
     # XXX don't hard-code this.
     # LISTEN_ADDR = network._dfltEnv["ip"]
     LISTEN_ADDR = ip_address("127.0.0.1")
-    # The amount of data to send between each source-sink pair,
-    # each time the source connects.
-    # We create a source-sink pair for each (bridge) client to an exit,
-    # and a source-sink pair for a (bridge) client to each hidden service.
-    #
-    # Default value of 5 MB should be large enough to exercise SENDMEs.
-    DATALEN: int = envvars.DATA_BYTES.get()
     # Calculate the amount of random data we should use
-    randomlen = _calculate_randomlen(DATALEN)
-    reps = _calculate_reps(DATALEN, randomlen)
+    randomlen = _calculate_randomlen(data_bytes)
+    reps = _calculate_reps(data_bytes, randomlen)
     # connection_count: the number of times each client will connect
-    connection_count = envvars.CONNECTIONS.get()
+    connection_count = connections
     # sanity check
     if reps == 0:
-        DATALEN = 0
+        data_bytes = 0
     # Get the random data
     if randomlen > 0:
         with open("/dev/urandom", "rb") as randfp:
@@ -120,7 +178,7 @@ def _verify_traffic(network: TorNet.Network, timeout: float = 5.0) -> bool:
         print("  HS nodes must be declared 'tag=\"hs\"'")
         return False
     print("Connecting:")
-    # the number of tor nodes in paths which will send DATALEN data
+    # the number of tor nodes in paths which will send `data_bytes` data
     # if a node is used in two paths, we count it twice
     # this is a lower bound, as cannabilised circuits are one node longer
     total_path_node_count = 0
@@ -137,7 +195,6 @@ def _verify_traffic(network: TorNet.Network, timeout: float = 5.0) -> bool:
     )
     # If 1, every client connects to every HS. If 0, one client connects to each
     # HS. (Clients choose an exit at random, so this doesn't apply to exits.)
-    hs_multi_client = envvars.HS_MULTI_CLIENT.get()
     total_path_node_count += _configure_hs(
         tt,
         tmpdata,
@@ -157,7 +214,7 @@ def _verify_traffic(network: TorNet.Network, timeout: float = 5.0) -> bool:
     if not status:
         return status
     # otherwise, report bandwidth used, if sufficient data was transmitted
-    _report_bandwidth(DATALEN, total_path_node_count, start_time, end_time)
+    _report_bandwidth(data_bytes, total_path_node_count, start_time, end_time)
     return status
 
 
