@@ -40,8 +40,13 @@ class EnvVar(Generic[C], ABC):
         EnvVar._all_instances.append(self)
 
         # Initialized in `register_argparser`
-        self._flag_name: Optional[str] = None
         self._ns_name: Optional[str] = None
+
+    def _flag_name(self) -> str:
+        """Flag name, when registering with an ArgumentParser"""
+        return "--" + self._varname.removeprefix(EnvVar._PREFIX).lower().replace(
+            "_", "-"
+        )
 
     def register_argparser(self, parser: argparse.ArgumentParser) -> None:
         """Register this environment variable with an argparse.ArgumentParser
@@ -50,17 +55,14 @@ class EnvVar(Generic[C], ABC):
         variable. Pass the namespace resulting from parsing the command-line
         parameters to `get` to actually do so.
         """
-        self._flag_name = "--" + self._varname.removeprefix(
-            EnvVar._PREFIX
-        ).lower().replace("_", "-")
         parser.add_argument(
-            self._flag_name,
+            self._flag_name(),
             type=self.parse,
             help=self.help() + f" (overrides {self._varname})",
         )
         # The name of the attribute where we expect the parser to store the
         # provided argument, if any.
-        self._ns_name = self._flag_name.removeprefix("--").replace("-", "_")
+        self._ns_name = self._flag_name().removeprefix("--").replace("-", "_")
 
     def get(self, ns: Optional[argparse.Namespace] = None) -> C:
         """Retrieve the effective value.
