@@ -59,6 +59,7 @@ class EnvVar(Generic[C], ABC):
         parser.add_argument(
             self._flag_name(),
             type=self.parse,
+            dest=self._ns_name(),
             help=self.help() + f" (overrides {self._varname})",
         )
 
