@@ -104,15 +104,13 @@ class EnvVar(Generic[C], ABC):
             lines.append(f"  {x._varname}: {x.help()} (default={x._default})")
         return "\n".join(lines)
 
-    @staticmethod
     @abstractmethod
-    def parse(x: str) -> C: ...
+    def parse(self, x: str) -> C: ...
 
 
 class EnvVarBool(EnvVar[bool]):
-    @staticmethod
     @override
-    def parse(x: str) -> bool:
+    def parse(self, x: str) -> bool:
         low = x.lower()
         if low in ["0", "false", "no", "n"]:
             return False
@@ -122,30 +120,26 @@ class EnvVarBool(EnvVar[bool]):
 
 
 class EnvVarInt(EnvVar[int]):
-    @staticmethod
     @override
-    def parse(x: str) -> int:
+    def parse(self, x: str) -> int:
         return int(x)
 
 
 class EnvVarStr(EnvVar[str]):
-    @staticmethod
     @override
-    def parse(x: str) -> str:
+    def parse(self, x: str) -> str:
         return x
 
 
 class EnvVarPath(EnvVar[Path]):
-    @staticmethod
     @override
-    def parse(x: str) -> Path:
+    def parse(self, x: str) -> Path:
         return Path(x)
 
 
 class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):
-    @staticmethod
     @override
-    def parse(x: str) -> list[IPNetwork]:
+    def parse(self, x: str) -> list[IPNetwork]:
         if not x:
             return []
         return [ipaddress.ip_network(n) for n in x.split(",")]
