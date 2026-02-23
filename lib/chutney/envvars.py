@@ -94,6 +94,9 @@ class EnvVar(Generic[C], ABC):
     def help(self) -> str:
         return self._help
 
+    def default(self) -> C:
+        return self._default
+
     @staticmethod
     def help_all() -> str:
         lines = []
