@@ -39,8 +39,9 @@ class EnvVar(Generic[C], ABC):
         # Register this instance
         EnvVar._all_instances.append(self)
 
-        # Initialized in `register_argparser`
-        self._ns_name: Optional[str] = None
+    def _ns_name(self) -> str:
+        """When registering an ArgumentParser, attribute name where result will be stored"""
+        return self._flag_name().removeprefix("--").replace("-", "_")
 
     def _flag_name(self) -> str:
         """Flag name, when registering with an ArgumentParser"""
@@ -60,9 +61,6 @@ class EnvVar(Generic[C], ABC):
             type=self.parse,
             help=self.help() + f" (overrides {self._varname})",
         )
-        # The name of the attribute where we expect the parser to store the
-        # provided argument, if any.
-        self._ns_name = self._flag_name().removeprefix("--").replace("-", "_")
 
     def get(self, ns: Optional[argparse.Namespace] = None) -> C:
         """Retrieve the effective value.
@@ -72,9 +70,7 @@ class EnvVar(Generic[C], ABC):
         after parsing the arguments. If `ns` has a value for this variable, it
         takes precedence over the environment variable.
         """
-        if (ns_name := self._ns_name) is not None and (
-            val := getattr(ns, ns_name, None)
-        ) is not None:
+        if (val := getattr(ns, self._ns_name(), None)) is not None:
             # Tell mypy to trust that val is of type `C`.
             # It *should* be, *assuming* that the namespace provided to us was
             # actually generated from a parser previously passed to
