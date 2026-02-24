@@ -528,7 +528,16 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # Which backend to use to run the node.
     backend: NodeBackend = NodeBackend.TOR
     # Which process-launcher to use.
-    launcher_backend: LauncherBackend = LauncherBackend.LOCAL
+    _LAUNCHER_BACKEND_ENV: ClassVar[envvars.EnvVarEnum[LauncherBackend]] = (
+        envvars.EnvVarEnum(
+            "CHUTNEY_LAUNCHER_BACKEND",
+            LauncherBackend.LOCAL,
+            "Which process-launcher to use",
+        )
+    )
+    launcher_backend: LauncherBackend = dataclasses.field(
+        default_factory=lambda: NodeConfig._LAUNCHER_BACKEND_ENV.get()
+    )
     # a short text string that represents the type of node.
     # Some special tag prefixes:
     # * 'h' configures it to run an onion service.
@@ -584,8 +593,15 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
     # `ip` and `ipv6_addr`
-    address_assignment_strategy: AddressAssignmentStrategy = (
-        AddressAssignmentStrategy.STATIC
+    _ADDRESS_ASSIGNMENT_ENV: ClassVar[envvars.EnvVarEnum[AddressAssignmentStrategy]] = (
+        envvars.EnvVarEnum(
+            "CHUTNEY_ADDRESS_ASSIGNMENT",
+            AddressAssignmentStrategy.STATIC,
+            "Strategy for deriving concrete node network addresses from base template",
+        )
+    )
+    address_assignment_strategy: AddressAssignmentStrategy = dataclasses.field(
+        default_factory=lambda: NodeConfig._ADDRESS_ASSIGNMENT_ENV.get()
     )
     # trusted networks. unsecured services, such as socks, dns, and the tor
     # controlport, will be bound to the node's assigned IP addresses if they
@@ -827,6 +843,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._DNS_CONF_ENV.register_argparser(parser)
         NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
         NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
+        NodeConfig._LAUNCHER_BACKEND_ENV.register_argparser(parser)
+        NodeConfig._ADDRESS_ASSIGNMENT_ENV.register_argparser(parser)
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
@@ -844,6 +862,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
             sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
             enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV.get(ns=ns),
+            launcher_backend=NodeConfig._LAUNCHER_BACKEND_ENV.get(ns=ns),
+            address_assignment_strategy=NodeConfig._ADDRESS_ASSIGNMENT_ENV.get(ns=ns),
         )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import enum
 import ipaddress
 import os
 
@@ -39,9 +40,15 @@ class EnvVar(Generic[C], ABC):
         # Register this instance
         EnvVar._all_instances.append(self)
 
-        # Initialized in `register_argparser`
-        self._flag_name: Optional[str] = None
-        self._ns_name: Optional[str] = None
+    def _ns_name(self) -> str:
+        """When registering an ArgumentParser, attribute name where result will be stored"""
+        return self._flag_name().removeprefix("--").replace("-", "_")
+
+    def _flag_name(self) -> str:
+        """Flag name, when registering with an ArgumentParser"""
+        return "--" + self._varname.removeprefix(EnvVar._PREFIX).lower().replace(
+            "_", "-"
+        )
 
     def register_argparser(self, parser: argparse.ArgumentParser) -> None:
         """Register this environment variable with an argparse.ArgumentParser
@@ -50,17 +57,12 @@ class EnvVar(Generic[C], ABC):
         variable. Pass the namespace resulting from parsing the command-line
         parameters to `get` to actually do so.
         """
-        self._flag_name = "--" + self._varname.removeprefix(
-            EnvVar._PREFIX
-        ).lower().replace("_", "-")
         parser.add_argument(
-            self._flag_name,
+            self._flag_name(),
             type=self.parse,
+            dest=self._ns_name(),
             help=self.help() + f" (overrides {self._varname})",
         )
-        # The name of the attribute where we expect the parser to store the
-        # provided argument, if any.
-        self._ns_name = self._flag_name.removeprefix("--").replace("-", "_")
 
     def get(self, ns: Optional[argparse.Namespace] = None) -> C:
         """Retrieve the effective value.
@@ -70,9 +72,7 @@ class EnvVar(Generic[C], ABC):
         after parsing the arguments. If `ns` has a value for this variable, it
         takes precedence over the environment variable.
         """
-        if (ns_name := self._ns_name) is not None and (
-            val := getattr(ns, ns_name, None)
-        ) is not None:
+        if (val := getattr(ns, self._ns_name(), None)) is not None:
             # Tell mypy to trust that val is of type `C`.
             # It *should* be, *assuming* that the namespace provided to us was
             # actually generated from a parser previously passed to
@@ -95,6 +95,9 @@ class EnvVar(Generic[C], ABC):
     def help(self) -> str:
         return self._help
 
+    def default(self) -> C:
+        return self._default
+
     @staticmethod
     def help_all() -> str:
         lines = []
@@ -104,15 +107,13 @@ class EnvVar(Generic[C], ABC):
             lines.append(f"  {x._varname}: {x.help()} (default={x._default})")
         return "\n".join(lines)
 
-    @staticmethod
     @abstractmethod
-    def parse(x: str) -> C: ...
+    def parse(self, x: str) -> C: ...
 
 
 class EnvVarBool(EnvVar[bool]):
-    @staticmethod
     @override
-    def parse(x: str) -> bool:
+    def parse(self, x: str) -> bool:
         low = x.lower()
         if low in ["0", "false", "no", "n"]:
             return False
@@ -122,33 +123,47 @@ class EnvVarBool(EnvVar[bool]):
 
 
 class EnvVarInt(EnvVar[int]):
-    @staticmethod
     @override
-    def parse(x: str) -> int:
+    def parse(self, x: str) -> int:
         return int(x)
 
 
 class EnvVarStr(EnvVar[str]):
-    @staticmethod
     @override
-    def parse(x: str) -> str:
+    def parse(self, x: str) -> str:
         return x
 
 
 class EnvVarPath(EnvVar[Path]):
-    @staticmethod
     @override
-    def parse(x: str) -> Path:
+    def parse(self, x: str) -> Path:
         return Path(x)
 
 
 class EnvVarIPNetworkList(EnvVar[list[IPNetwork]]):
-    @staticmethod
     @override
-    def parse(x: str) -> list[IPNetwork]:
+    def parse(self, x: str) -> list[IPNetwork]:
         if not x:
             return []
         return [ipaddress.ip_network(n) for n in x.split(",")]
+
+
+ENUM = TypeVar("ENUM", bound=enum.Enum)
+
+
+class EnvVarEnum(Generic[ENUM], EnvVar[ENUM]):
+    @override
+    def help(self) -> str:
+        t = type(self.default())
+        return super().help() + " (choices: " + ",".join(x.name for x in t) + ")"
+
+    @override
+    def parse(self, x: str) -> ENUM:
+        t = type(self.default())
+        try:
+            return t[x]
+        except KeyError as ke:
+            raise ValueError from ke
 
 
 DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
