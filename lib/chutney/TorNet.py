@@ -1232,7 +1232,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""
-        with get_absolute_nodes_path().joinpath("network.json").open("w") as f:
+        with self.dir.joinpath("network.json").open("w") as f:
             json.dump(self, f, indent=2, cls=chutney.jsonable.CustomEncoder)
 
     @override
