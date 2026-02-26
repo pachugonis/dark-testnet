@@ -210,6 +210,8 @@ configs = [
 
 # Add the configs to the network, getting their corresponding Nodes.
 network.addNodes(configs)
+# Initialize a directory.
+network.init()
 # Configure the first phase of the network, generating the torrc files, and
 # validating that they are well-formed.
 # (It'd be nice to do all phases, but that may require *starting* launch_phase=1 nodes
