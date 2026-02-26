@@ -1216,7 +1216,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self._write_network_json()
 
         arti_tor_config = chutney.arti.config.tor_config(self)
-        with get_absolute_nodes_path().joinpath("arti.toml").open("wb") as f:
+        with self.dir.joinpath("arti.toml").open("wb") as f:
             f.write(textwrap.dedent("""
                 # Base `arti_client::TorClientConfig` options for configuring
                 # applications (not necessarily `arti`) that embed an arti
