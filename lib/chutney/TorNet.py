@@ -587,9 +587,17 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # value of ConnLimit torrc option
     connlimit: int = 60
     # path of the tor binary (for backend = NodeBackend.TOR)
-    tor: str = TorBin().config_envvar().get()
+    tor: str = dataclasses.field(
+        default_factory=lambda: TorBin().config_envvar().get()
+    )
+    # path of the tor-gencert binary (for backend = NodeBackend.TOR)
+    tor_gencert: str = dataclasses.field(
+        default_factory=lambda: TorGenCertBin().config_envvar().get()
+    )
     # path of the arti binary (for backend = NodeBackend.ARTI)
-    arti: str = ArtiBin().config_envvar().get()
+    arti: str = dataclasses.field(
+        default_factory=lambda: ArtiBin().config_envvar().get()
+    )
     # lifetime of authority certs, in months
     auth_cert_lifetime: int = 12
     # strategy for deriving concrete network addresses from the configuration
@@ -720,11 +728,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # long-term usage, prefer to add more-specific (and arti-compatible)
     # configuration options.
     extra_raw_torrc: str = ""
-
-    @property
-    def tor_gencert(self) -> str:
-        """name or path of the tor-gencert binary (if present)"""
-        return TorGenCertBin().config_envvar().get()
 
     # XXX Move template logic into template
     @property
