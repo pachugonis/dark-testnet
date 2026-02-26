@@ -1018,32 +1018,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
             raise RuntimeError(("Unrecognized requirement %r" % requirement))
         self._requirements.append(requirement)
 
-    def move_aside_nodes_dir(self) -> None:
-        """Move aside the nodes directory, if it exists and is not a link.
-        Used for backwards-compatibility only: nodes is created as a link to
-        a new directory with a unique name in the current implementation.
-        """
-        nodesdir = get_absolute_nodes_path()
-
-        # only move the directory if it exists
-        if not nodesdir.exists():
-            return
-        # and if it's not a link
-        if nodesdir.is_symlink():
-            return
-
-        # subtract 1 second to avoid collisions and get the correct ordering
-        newdir = get_new_absolute_nodes_path(time.time() - 1)
-
-        logger.info("renaming '%s' to '%s'" % (nodesdir, newdir))
-        nodesdir.rename(newdir)
-
     def create_new_nodes_dir(self) -> None:
         """Create a new directory with a unique name, and symlink it to nodes"""
-        # for backwards compatibility, move aside the old nodes directory
-        # (if it's not a link)
-        self.move_aside_nodes_dir()
-
         # the unique directory we'll create
         newnodesdir = get_new_absolute_nodes_path()
         # the canonical name we'll link it to
