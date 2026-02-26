@@ -156,7 +156,7 @@ def get_absolute_nodes_path() -> Path:
     return Path(envvars.DATA_DIR.get().resolve(), "nodes")
 
 
-def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
+def get_new_absolute_nodes_path(now: Optional[float] = None) -> Path:
     """
     Returns the absolute path of a unique "nodes*" directory that chutney
     should use to store the current network's torrcs and tor runtime data.
@@ -169,6 +169,7 @@ def get_new_absolute_nodes_path(now: float = time.time()) -> Path:
     not supported. The uniqueness check is only designed to avoid
     collisions if the clock is set backwards.)
     """
+    now = now or time.time()
     # automatically chosen to prevent path collisions, and result in an ordered
     # series of directory path names
     # should only be called by 'chutney configure', all other chutney commands
