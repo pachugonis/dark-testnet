@@ -33,6 +33,7 @@ class EnvVar(Generic[C], ABC):
         self._default = default
         self._help = help
         self._registered_argparser = False
+        self._fetched = False
 
         # Multiple instances with the same variable name would defeat the
         # purpose a bit. Especially if they have conflicting types, help
@@ -61,6 +62,10 @@ class EnvVar(Generic[C], ABC):
         variable. Pass the namespace resulting from parsing the command-line
         parameters to `get` to actually do so.
         """
+        if self._fetched:
+            logger.warning(
+                f"EnvVar {self.varname()}: Registering argparser, but already fetched value"
+            )
         parser.add_argument(
             self._flag_name(),
             type=self.parse,
@@ -77,6 +82,7 @@ class EnvVar(Generic[C], ABC):
         after parsing the arguments. If `ns` has a value for this variable, it
         takes precedence over the environment variable.
         """
+        self._fetched = True
         if self._registered_argparser:
             if ns is None:
                 logger.warning(
