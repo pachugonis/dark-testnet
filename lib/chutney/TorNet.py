@@ -142,7 +142,7 @@ class AddressAssignmentStrategy(FromDecodedJson, Enum):
         return AddressAssignmentStrategy[check_type(o, str)]
 
 
-def get_absolute_nodes_path() -> Path:
+def _get_absolute_nodes_path(data_dir: Path) -> Path:
     """
     Returns the absolute path of the "nodes" symlink that points to the
     "nodes*" directory that chutney should use to store the current
@@ -153,10 +153,10 @@ def get_absolute_nodes_path() -> Path:
 
     See get_new_absolute_nodes_path() for more details.
     """
-    return Path(envvars.DATA_DIR.get().resolve(), "nodes")
+    return Path(data_dir.resolve(), "nodes")
 
 
-def get_new_absolute_nodes_path(now: Optional[float] = None) -> Path:
+def _get_new_absolute_nodes_path(data_dir: Path, now: Optional[float] = None) -> Path:
     """
     Returns the absolute path of a unique "nodes*" directory that chutney
     should use to store the current network's torrcs and tor runtime data.
@@ -174,7 +174,7 @@ def get_new_absolute_nodes_path(now: Optional[float] = None) -> Path:
     # series of directory path names
     # should only be called by 'chutney configure', all other chutney commands
     # should use get_absolute_nodes_path()
-    nodesdir = get_absolute_nodes_path()
+    nodesdir = _get_absolute_nodes_path(data_dir)
     newdir = newdirbase = Path("%s.%d" % (nodesdir, now))
     # if the time is the same, fall back to a simple integer count
     # (this is very unlikely to happen unless the clock changes: it's not
@@ -881,9 +881,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
         # Keys into `KNOWN_REQUIREMENTS`
         self._requirements: list[str] = []
         self._nextnodenum = 0
-        # Use the "nodes" symlink by default. This is overwritten by
-        # `create_new_nodes_dir` when we configure a new network.
-        self.dir: Path = get_absolute_nodes_path()
+
+        # "Nodes" directory where we'll persist the network's state.
+        # Initialized in `init` for a fresh network, or in `from_nodes_dir`
+        # when loading from an existing directory.
+        self._dir: Optional[Path] = None
 
         # Whether a bridge authority has been added.
         self.hasbridgeauth = False
@@ -913,6 +915,14 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.dnsport_base: int = 10000
 
     @property
+    def dir(self) -> Path:
+        """The nodes in this network"""
+        if self._dir is None:
+            raise ChutneyError("No directory. Use `init` to create one.")
+
+        return self._dir
+
+    @property
     def nodes(self) -> Iterable[Node]:
         """The nodes in this network"""
         return self._nodes
@@ -922,7 +932,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         json_str = nodes_dir.joinpath("network.json").read_text()
         json_obj = json.loads(json_str)
         net = Network.from_decoded_json(json_obj)
-        net.dir = nodes_dir
+        net._dir = nodes_dir
         return net
 
     @staticmethod
@@ -933,7 +943,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         For examples of network scripts, see`chutney/data/networks`.
         """
-
         # If not provided defaults, generate them from environment
         non_optional_config_defaults = config_defaults or NodeConfig.from_envargs()
 
@@ -1018,12 +1027,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
             raise RuntimeError(("Unrecognized requirement %r" % requirement))
         self._requirements.append(requirement)
 
-    def create_new_nodes_dir(self) -> None:
+    def _create_new_nodes_dir(self, data_dir: Path) -> None:
         """Create a new directory with a unique name, and symlink it to nodes"""
         # the unique directory we'll create
-        newnodesdir = get_new_absolute_nodes_path()
+        newnodesdir = _get_new_absolute_nodes_path(data_dir)
+
         # the canonical name we'll link it to
-        nodeslink = get_absolute_nodes_path()
+        nodeslink = _get_absolute_nodes_path(data_dir)
 
         # this path should be unique and should not exist
         if newnodesdir.exists():
@@ -1051,7 +1061,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             else:
                 raise
         nodeslink.symlink_to(newnodesdir)
-        self.dir = newnodesdir
+        self._dir = newnodesdir
 
     def get_familykey_path(self, ident: Optional[str], ext: bool = True) -> Path:
         """
@@ -1165,9 +1175,10 @@ class Network(ToCustomJsonable, FromDecodedJson):
                         hs_client.nick, hs_client_pubkey
                     )
 
-    def init(self) -> None:
+    def init(self, data_dir: Optional[Path] = None) -> None:
         """Create a nodes directory and metadata"""
-        self.create_new_nodes_dir()
+        data_dir = data_dir or envvars.DATA_DIR.get()
+        self._create_new_nodes_dir(data_dir=data_dir)
         self._write_network_json()
 
     def configure(self, *, config_phase: int) -> None:
@@ -1759,7 +1770,7 @@ class InitCLICommand(CLICommand):
 
     @override
     def run(self, network: Network, ns: argparse.Namespace) -> None:
-        network.init()
+        network.init(data_dir=envvars.DATA_DIR.get(ns=ns))
 
 
 class ConfigureCLICommand(CLICommand):
@@ -2045,6 +2056,7 @@ def _parse_args(
 
 
 def _network_from_args(ns: argparse.Namespace) -> Network:
+    data_dir = envvars.DATA_DIR.get(ns=ns)
     config_defaults = NodeConfig.from_envargs(ns=ns)
     net_name = check_type(getattr(ns, "net", None), Optional[str])
     if net_name is not None:
@@ -2063,7 +2075,7 @@ def _network_from_args(ns: argparse.Namespace) -> Network:
 
     assert ns.net_from_data_dir
 
-    unresolved_nodes_dir = get_absolute_nodes_path()
+    unresolved_nodes_dir = _get_absolute_nodes_path(data_dir=data_dir)
     nodes_dir = unresolved_nodes_dir.resolve()
     if nodes_dir == unresolved_nodes_dir:
         logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
