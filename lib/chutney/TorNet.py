@@ -1707,6 +1707,7 @@ class CLICommand(ABC):
             # Add support for overriding envvars that effect Network creation.
             # TODO: these are ignored in the `--net-from-data-dir` case. This
             # might be confusing, but I'm not sure how better to arrange things.
+            NetworkConfig.register_argparser(self._subparser)
             NodeConfig.register_argparser(self._subparser)
             TorBin().config_envvar().register_argparser(self._get_subparser())
             TorGenCertBin().config_envvar().register_argparser(self._get_subparser())
