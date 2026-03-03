@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import enum
 import ipaddress
+import logging
 import os
 
 from abc import ABC, abstractmethod
@@ -11,6 +12,8 @@ from typing import TypeVar, Generic, Optional, cast
 from typing_extensions import override
 
 from chutney.Util import IPAddress, IPNetwork
+
+logger = logging.getLogger(__name__)
 
 C = TypeVar("C", covariant=True)
 
@@ -29,6 +32,8 @@ class EnvVar(Generic[C], ABC):
         self._varname = varname
         self._default = default
         self._help = help
+        self._registered_argparser = False
+        self._fetched = False
 
         # Multiple instances with the same variable name would defeat the
         # purpose a bit. Especially if they have conflicting types, help
@@ -57,12 +62,17 @@ class EnvVar(Generic[C], ABC):
         variable. Pass the namespace resulting from parsing the command-line
         parameters to `get` to actually do so.
         """
+        if self._fetched:
+            logger.warning(
+                f"EnvVar {self.varname()}: Registering argparser, but already fetched value"
+            )
         parser.add_argument(
             self._flag_name(),
             type=self.parse,
             dest=self._ns_name(),
             help=self.help() + f" (overrides {self._varname})",
         )
+        self._registered_argparser = True
 
     def get(self, ns: Optional[argparse.Namespace] = None) -> C:
         """Retrieve the effective value.
@@ -72,14 +82,21 @@ class EnvVar(Generic[C], ABC):
         after parsing the arguments. If `ns` has a value for this variable, it
         takes precedence over the environment variable.
         """
-        if (val := getattr(ns, self._ns_name(), None)) is not None:
-            # Tell mypy to trust that val is of type `C`.
-            # It *should* be, *assuming* that the namespace provided to us was
-            # actually generated from a parser previously passed to
-            # `register_argparser`.  It'd be nice to use `isinstance` or
-            # `check_type` to validate it, but those don't support using a type
-            # variable.
-            return cast("C", val)
+        self._fetched = True
+        if self._registered_argparser:
+            if ns is None:
+                logger.warning(
+                    f"EnvVar {self.varname()}: Registered argparser,"
+                    " but retrieving without applying parse-result"
+                )
+            elif (val := getattr(ns, self._ns_name(), None)) is not None:
+                # Tell mypy to trust that val is of type `C`.
+                # It *should* be, *assuming* that the namespace provided to us was
+                # actually generated from a parser previously passed to
+                # `register_argparser`.  It'd be nice to use `isinstance` or
+                # `check_type` to validate it, but those don't support using a type
+                # variable.
+                return cast("C", val)
         if (strval := os.environ.get(self._varname)) is not None:
             try:
                 return self.parse(strval)
