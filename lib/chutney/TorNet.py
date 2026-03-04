@@ -1704,8 +1704,14 @@ class CLICommand(ABC):
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
 
-            # Add support for overriding NodeConfig defaults
+            # Add support for overriding envvars that effect Network creation.
+            # TODO: these are ignored in the `--net-from-data-dir` case. This
+            # might be confusing, but I'm not sure how better to arrange things.
+            NetworkConfig.register_argparser(self._subparser)
             NodeConfig.register_argparser(self._subparser)
+            TorBin().config_envvar().register_argparser(self._get_subparser())
+            TorGenCertBin().config_envvar().register_argparser(self._get_subparser())
+            ArtiBin().config_envvar().register_argparser(self._get_subparser())
 
             # We add a group of mutually exclusive flags, one for each method of
             # specifying the config.
@@ -1715,11 +1721,11 @@ class CLICommand(ABC):
             method_group.add_argument(
                 "--net",
                 choices=getNetworks(),
-                help="Load built-in network config by name",
+                help="Configure a network using a built-in network script, by name.",
             )
             method_group.add_argument(
                 "--net-from-script-path",
-                help="Load network config from a chutney network script",
+                help="Configure a network using a chutney network script, by path.",
                 type=Path,
             )
             method_group.add_argument(
@@ -1727,7 +1733,9 @@ class CLICommand(ABC):
                 action="store_true",
                 # If the group isn't required, then make this the default option.
                 default=not require_net_spec_group,
-                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes."
+                " The loaded configuration is *not* altered by other options like"
+                " `--tor`/`CHUTNEY_TOR`.",
             )
         else:
             # User isn't permitted to specify; always get from data dir.
@@ -2073,13 +2081,8 @@ def _parse_args(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=envvars.EnvVar.help_all(),
     )
-
     # Register environment variables to be overridable via command-line.
     envvars.DATA_DIR.register_argparser(parser)
-    TorBin().config_envvar().register_argparser(parser)
-    TorGenCertBin().config_envvar().register_argparser(parser)
-    ArtiBin().config_envvar().register_argparser(parser)
-
     subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
 
     PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
