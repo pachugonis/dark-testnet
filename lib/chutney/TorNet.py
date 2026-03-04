@@ -1721,11 +1721,11 @@ class CLICommand(ABC):
             method_group.add_argument(
                 "--net",
                 choices=getNetworks(),
-                help="Load built-in network config by name",
+                help="Configure a network using a built-in network script, by name.",
             )
             method_group.add_argument(
                 "--net-from-script-path",
-                help="Load network config from a chutney network script",
+                help="Configure a network using a chutney network script, by path.",
                 type=Path,
             )
             method_group.add_argument(
@@ -1733,7 +1733,9 @@ class CLICommand(ABC):
                 action="store_true",
                 # If the group isn't required, then make this the default option.
                 default=not require_net_spec_group,
-                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes",
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes."
+                " The loaded configuration is *not* altered by other options like"
+                " `--tor`/`CHUTNEY_TOR`.",
             )
         else:
             # User isn't permitted to specify; always get from data dir.
