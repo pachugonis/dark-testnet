@@ -1033,6 +1033,25 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return net
 
     @staticmethod
+    def from_data_dir(data_dir: Optional[Path] = None) -> Network:
+        """Load Network from `data_dir`. default: CHUTNEY_DATA_DIR"""
+        data_dir = data_dir or envvars.DATA_DIR.get()
+        unresolved_nodes_dir = _get_absolute_nodes_path(data_dir=data_dir)
+        nodes_dir = unresolved_nodes_dir.resolve()
+        if nodes_dir == unresolved_nodes_dir:
+            logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
+        else:
+            logger.info(
+                f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}"
+            )
+        if not nodes_dir.exists():
+            raise ChutneyError(
+                f"Nodes dir '{nodes_dir}' doesn't exist."
+                " Try providing a network name or setting CHUTNEY_DATA_DIR."
+            )
+        return Network.from_nodes_dir(nodes_dir)
+
+    @staticmethod
     def from_network_script_contents(
         network_script_contents: str,
         *,
@@ -2180,24 +2199,7 @@ def _network_from_args(ns: argparse.Namespace) -> Network:
         raise ChutneyInternalError(
             "command parser should have ensured net_from_data_dir was set"
         )
-
-    unresolved_nodes_dir = _get_absolute_nodes_path(data_dir=data_dir)
-    nodes_dir = unresolved_nodes_dir.resolve()
-    if nodes_dir == unresolved_nodes_dir:
-        logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
-    else:
-        logger.info(
-            f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}"
-        )
-    if not nodes_dir.exists():
-        raise ChutneyError(
-            f"Nodes dir '{nodes_dir}' doesn't exist."
-            " Try providing a network name or setting CHUTNEY_DATA_DIR."
-        )
-    try:
-        return Network.from_nodes_dir(nodes_dir)
-    except Exception as e:
-        raise ChutneyError(f"Couldn't load network from f'{nodes_dir}'") from e
+    return Network.from_data_dir(data_dir)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
