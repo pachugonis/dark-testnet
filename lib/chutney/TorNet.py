@@ -1758,10 +1758,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
 
 # This is the type returned by `ArgumentParser.add_subparsers`. Unfortunately
-# the argparse module doesn't expose a public named type. We refer to it using
-# the internal _SubParsersAction type that it gets, encapsulating that bit of
-# ugliness into this alias.
-class _SubParsers(Protocol):
+# the argparse module doesn't expose a public named type, so we just specify
+# the documented protocol.
+class SubParsers(Protocol):
     # Since we can't name a lot of the kwarg types either, we just use Any.
     # This means mypy etc. won't statically catch type errors when calling this
     # method via this type. In practice such errors will be found on any run of
@@ -1770,52 +1769,26 @@ class _SubParsers(Protocol):
 
 
 class CLICommand(ABC):
-    """A CLI command"""
+    """A chutney CLI command.
+
+    A chutney CLI program should, for every subcommand, define a subclass of this class,
+    instantiate that class once, passing the result of `argparse.ArgumentParser.add_subparsers`.
+
+    After parsing the command-line arguments, `CLICommand.run_command` will run the user-selected
+    subcommand.
+    """
+
+    # Attribute where we'll store the name of the selected subcommand.
+    _CMD_DEST: Final[str] = "cmd"
 
     def __init__(
-        self, subparsers: _SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self, subparsers: SubParsers, *, require_net_spec_group: Optional[bool] = None
     ) -> None:
         self._subparser = subparsers.add_parser(self.name(), help=self.help())
-        if require_net_spec_group is not None:
-            # This command supports specifying the network config.
-
-            # Add support for overriding envvars that effect Network creation.
-            # TODO: these are ignored in the `--net-from-data-dir` case. This
-            # might be confusing, but I'm not sure how better to arrange things.
-            NetworkConfig.register_argparser(self._subparser)
-            NodeConfig.register_argparser(self._subparser)
-            TorBin().config_envvar().register_argparser(self._get_subparser())
-            TorGenCertBin().config_envvar().register_argparser(self._get_subparser())
-            ArtiBin().config_envvar().register_argparser(self._get_subparser())
-
-            # We add a group of mutually exclusive flags, one for each method of
-            # specifying the config.
-            method_group = self._subparser.add_mutually_exclusive_group(
-                required=require_net_spec_group
-            )
-            method_group.add_argument(
-                "--net",
-                choices=getNetworks(),
-                help="Configure a network using a built-in network script, by name.",
-            )
-            method_group.add_argument(
-                "--net-from-script-path",
-                help="Configure a network using a chutney network script, by path.",
-                type=Path,
-            )
-            method_group.add_argument(
-                "--net-from-data-dir",
-                action="store_true",
-                # If the group isn't required, then make this the default option.
-                default=not require_net_spec_group,
-                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes."
-                " The loaded configuration is *not* altered by other options like"
-                " `--tor`/`CHUTNEY_TOR`.",
-            )
-        else:
-            # User isn't permitted to specify; always get from data dir.
-            self._subparser.set_defaults(net_from_data_dir=True)
-        self._subparser.set_defaults(cmd=self)
+        CLINetworkBuilder.register_argparser(
+            self._get_subparser(), require_net_spec_group=require_net_spec_group
+        )
+        self._subparser.set_defaults(**{CLICommand._CMD_DEST: self})
 
     @staticmethod
     @abstractmethod
@@ -1840,6 +1813,24 @@ class CLICommand(ABC):
         Intended for usage by child classes, to register additional arguments.
         """
         return self._subparser
+
+    @staticmethod
+    def add_subparsers(parser: argparse.ArgumentParser) -> SubParsers:
+        """Get a `SubParsers` object for adding commands to `parser`.
+
+        This method should be used instead of calling `ArgumentParser.add_subparsers` directly,
+        to ensure the selected subcommand is stored such  that `CLICommand.run_selected_subcommand`
+        can find it.
+        """
+        return parser.add_subparsers(dest=CLICommand._CMD_DEST)
+
+    @staticmethod
+    def run_selected_subcommand(args: argparse.Namespace) -> None:
+        """Run the user-selected subcommand."""
+
+        network = CLINetworkBuilder.build(args)
+        cmd = check_type(getattr(args, CLICommand._CMD_DEST), CLICommand)
+        cmd.run(network, args)
 
 
 class PrintPhasesCLICommand(CLICommand):
@@ -1902,7 +1893,7 @@ class InitCLICommand(CLICommand):
 class ConfigureCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         config_phase_env: envvars.EnvVarInt,
         require_net_spec_group: Optional[bool] = None,
@@ -1929,7 +1920,7 @@ class ConfigureCLICommand(CLICommand):
 class StatusCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         launch_phase_env: envvars.EnvVarInt,
         require_net_spec_group: Optional[bool] = None,
@@ -1963,7 +1954,7 @@ class StatusCLICommand(CLICommand):
 class RestartCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         launch_phase_env: envvars.EnvVarInt,
         require_net_spec_group: Optional[bool] = None,
@@ -1990,7 +1981,7 @@ class RestartCLICommand(CLICommand):
 class StartCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         launch_phase_env: envvars.EnvVarInt,
         require_net_spec_group: Optional[bool] = None,
@@ -2036,7 +2027,7 @@ class HupCLICommand(CLICommand):
 class WaitForBootstrapCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         launch_phase_env: envvars.EnvVarInt,
         require_net_spec_group: Optional[bool] = None,
@@ -2098,7 +2089,7 @@ class BootstrapCLICommand(CLICommand):
 class VerifyCLICommand(CLICommand):
     def __init__(
         self,
-        subparsers: _SubParsers,
+        subparsers: SubParsers,
         *,
         require_net_spec_group: Optional[bool] = None,
     ) -> None:
@@ -2139,6 +2130,87 @@ def getNetworks() -> list[str]:
     return networks
 
 
+class CLINetworkBuilder:
+    @staticmethod
+    def register_argparser(
+        parser: argparse.ArgumentParser,
+        *,
+        require_net_spec_group: Optional[bool] = None,
+    ) -> None:
+        if require_net_spec_group is not None:
+            # This command supports specifying the network config.
+
+            # Add support for overriding envvars that effect Network creation.
+            # TODO: these are ignored in the `--net-from-data-dir` case. This
+            # might be confusing, but I'm not sure how better to arrange things.
+            NetworkConfig.register_argparser(parser)
+            NodeConfig.register_argparser(parser)
+            TorBin().config_envvar().register_argparser(parser)
+            TorGenCertBin().config_envvar().register_argparser(parser)
+            ArtiBin().config_envvar().register_argparser(parser)
+
+            # We add a group of mutually exclusive flags, one for each method of
+            # specifying the config.
+            method_group = parser.add_mutually_exclusive_group(
+                required=require_net_spec_group
+            )
+            method_group.add_argument(
+                "--net",
+                choices=getNetworks(),
+                help="Configure a network using a built-in network script, by name.",
+            )
+            method_group.add_argument(
+                "--net-from-script-path",
+                help="Configure a network using a chutney network script, by path.",
+                type=Path,
+            )
+            method_group.add_argument(
+                "--net-from-data-dir",
+                action="store_true",
+                # If the group isn't required, then make this the default option.
+                default=not require_net_spec_group,
+                help="Load network config from directory $CHUTNEY_DATA_DIR/nodes."
+                " The loaded configuration is *not* altered by other options like"
+                " `--tor`/`CHUTNEY_TOR`.",
+            )
+        else:
+            # User isn't permitted to specify; always get from data dir.
+            parser.set_defaults(net_from_data_dir=True)
+
+    @staticmethod
+    def build(ns: argparse.Namespace) -> Network:
+        data_dir = envvars.DATA_DIR.get(ns=ns)
+        node_config_defaults = NodeConfig.from_envargs(ns=ns)
+        net_config = NetworkConfig.from_envargs(ns=ns)
+        net_name = check_type(getattr(ns, "net", None), Optional[str])
+        if net_name is not None:
+            logger.info(
+                f"Loading network config from built-in network name: '{net_name}'"
+            )
+            return Network.from_network_script_name(
+                net_name, config=net_config, node_config_defaults=node_config_defaults
+            )
+        script_path = check_type(
+            getattr(ns, "net_from_script_path", None), Optional[Path]
+        )
+        if script_path is not None:
+            logger.info(
+                f"Loading network config from chutney network script path: '{script_path}'"
+            )
+            return Network.from_network_script_path(
+                script_path,
+                config=net_config,
+                node_config_defaults=node_config_defaults,
+            )
+
+        if not ns.net_from_data_dir:
+            raise ChutneyInternalError(
+                "command parser should have ensured net_from_data_dir was set"
+            )
+
+        return Network.from_data_dir(data_dir)
+
+
 def _parse_args(
     argv: Optional[Sequence[str]],
     *,
@@ -2158,7 +2230,7 @@ def _parse_args(
     )
     # Register environment variables to be overridable via command-line.
     envvars.DATA_DIR.register_argparser(parser)
-    subparsers: _SubParsers = parser.add_subparsers(dest="cmd")
+    subparsers: SubParsers = CLICommand.add_subparsers(parser)
 
     PrintPhasesCLICommand(subparsers, require_net_spec_group=False)
     SupportedCLICommand(subparsers, require_net_spec_group=False)
@@ -2176,32 +2248,6 @@ def _parse_args(
     return parser.parse_args(argv)
 
 
-def _network_from_args(ns: argparse.Namespace) -> Network:
-    data_dir = envvars.DATA_DIR.get(ns=ns)
-    node_config_defaults = NodeConfig.from_envargs(ns=ns)
-    net_config = NetworkConfig.from_envargs(ns=ns)
-    net_name = check_type(getattr(ns, "net", None), Optional[str])
-    if net_name is not None:
-        logger.info(f"Loading network config from built-in network name: '{net_name}'")
-        return Network.from_network_script_name(
-            net_name, config=net_config, node_config_defaults=node_config_defaults
-        )
-    script_path = check_type(getattr(ns, "net_from_script_path", None), Optional[Path])
-    if script_path is not None:
-        logger.info(
-            f"Loading network config from chutney network script path: '{script_path}'"
-        )
-        return Network.from_network_script_path(
-            script_path, config=net_config, node_config_defaults=node_config_defaults
-        )
-
-    if not ns.net_from_data_dir:
-        raise ChutneyInternalError(
-            "command parser should have ensured net_from_data_dir was set"
-        )
-    return Network.from_data_dir(data_dir)
-
-
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """A slightly more hermetic main could be called reasonably from python
 
@@ -2210,9 +2256,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     chutney_logging.logging_basic_config()
 
     args = _parse_args(argv)
-    network = _network_from_args(args)
-    cmd = check_type(args.cmd, CLICommand)
-    cmd.run(network, args)
+    CLICommand.run_selected_subcommand(args)
 
 
 def __main__() -> None:
