@@ -275,7 +275,7 @@ class Node(ToCustomJsonable):
 
     @property
     def ip(self) -> Option[IPv4Address]:
-        if self._config.ip is None:
+        if not self._config.ip:
             return Option(None)
         base = IPv4Address(self._config.ip)
         strategy = self._config.address_assignment_strategy
@@ -289,7 +289,7 @@ class Node(ToCustomJsonable):
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
         base_str = self._config.ipv6_addr
-        if base_str is None:
+        if not base_str:
             return Option(None)
         # The IPv6Address constructor doesn't recognize addresses enclosed in
         # brackets (e.g. `[::1]`), and indeed they aren't really part of the
@@ -903,8 +903,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         return NodeConfig(
             hs_target_address=NodeConfig._HS_TARGET_ADDRESS_ENV.get(ns=ns),
             trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
-            ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
-            ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,
+            ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns),
+            ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns),
             disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
             controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
             dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
