@@ -873,49 +873,79 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         d["hs_target_address"] = ipaddress.ip_address(d["hs_target_address"])
         return NodeConfig(**d)
 
-    @staticmethod
-    def register_argparser(parser: argparse.ArgumentParser) -> None:
+
+class CLINodeConfigBuilder:
+    """Build a NodeConfig, using an ArgumentParser.
+
+    Enables selectively adding fields to be overridable via an ArgumentParser.
+    """
+
+    # keys are NodeConfig field names, values are EnvVars
+    # from which they are initialized.
+    _FIELDS_TO_ENVVARS: Final[Mapping[str, envvars.EnvVar[object]]] = dict(
+        hs_target_address=NodeConfig._HS_TARGET_ADDRESS_ENV,
+        trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV,
+        ip=NodeConfig._LISTEN_ADDRESS_ENV,
+        ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV,
+        disableipv6=NodeConfig._DISABLE_IPV6_ENV,
+        controlling_pid=NodeConfig._CONTROLLING_PID_ENV,
+        dns_conf=NodeConfig._DNS_CONF_ENV,
+        sandbox=NodeConfig._TOR_SANDBOX_ENV,
+        enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV,
+        launcher_backend=NodeConfig._LAUNCHER_BACKEND_ENV,
+        address_assignment_strategy=NodeConfig._ADDRESS_ASSIGNMENT_ENV,
+        tor=TorBin().config_envvar(),
+        tor_gencert=TorGenCertBin().config_envvar(),
+        arti=ArtiBin().config_envvar(),
+    )
+
+    def __init__(
+        self,
+        parser: argparse.ArgumentParser,
+        overrides: Optional[Mapping[str, object]] = None,
+    ) -> None:
         """Add command-line options to `parser` to override some defaults.
 
-        The subsequent parse result can be provided to `TorNet.from_envargs`
-        to allow any user-provided command-line options to override the
-        environment-variable defaults."""
-        NodeConfig._TRUSTED_NETWORKS_ENV.register_argparser(parser)
-        NodeConfig._LISTEN_ADDRESS_ENV.register_argparser(parser)
-        NodeConfig._LISTEN_ADDRESS_V6_ENV.register_argparser(parser)
-        NodeConfig._DISABLE_IPV6_ENV.register_argparser(parser)
-        NodeConfig._CONTROLLING_PID_ENV.register_argparser(parser)
-        NodeConfig._DNS_CONF_ENV.register_argparser(parser)
-        NodeConfig._TOR_SANDBOX_ENV.register_argparser(parser)
-        NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
-        NodeConfig._LAUNCHER_BACKEND_ENV.register_argparser(parser)
-        NodeConfig._ADDRESS_ASSIGNMENT_ENV.register_argparser(parser)
+        Additional kwargs are interpreted as pre-specified values
+        for the given NodeConfig fields. Fields with a pre-specified value are *not*
+        registered to be overridable via the `parser`.
         NodeConfig._HS_TARGET_ADDRESS_ENV.register_argparser(parser)
-        # We already register KnownBin envvars globally
 
-    @staticmethod
-    def from_envargs(ns: Optional[argparse.Namespace] = None) -> NodeConfig:
-        """Create a default NodeConfig, optionally overridden with args from `ns`
-
-        The intent is for `ns` to be the result of parsing command-line arguments,
-        using a parser previously passed to `NodeConfig.register_argparser`.
+        The subsequent parse result can be provided to `build`.
         """
-        return NodeConfig(
-            hs_target_address=NodeConfig._HS_TARGET_ADDRESS_ENV.get(ns=ns),
-            trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
-            ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns),
-            ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns),
-            disableipv6=NodeConfig._DISABLE_IPV6_ENV.get(ns=ns),
-            controlling_pid=NodeConfig._CONTROLLING_PID_ENV.get(ns=ns),
-            dns_conf=NodeConfig._DNS_CONF_ENV.get(ns=ns),
-            sandbox=NodeConfig._TOR_SANDBOX_ENV.get(ns=ns),
-            enable_controlsocket=NodeConfig._ENABLE_CONTROLSOCKET_ENV.get(ns=ns),
-            launcher_backend=NodeConfig._LAUNCHER_BACKEND_ENV.get(ns=ns),
-            address_assignment_strategy=NodeConfig._ADDRESS_ASSIGNMENT_ENV.get(ns=ns),
-            tor=TorBin().config_envvar().get(ns=ns),
-            tor_gencert=TorGenCertBin().config_envvar().get(ns=ns),
-            arti=ArtiBin().config_envvar().get(ns=ns),
-        )
+        # Save specified overrides for when we actually
+        # build the NodeConfig.
+        self._overrides: Final[dict[str, object]] = dict(overrides or {})
+
+        # Register only the non-overridden fields to be overridable via the
+        # parser.
+        for field, envvar in self._FIELDS_TO_ENVVARS.items():
+            if field not in self._overrides:
+                envvar.register_argparser(parser)
+
+    def build(self, ns: argparse.Namespace) -> NodeConfig:
+        """Create a default NodeConfig, with pre-specified and command-line overrides`.
+
+        The intent is for `ns` to be the result of parsing command-line
+        arguments, using a parser previously passed to
+        `__init__`.
+        """
+        # Create a copy before mutating, in case this method
+        # is called multiple times.
+        #
+        # Also use Any instead of object for the value type
+        # to tell mypy not to try (and fail) to validate the
+        # parameters we provide to the NodeConfig constructor below.
+        #
+        # TODO: is there some reasonable way to get type safety here?
+        overrides: dict[str, Any] = dict(self._overrides)
+
+        # Get additional overrides from environment variables and parse results.
+        for field, envvar in self._FIELDS_TO_ENVVARS.items():
+            if field not in overrides:
+                overrides[field] = envvar.get(ns=ns)
+
+        return NodeConfig(**overrides)
 
 
 KNOWN_REQUIREMENTS = {"IPV6": chutney.Host.is_ipv6_supported}
@@ -1063,7 +1093,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         For examples of network scripts, see`chutney/data/networks`.
         """
         # If not provided defaults, generate them from environment
-        non_optional_config_defaults = node_config_defaults or NodeConfig.from_envargs()
+        non_optional_config_defaults = node_config_defaults or NodeConfig()
 
         # Wrappers used from network scripts (`data`) that manipulate
         # an implicit network (`_THE_NETWORK`).
@@ -1782,11 +1812,17 @@ class CLICommand(ABC):
     _CMD_DEST: Final[str] = "cmd"
 
     def __init__(
-        self, subparsers: SubParsers, *, require_net_spec_group: Optional[bool] = None
+        self,
+        subparsers: SubParsers,
+        *,
+        require_net_spec_group: Optional[bool] = None,
+        node_config_overrides: Optional[Mapping[str, object]] = None,
     ) -> None:
         self._subparser = subparsers.add_parser(self.name(), help=self.help())
-        CLINetworkBuilder.register_argparser(
-            self._get_subparser(), require_net_spec_group=require_net_spec_group
+        self._net_builder = CLINetworkBuilder(
+            self._get_subparser(),
+            require_net_spec_group=require_net_spec_group,
+            node_config_overrides=node_config_overrides,
         )
         self._subparser.set_defaults(**{CLICommand._CMD_DEST: self})
 
@@ -1826,10 +1862,10 @@ class CLICommand(ABC):
 
     @staticmethod
     def run_selected_subcommand(args: argparse.Namespace) -> None:
-        """Run the user-selected subcommand."""
+        """Load the selected network and run the user-selected subcommand."""
 
-        network = CLINetworkBuilder.build(args)
         cmd = check_type(getattr(args, CLICommand._CMD_DEST), CLICommand)
+        network = cmd._net_builder.build(args)
         cmd.run(network, args)
 
 
@@ -2131,23 +2167,37 @@ def getNetworks() -> list[str]:
 
 
 class CLINetworkBuilder:
-    @staticmethod
-    def register_argparser(
+    """Helper for building a Network from command-line options"""
+
+    def __init__(
+        self,
         parser: argparse.ArgumentParser,
         *,
         require_net_spec_group: Optional[bool] = None,
+        node_config_overrides: Optional[Mapping[str, object]] = None,
     ) -> None:
+        """Registers relevant command-line options with `parser`.
+        If `require_net_spec_group` is None, always reconstitutes from
+        CHUTNEY_DATA_DIR/nodes.  If `require_net_spec_group` is False, it
+        defaults to reconstituting from CHUTNEY_DATA_DIR/nodes, but may be
+        overridden.  If `require_net_spec_group` is True, then the user must
+        provide a flag specifying how to load the network.
+
+        `node_config_overrides`, if provided, are passed through to generated
+        `NodeConfigOptions`.  The flags normally registered with `parser` for
+        overriding those options are suppressed.
+        """
+        self._node_config_builder: Optional[CLINodeConfigBuilder] = None
         if require_net_spec_group is not None:
             # This command supports specifying the network config.
 
             # Add support for overriding envvars that effect Network creation.
             # TODO: these are ignored in the `--net-from-data-dir` case. This
             # might be confusing, but I'm not sure how better to arrange things.
+            self._node_config_builder = CLINodeConfigBuilder(
+                parser, overrides=node_config_overrides
+            )
             NetworkConfig.register_argparser(parser)
-            NodeConfig.register_argparser(parser)
-            TorBin().config_envvar().register_argparser(parser)
-            TorGenCertBin().config_envvar().register_argparser(parser)
-            ArtiBin().config_envvar().register_argparser(parser)
 
             # We add a group of mutually exclusive flags, one for each method of
             # specifying the config.
@@ -2174,13 +2224,18 @@ class CLINetworkBuilder:
                 " `--tor`/`CHUTNEY_TOR`.",
             )
         else:
+            if node_config_overrides:
+                logger.warning(
+                    f"NodeConfig overrides won't be used: {node_config_overrides}"
+                )
             # User isn't permitted to specify; always get from data dir.
             parser.set_defaults(net_from_data_dir=True)
 
-    @staticmethod
-    def build(ns: argparse.Namespace) -> Network:
+    def build(self, ns: argparse.Namespace) -> Network:
         data_dir = envvars.DATA_DIR.get(ns=ns)
-        node_config_defaults = NodeConfig.from_envargs(ns=ns)
+        node_config_defaults: Optional[NodeConfig] = None
+        if self._node_config_builder is not None:
+            node_config_defaults = self._node_config_builder.build(ns=ns)
         net_config = NetworkConfig.from_envargs(ns=ns)
         net_name = check_type(getattr(ns, "net", None), Optional[str])
         if net_name is not None:
