@@ -1440,7 +1440,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
     CHECK_NETWORK_STATUS_DELAY = 1.0
     PRINT_NETWORK_STATUS_DELAY = V3_AUTH_VOTING_INTERVAL / 2.0
-    CHECKS_PER_PRINT = PRINT_NETWORK_STATUS_DELAY / CHECK_NETWORK_STATUS_DELAY
 
     # There are 7 v3 directory document types, but some networks only use 6,
     # because they don't have a bridge authority
@@ -1472,8 +1471,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
-        checks_since_last_print = 0
-
         while True:
             all_bootstrapped = True
             most_recent_desc_status = dict()
@@ -1547,48 +1544,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
             if now >= limit:
                 break
             if now >= next_print_status:
-                if checks_since_last_print <= Network.CHECKS_PER_PRINT / 2:
-                    logger.warning(
-                        "checks_since_last_print: {} (expected: {})".format(
-                            checks_since_last_print, Network.CHECKS_PER_PRINT
-                        )
-                    )
-                    logger.warning("start: {} limit: {}".format(start, limit))
-                    logger.warning(
-                        "next_print_status: {} now: {}".format(
-                            next_print_status, time.time()
-                        )
-                    )
                 self.print_bootstrap_status(
                     nodes, most_recent_desc_status, elapsed=elapsed
                 )
                 next_print_status = now + Network.PRINT_NETWORK_STATUS_DELAY
-                checks_since_last_print = 0
 
             time.sleep(Network.CHECK_NETWORK_STATUS_DELAY)
-
-            # macOS Travis has some weird hangs, make sure we're not hanging
-            # in this loop due to clock skew
-            checks_since_last_print += 1
-            if checks_since_last_print >= Network.CHECKS_PER_PRINT * 2:
-                self.print_bootstrap_status(
-                    nodes,
-                    most_recent_desc_status,
-                    elapsed=elapsed,
-                    msg="Internal timing error",
-                )
-                print(
-                    "checks_since_last_print: {} (expected: {})".format(
-                        checks_since_last_print, Network.CHECKS_PER_PRINT
-                    )
-                )
-                print("start: {} limit: {}".format(start, limit))
-                print(
-                    "next_print_status: {} now: {}".format(
-                        next_print_status, time.time()
-                    )
-                )
-                raise ChutneyTimeoutError()
 
         self.print_bootstrap_status(
             nodes,
