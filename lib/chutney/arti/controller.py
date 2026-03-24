@@ -145,7 +145,8 @@ class LocalArtiNodeController(NodeController):
         """Return the expected path to the logfile for this instance."""
         return self._node.dir.joinpath("debug.log")
 
-    def _getLastOnionServiceDescStatus(self) -> DirInfoStatus:
+    @override
+    def getLastOnionServiceDescStatus(self) -> DirInfoStatus:
         status = self._most_recent_oniondesc_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
@@ -227,17 +228,6 @@ class LocalArtiNodeController(NodeController):
                         message="Restricted discovery enabled, but no auth'd clients configured",
                     )
                     continue
-
-    @override
-    def isBootstrapped(self) -> bool:
-        status = self.getLastBootstrapStatus()
-        if status.percent_or_code != DirInfoStatusCode.SUCCESS:
-            return False
-        if self._node.is_hs:
-            status = self._getLastOnionServiceDescStatus()
-            if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
-                return False
-        return True
 
     def _get_sqlite_conn(self) -> Optional[sqlite3.Connection]:
         db_path = self._node.dir.joinpath("cache", "dir.sqlite3")

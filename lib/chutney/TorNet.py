@@ -1477,8 +1477,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
             for n in nodes:
                 n._controller.updateLastStatus()
 
-                if not n._controller.isBootstrapped():
+                status = n._controller.getLastBootstrapStatus()
+                if status.percent_or_code != DirInfoStatusCode.SUCCESS:
                     all_bootstrapped = False
+                if n.is_hs:
+                    status = n._controller.getLastOnionServiceDescStatus()
+                    if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
+                        all_bootstrapped = False
 
                 desc_status = n._controller.getNodeDirInfoStatus(
                     launch_phase=launch_phase
