@@ -15,7 +15,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from abc import ABC, abstractmethod
-from collections.abc import Set
+from collections.abc import Mapping, Set
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
@@ -1376,7 +1376,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
     def print_bootstrap_status(
         self,
         nodes: Iterable[Node],
-        most_recent_desc_status: dict[
+        most_recent_desc_status: Mapping[
             str, tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]
         ],
         elapsed: Optional[float] = None,
@@ -1473,8 +1473,19 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
         while True:
+            most_recent_desc_status: Mapping[
+                str, tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]
+            ] = {
+                n.nick: desc_status
+                for n in nodes
+                if (
+                    desc_status := n._controller.getNodeDirInfoStatus(
+                        launch_phase=launch_phase
+                    )
+                )
+                is not None
+            }
             all_bootstrapped = True
-            most_recent_desc_status = dict()
             for n in nodes:
                 n._controller.updateLastStatus()
 
@@ -1486,12 +1497,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
                     if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                         all_bootstrapped = False
 
-                desc_status = n._controller.getNodeDirInfoStatus(
-                    launch_phase=launch_phase
-                )
+                desc_status = most_recent_desc_status.get(n.nick)
                 if desc_status:
                     code, desc_nodes, docs = desc_status
-                    most_recent_desc_status[n.nick] = (code, desc_nodes, docs)
                     if code != DirInfoStatusCode.SUCCESS:
                         all_bootstrapped = False
 
