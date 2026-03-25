@@ -1373,71 +1373,97 @@ class Network(ToCustomJsonable, FromDecodedJson):
         print("Sending SIGHUP to nodes")
         return all([n._controller.hup() for n in self._nodes])
 
-    def print_bootstrap_status(
+    def _all_bootstrapped(
         self,
         nodes: Iterable[Node],
         most_recent_desc_status: Mapping[
             str, tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]]
         ],
+        *,
+        print_status: bool = False,
         elapsed: Optional[float] = None,
         msg: str = "Bootstrap in progress",
-    ) -> None:
+    ) -> bool:
+        """Check whether all of `nodes` are fully bootstrapped"""
         nick_set: Final[Set[str]] = set((n.nick for n in nodes))
         elapsed_msg = ""
         if elapsed:
             elapsed_msg = ": {} seconds".format(int(elapsed))
         if msg:
             header = "{}{}".format(msg, elapsed_msg)
-        print(header)
-        print("Node status:")
+        all_bootstrapped = True
+        if print_status:
+            print(header)
+            print("Node status:")
         for n in nodes:
+            n._controller.updateLastStatus()
             if not n._controller.isRunning():
-                print(f"{n.nick} is not running")
+                # XXX set result to False?
+                if print_status:
+                    print(f"{n.nick} is not running")
             status = n._controller.getLastBootstrapStatus()
-            # Support older tor versions without bootstrap keywords
-            kwd = status.keyword or "None"
-            print(
-                "{:13}: {:19}, {:25}, {}".format(
-                    n.nick, status.percent_or_code, kwd, status.message
+            if status.percent_or_code != DirInfoStatusCode.SUCCESS:
+                all_bootstrapped = False
+            if print_status:
+                # Support older tor versions without bootstrap keywords
+                kwd = status.keyword or "None"
+                print(
+                    "{:13}: {:19}, {:25}, {}".format(
+                        n.nick, status.percent_or_code, kwd, status.message
+                    )
                 )
-            )
+            if n.is_hs:
+                status = n._controller.getLastOnionServiceDescStatus()
+                # XXX print this status?
+                if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
+                    all_bootstrapped = False
+
         cons_auth_nick_set: Final[Set[str]] = set(
             (n.nick for n in nodes if n._config.consensus_authority)
         )
         cache_client_nick_set: Final[Set[str]] = nick_set - cons_auth_nick_set
-        print("Published dir info:")
+        if print_status:
+            print("Published dir info:")
         for n in nodes:
-            if n.nick in most_recent_desc_status:
-                desc_status = most_recent_desc_status[n.nick]
+            desc_status = most_recent_desc_status.get(n.nick)
+            if desc_status is None:
+                # This node doesn't have a descriptor. (e.g. a client)
+                pass
+            else:
                 code, desc_nodes, docs = desc_status
-                node_set = set(desc_nodes)
-                if node_set == nick_set:
-                    desc_nodes = "all nodes"
-                elif node_set == cons_auth_nick_set:
-                    desc_nodes = "dir auths"
-                elif node_set == cache_client_nick_set:
-                    desc_nodes = "caches and clients"
-                else:
-                    desc_nodes = [node.nick.replace("test", "") for node in nodes]
-                    desc_nodes = " ".join(sorted(desc_nodes))
-                if len(docs) >= self.getDocTypeDisplayLimit():
-                    docs_string = "all formats"
-                else:
-                    # Fold desc_new into desc, and md_new into md
-                    docs_set = set(d for d in docs)
-                    if DirFormat.DESC_NEW in docs_set:
-                        docs_set.discard(DirFormat.DESC_NEW)
-                        docs_set.add(DirFormat.DESC)
-                    if DirFormat.MD_NEW in docs:
-                        docs_set.discard(DirFormat.MD_NEW)
-                        docs_set.add(DirFormat.MD)
-                    docs_string = " ".join(sorted([str(d) for d in docs_set]))
-                print(
-                    "{:13}: {:19}, {:25}, {:30}".format(
-                        n.nick, code, desc_nodes, docs_string
+                if code != DirInfoStatusCode.SUCCESS:
+                    all_bootstrapped = False
+                if print_status:
+                    node_set = set(desc_nodes)
+                    if node_set == nick_set:
+                        desc_nodes = "all nodes"
+                    elif node_set == cons_auth_nick_set:
+                        desc_nodes = "dir auths"
+                    elif node_set == cache_client_nick_set:
+                        desc_nodes = "caches and clients"
+                    else:
+                        desc_nodes = [node.nick.replace("test", "") for node in nodes]
+                        desc_nodes = " ".join(sorted(desc_nodes))
+                    if len(docs) >= self.getDocTypeDisplayLimit():
+                        docs_string = "all formats"
+                    else:
+                        # Fold desc_new into desc, and md_new into md
+                        docs_set = set(d for d in docs)
+                        if DirFormat.DESC_NEW in docs_set:
+                            docs_set.discard(DirFormat.DESC_NEW)
+                            docs_set.add(DirFormat.DESC)
+                        if DirFormat.MD_NEW in docs:
+                            docs_set.discard(DirFormat.MD_NEW)
+                            docs_set.add(DirFormat.MD)
+                        docs_string = " ".join(sorted([str(d) for d in docs_set]))
+                    print(
+                        "{:13}: {:19}, {:25}, {:30}".format(
+                            n.nick, code, desc_nodes, docs_string
+                        )
                     )
-                )
-        print()
+        if print_status:
+            print()
+        return all_bootstrapped
 
     CHECK_NETWORK_STATUS_DELAY = 1.0
     PRINT_NETWORK_STATUS_DELAY = V3_AUTH_VOTING_INTERVAL / 2.0
@@ -1485,34 +1511,26 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 )
                 is not None
             }
-            all_bootstrapped = True
-            for n in nodes:
-                n._controller.updateLastStatus()
-
-                status = n._controller.getLastBootstrapStatus()
-                if status.percent_or_code != DirInfoStatusCode.SUCCESS:
-                    all_bootstrapped = False
-                if n.is_hs:
-                    status = n._controller.getLastOnionServiceDescStatus()
-                    if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
-                        all_bootstrapped = False
-
-                desc_status = most_recent_desc_status.get(n.nick)
-                if desc_status:
-                    code, desc_nodes, docs = desc_status
-                    if code != DirInfoStatusCode.SUCCESS:
-                        all_bootstrapped = False
-
             now = time.time()
             elapsed = now - start
+            print_status = now >= next_print_status
+            if print_status:
+                next_print_status = now + Network.PRINT_NETWORK_STATUS_DELAY
+            all_bootstrapped = self._all_bootstrapped(
+                nodes,
+                most_recent_desc_status,
+                print_status=print_status,
+                elapsed=elapsed,
+            )
             if all_bootstrapped:
                 print("Everything bootstrapped after {} sec".format(int(elapsed)))
-                self.print_bootstrap_status(
+                assert self._all_bootstrapped(
                     nodes,
                     most_recent_desc_status,
+                    print_status=True,
                     elapsed=elapsed,
                     msg="Bootstrap finished",
-                )
+                ), "Went from bootstrapped to not-bootstrapped"
 
                 # Potentially wait a bit longer to let other things finish that
                 # we don't explicitly check for, including a timing bug in Tor 0.3.5.
@@ -1557,19 +1575,15 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 return
             if now >= limit:
                 break
-            if now >= next_print_status:
-                self.print_bootstrap_status(
-                    nodes, most_recent_desc_status, elapsed=elapsed
-                )
-                next_print_status = now + Network.PRINT_NETWORK_STATUS_DELAY
 
             time.sleep(Network.CHECK_NETWORK_STATUS_DELAY)
 
-        self.print_bootstrap_status(
+        self._all_bootstrapped(
             nodes,
             most_recent_desc_status,
+            print_status=True,
             elapsed=elapsed,
-            msg="Bootstrap failed",
+            msg="Bootstrap failed (timeout)",
         )
         raise ChutneyTimeoutError()
 
