@@ -1472,9 +1472,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
-        wait_time_list = [n._controller.getUncheckedDirInfoWaitTime() for n in nodes]
-        wait_time = max(wait_time_list)
-
         checks_since_last_print = 0
 
         while True:
@@ -1506,11 +1503,14 @@ class Network(ToCustomJsonable, FromDecodedJson):
                     msg="Bootstrap finished",
                 )
 
-                # Wait for unchecked bridge or onion service dir info.
-                # (See #33581 and #33609.)
-                # Also used to work around a timing bug in Tor 0.3.5.
+                # Potentially wait a bit longer to let other things finish that
+                # we don't explicitly check for, including a timing bug in Tor 0.3.5.
+                wait_time_list = [
+                    n._controller.getUncheckedDirInfoWaitTime() for n in nodes
+                ]
+                wait_time = max(wait_time_list)
                 print(
-                    "Waiting {} seconds for the network to be ready...\n".format(
+                    "Waiting an extra {} seconds for the network to be ready...\n".format(
                         int(wait_time)
                     )
                 )
@@ -1522,11 +1522,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 # condition where:
                 #  - all the directory info that chutney checks is present,
                 #  - but some unchecked dir info is missing
-                #    (perhaps onion service descriptors, see #33609)
-                #    or some other state or connection isn't quite ready, and
                 #  - chutney's SOCKS connection puts tor in a failing state,
                 #    which affects tor for at least 10 seconds.
-                #
                 # We have only seen this race condition in 0.3.5. The fixes to
                 # microdescriptor downloads in 0.4.0 or 0.4.1 likely resolve
                 # this issue.

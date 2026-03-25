@@ -113,20 +113,17 @@ class LocalNodeController(NodeController):
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            # We don't check for onion service descriptors before verifying.
-            # See #33609 for details.
+            # This delay was originally added before we checked onion descriptor
+            # publishing status at all. We now do check that some are published,
+            # but it's a bit imprecise (see
+            # `_update_last_onion_service_desc_status` and #33609), so we keep
+            # this for now.
             return self._network.V3_AUTH_VOTING_INTERVAL + 10
-        elif self._node._config.bridge:
-            # The extra time after other descriptors have finished, and before
-            # verifying.
-            return 0
         elif self.isLegacyTorVersion():
             # Let everything propagate for another consensus period before verifying.
             return self._network.V3_AUTH_VOTING_INTERVAL
         else:
-            # We don't check for bridge descriptors before verifying.
-            # See #33581.
-            return 10
+            return 0
 
     def getPid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.

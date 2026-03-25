@@ -55,14 +55,7 @@ class LocalArtiNodeController(NodeController):
 
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
-        if self._node.is_hs:
-            # We don't check for onion service descriptors before verifying.
-            # See #33609 for details.
-            return self._network.V3_AUTH_VOTING_INTERVAL + 10
-        else:
-            # The extra time after other descriptors have finished, and before
-            # verifying.
-            return 0
+        return 0
 
     def _get_pid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.
