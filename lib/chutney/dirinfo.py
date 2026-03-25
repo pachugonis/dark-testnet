@@ -26,6 +26,7 @@ class DirInfoStatusCode(enum.Enum):
     # TODO: rename
     NO_PROGRESS = 0
     SUCCESS = 100
+    ONIONDESC_CREATED = 1
     ONIONDESC_PUBLISHED = 200
 
     def __str__(self) -> str:

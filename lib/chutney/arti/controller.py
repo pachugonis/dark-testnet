@@ -203,15 +203,22 @@ class LocalArtiNodeController(NodeController):
                     continue
                 m = re.search(
                     r" descriptor uploaded successfully to "
-                    + r"\d+/\d+ HSDirs nickname="
+                    + r"(\d+)/(\d+) HSDirs nickname="
                     + _HS_NICKNAME,
                     line,
                 )
                 if m:
+                    have = int(m.group(1))
+                    want = int(m.group(2))
+                    percent_or_code: int | DirInfoStatusCode
+                    if have >= want:
+                        percent_or_code = DirInfoStatusCode.ONIONDESC_PUBLISHED
+                    else:
+                        percent_or_code = int(have / want)
                     self._most_recent_oniondesc_status = DirInfoStatus(
-                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                        percent_or_code=percent_or_code,
                         keyword=HSV3_KEYWORD,
-                        message=m.group(0),
+                        message=f"{have}/{want} uploaded",
                     )
                     continue
                 m = re.search(

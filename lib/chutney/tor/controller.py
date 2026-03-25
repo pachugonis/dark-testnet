@@ -308,17 +308,82 @@ class LocalNodeController(NodeController):
             message="No onion service descriptor messages yet.",
         )
         with open(logfname, "r") as f:
+            want_current: Optional[int] = None
+            want_next: Optional[int] = None
+            completed_uploads = 0
             for line in f:
-                m_v3 = re.search(
+                match = re.search(
                     r"Service ([^\s]+ [^\s]+ descriptor of revision .*)", line
                 )
-                if m_v3:
+                if match:
                     status = DirInfoStatus(
-                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                        percent_or_code=DirInfoStatusCode.ONIONDESC_CREATED,
                         keyword=HSV3_KEYWORD,
-                        message=m_v3.groups()[0],
+                        message=match.group(1),
                     )
-                    break
+                # Look for the first statement of how many current intro points
+                # we want. Don't reset based on subsequent matching lines, since
+                # we would have to also reset the corresponding "completed"
+                # count, but we can't, since we can't separate the "current"
+                # completed from the "next" completed.
+                if (
+                    want_current is None
+                    and (
+                        match := re.search(
+                            r"Service [^\s]+ just picked \d+ intro points"
+                            r" and wanted (\d+) for current descriptor."
+                            r" It currently has \d+ intro points.",
+                            line,
+                        )
+                    )
+                    is not None
+                ):
+                    want_current = int(match.group(1))
+                    logger.debug(f"hs wants {want_current} current intro points")
+                # Look for the first statement of how many next intro points we want.
+                if (
+                    want_next is None
+                    and (
+                        match := re.search(
+                            r"Service [^\s]+ just picked \d+ intro points"
+                            r" and wanted (\d+) for next descriptor."
+                            r" It currently has \d+ intro points.",
+                            line,
+                        )
+                    )
+                    is not None
+                ):
+                    want_next = int(match.group(1))
+                    logger.debug(f"hs wants {want_next} next intro points")
+                upload_success_msg = (
+                    "Uploading hidden service descriptor:"
+                    ' finished with status 200 ("HS descriptor stored successfully.")'
+                )
+                if upload_success_msg in line:
+                    completed_uploads += 1
+                    logger.debug(
+                        f"hs has completed {completed_uploads} descriptor uploads"
+                    )
+                if want_current is not None and want_next is not None:
+                    wanted = want_current + want_next
+                    if completed_uploads >= wanted:
+                        # We've completed at least as many uploads as we initially wanted.
+                        # It's possible that some of these are now-expired and we're not actually
+                        # completely up to date, but this is about the best we can reasonably do
+                        # with the available log messages.
+                        # See #33609.
+                        status = DirInfoStatus(
+                            percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                            keyword=HSV3_KEYWORD,
+                            message="published",
+                        )
+                        break
+                    status = DirInfoStatus(
+                        percent_or_code=int(completed_uploads / wanted),
+                        keyword=HSV3_KEYWORD,
+                        message=f"published {completed_uploads}/{wanted}",
+                    )
+
         self.most_recent_oniondesc_status = status
 
     def getLastOnionServiceDescStatus(self) -> DirInfoStatus:
