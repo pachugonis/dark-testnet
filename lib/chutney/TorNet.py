@@ -1398,7 +1398,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for n in nodes:
             n._controller.updateLastStatus()
             if not n._controller.isRunning():
-                # XXX set result to False?
+                # One might argue that a node whose state is syncd with the
+                # network could be considered bootstrapped even if the process
+                # isn't running, but in practice we use "bootstrapped" to mean
+                # "ready to `verify`".
+                all_bootstrapped = False
                 if print_status:
                     print(f"{n.nick} is not running")
             status = n._controller.getLastBootstrapStatus()
