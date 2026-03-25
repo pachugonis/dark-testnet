@@ -15,11 +15,13 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from abc import ABC, abstractmethod
+from collections.abc import Set
 from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import (
     ClassVar,
+    Final,
     List,
     Optional,
     Any,
@@ -1380,8 +1382,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         elapsed: Optional[float] = None,
         msg: str = "Bootstrap in progress",
     ) -> None:
-        nick_set = set()
-        cons_auth_nick_set = set()
+        nick_set: Final[Set[str]] = set((n.nick for n in nodes))
         elapsed_msg = ""
         if elapsed:
             elapsed_msg = ": {} seconds".format(int(elapsed))
@@ -1392,9 +1393,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
         for n in nodes:
             if not n._controller.isRunning():
                 print(f"{n.nick} is not running")
-            nick_set.add(n.nick)
-            if n._config.consensus_authority:
-                cons_auth_nick_set.add(n.nick)
             status = n._controller.getLastBootstrapStatus()
             # Support older tor versions without bootstrap keywords
             kwd = status.keyword or "None"
@@ -1403,7 +1401,10 @@ class Network(ToCustomJsonable, FromDecodedJson):
                     n.nick, status.percent_or_code, kwd, status.message
                 )
             )
-        cache_client_nick_set = nick_set.difference(cons_auth_nick_set)
+        cons_auth_nick_set: Final[Set[str]] = set(
+            (n.nick for n in nodes if n._config.consensus_authority)
+        )
+        cache_client_nick_set: Final[Set[str]] = nick_set - cons_auth_nick_set
         print("Published dir info:")
         for n in nodes:
             if n.nick in most_recent_desc_status:
