@@ -1394,8 +1394,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
         all_bootstrapped = True
         if print_status:
             print(header)
-            print("Node status:")
+        cons_auth_nick_set: Final[Set[str]] = set(
+            (n.nick for n in nodes if n._config.consensus_authority)
+        )
+        cache_client_nick_set: Final[Set[str]] = nick_set - cons_auth_nick_set
         for n in nodes:
+            if print_status:
+                print(f"  {n.nick}:")
             n._controller.updateLastStatus()
             if not n._controller.isRunning():
                 # One might argue that a node whose state is syncd with the
@@ -1404,7 +1409,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 # "ready to `verify`".
                 all_bootstrapped = False
                 if print_status:
-                    print(f"{n.nick} is not running")
+                    print("    not running")
             status = n._controller.getLastBootstrapStatus()
             if status.percent_or_code != DirInfoStatusCode.SUCCESS:
                 all_bootstrapped = False
@@ -1412,8 +1417,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 # Support older tor versions without bootstrap keywords
                 kwd = status.keyword or "None"
                 print(
-                    "{:13}: {:19}, {:25}, {}".format(
-                        n.nick, status.percent_or_code, kwd, status.message
+                    "    bootstrap progress: {}, {}, {}".format(
+                        status.percent_or_code, kwd, status.message
                     )
                 )
             if n.is_hs:
@@ -1421,14 +1426,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 # XXX print this status?
                 if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                     all_bootstrapped = False
-
-        cons_auth_nick_set: Final[Set[str]] = set(
-            (n.nick for n in nodes if n._config.consensus_authority)
-        )
-        cache_client_nick_set: Final[Set[str]] = nick_set - cons_auth_nick_set
-        if print_status:
-            print("Published dir info:")
-        for n in nodes:
             desc_status = most_recent_desc_status.get(n.nick)
             if desc_status is None:
                 # This node doesn't have a descriptor. (e.g. a client)
@@ -1461,8 +1458,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
                             docs_set.add(DirFormat.MD)
                         docs_string = " ".join(sorted([str(d) for d in docs_set]))
                     print(
-                        "{:13}: {:19}, {:25}, {:30}".format(
-                            n.nick, code, desc_nodes, docs_string
+                        "    desc publishing: {}, {}, {}".format(
+                            code, desc_nodes, docs_string
                         )
                     )
         if print_status:
