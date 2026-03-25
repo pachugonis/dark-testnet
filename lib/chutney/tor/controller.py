@@ -22,7 +22,6 @@ from chutney.dirinfo import (
     DirInfoStatus,
     DirInfoStatusCode,
     DirFormat,
-    HSV2_KEYWORD,
     HSV3_KEYWORD,
 )
 from chutney.node_controller import NodeController
@@ -310,15 +309,6 @@ class LocalNodeController(NodeController):
         )
         with open(logfname, "r") as f:
             for line in f:
-                m_v2 = re.search(r"Launching upload for hidden service (.*)", line)
-                if m_v2:
-                    status = DirInfoStatus(
-                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=HSV2_KEYWORD,
-                        message=m_v2.groups()[0],
-                    )
-                    break
-                # else check for HSv3
                 m_v3 = re.search(
                     r"Service ([^\s]+ [^\s]+ descriptor of revision .*)", line
                 )

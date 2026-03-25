@@ -9,7 +9,6 @@ import chutney.errors
 
 from chutney.Util import Option, IPAddress
 
-HSV2_KEYWORD = "hidden service v2"
 HSV3_KEYWORD = "hidden service v3"
 
 
