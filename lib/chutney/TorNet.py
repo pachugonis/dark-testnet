@@ -1423,9 +1423,12 @@ class Network(ToCustomJsonable, FromDecodedJson):
                 )
             if n.is_hs:
                 status = n._controller.getLastOnionServiceDescStatus()
-                # XXX print this status?
                 if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
                     all_bootstrapped = False
+                if print_status:
+                    print(
+                        f"    oniondesc publishing: {status.percent_or_code}, {status.keyword}"
+                    )
             desc_status = most_recent_desc_status.get(n.nick)
             if desc_status is None:
                 # This node doesn't have a descriptor. (e.g. a client)
