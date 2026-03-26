@@ -74,7 +74,9 @@ class DirFormat(enum.Enum):
     def __str__(self) -> str:
         return self.name
 
-    def status_pattern(self, nick: str, ed25519_key: Option[str]) -> Optional[str]:
+    def status_pattern(
+        self, nick: str, ed25519_key: Option[str]
+    ) -> Optional[re.Pattern[str]]:
         """Returns a regular expression pattern for finding a node with the given nick and key
         in this format's file. Returns None if the requested pattern is not
         available.
@@ -92,12 +94,12 @@ class DirFormat(enum.Enum):
                 return None
             else:
                 # ns_cons and md_cons work
-                return r"^r " + nick + " "
+                return re.compile(r"^r " + nick + " ")
         elif desc:
-            return r"^router " + nick + " "
+            return re.compile(r"^router " + nick + " ")
         elif md:
             return ed25519_key.map(
-                lambda s: r"^id ed25519 " + re.escape(s)
+                lambda s: re.compile(r"^id ed25519 " + re.escape(s))
             ).as_optional()
         else:
             raise chutney.errors.ChutneyError(

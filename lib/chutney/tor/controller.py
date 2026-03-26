@@ -287,7 +287,27 @@ class LocalNodeController(NodeController):
             logname = "notice.log"
         return datadir.joinpath(logname)
 
-    def _update_last_onion_service_desc_status(self) -> None:
+    def _update_last_onion_service_desc_status(
+        self,
+        *,
+        _created_pattern: re.Pattern[str] = re.compile(
+            r"Service ([^\s]+ [^\s]+ descriptor of revision .*)"
+        ),
+        _want_current_pattern: re.Pattern[str] = re.compile(
+            r"Service [^\s]+ just picked \d+ intro points"
+            r" and wanted (\d+) for current descriptor."
+            r" It currently has \d+ intro points.",
+        ),
+        _want_next_pattern: re.Pattern[str] = re.compile(
+            r"Service [^\s]+ just picked \d+ intro points"
+            r" and wanted (\d+) for next descriptor."
+            r" It currently has \d+ intro points.",
+        ),
+        _completed_upload_pattern: re.Pattern[str] = re.compile(
+            r"Uploading hidden service descriptor:"
+            r' finished with status 200 \("HS descriptor stored successfully."\)'
+        ),
+    ) -> None:
         """Look through the logs and cache the last onion service
         descriptor status received.
         """
@@ -309,9 +329,7 @@ class LocalNodeController(NodeController):
             want_next: Optional[int] = None
             completed_uploads = 0
             for line in f:
-                match = re.search(
-                    r"Service ([^\s]+ [^\s]+ descriptor of revision .*)", line
-                )
+                match = _created_pattern.search(line)
                 if match:
                     status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_CREATED,
@@ -325,38 +343,18 @@ class LocalNodeController(NodeController):
                 # completed from the "next" completed.
                 if (
                     want_current is None
-                    and (
-                        match := re.search(
-                            r"Service [^\s]+ just picked \d+ intro points"
-                            r" and wanted (\d+) for current descriptor."
-                            r" It currently has \d+ intro points.",
-                            line,
-                        )
-                    )
-                    is not None
+                    and (match := _want_current_pattern.search(line)) is not None
                 ):
                     want_current = int(match.group(1))
                     logger.debug(f"hs wants {want_current} current intro points")
                 # Look for the first statement of how many next intro points we want.
                 if (
                     want_next is None
-                    and (
-                        match := re.search(
-                            r"Service [^\s]+ just picked \d+ intro points"
-                            r" and wanted (\d+) for next descriptor."
-                            r" It currently has \d+ intro points.",
-                            line,
-                        )
-                    )
-                    is not None
+                    and (match := _want_next_pattern.search(line)) is not None
                 ):
                     want_next = int(match.group(1))
                     logger.debug(f"hs wants {want_next} next intro points")
-                upload_success_msg = (
-                    "Uploading hidden service descriptor:"
-                    ' finished with status 200 ("HS descriptor stored successfully.")'
-                )
-                if upload_success_msg in line:
+                if _completed_upload_pattern.search(line):
                     completed_uploads += 1
                     logger.debug(
                         f"hs has completed {completed_uploads} descriptor uploads"
@@ -397,7 +395,12 @@ class LocalNodeController(NodeController):
         assert rv is not None
         return rv
 
-    def _update_last_bootstrap_status(self) -> None:
+    def _update_last_bootstrap_status(
+        self,
+        _bootstrap_pattern: re.Pattern[str] = re.compile(
+            r"Bootstrapped (\d+)%(?: \(([^\)]*)\))?: (.*)"
+        ),
+    ) -> None:
         logfname = self.getLogfile()
         if not logfname.exists():
             self.most_recent_bootstrap_status = DirInfoStatus(
@@ -413,7 +416,7 @@ class LocalNodeController(NodeController):
         )
         with logfname.open(mode="r") as f:
             for line in f:
-                m = re.search(r"Bootstrapped (\d+)%(?: \(([^\)]*)\))?: (.*)", line)
+                m = _bootstrap_pattern.search(line)
                 if m:
                     percent_s, keyword, message = m.groups()
                     status = DirInfoStatus(
@@ -496,7 +499,7 @@ class LocalNodeController(NodeController):
             for line in f:
                 line_count = line_count + 1
                 if dir_pattern:
-                    m = re.search(dir_pattern, line)
+                    m = dir_pattern.search(line)
                     if m:
                         return DirInfoStatusCode.SUCCESS
         if line_count == 0:

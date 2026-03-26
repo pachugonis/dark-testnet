@@ -161,7 +161,20 @@ class LocalArtiNodeController(NodeController):
         return rv
 
     @override
-    def updateLastStatus(self) -> None:
+    def updateLastStatus(
+        self,
+        *,
+        _status_pattern: re.Pattern[str] = re.compile(
+            r" arti_client::status: (\d+)%: (.*)"
+        ),
+        _hs_pattern: re.Pattern[str] = re.compile(
+            r" descriptor uploaded successfully to (\d+)/(\d+) HSDirs nickname="
+        ),
+        _rd_error_pattern: re.Pattern[str] = re.compile(
+            r"Restricted discovery is enabled,"
+            r" but no authorized clients are configured",
+        ),
+    ) -> None:
         logfname = self._debug_log_path()
         if not logfname.exists():
             self._most_recent_bootstrap_status = DirInfoStatus(
@@ -179,8 +192,7 @@ class LocalArtiNodeController(NodeController):
         self._most_recent_oniondesc_status = status
         with logfname.open(mode="r") as f:
             for line in f:
-                m = re.search(r" arti_client::status: (\d+)%: (.*)", line)
-                if m:
+                if m := _status_pattern.search(line):
                     percent_s, message = m.groups()
                     self._most_recent_bootstrap_status = DirInfoStatus(
                         percent_or_code=(
@@ -194,13 +206,7 @@ class LocalArtiNodeController(NodeController):
                 if not self._node.is_hs:
                     # No need to scan for hs descriptor updates
                     continue
-                m = re.search(
-                    r" descriptor uploaded successfully to "
-                    + r"(\d+)/(\d+) HSDirs nickname="
-                    + _HS_NICKNAME,
-                    line,
-                )
-                if m:
+                if m := _hs_pattern.search(line):
                     have = int(m.group(1))
                     want = int(m.group(2))
                     percent_or_code: int | DirInfoStatusCode
@@ -214,12 +220,7 @@ class LocalArtiNodeController(NodeController):
                         message=f"{have}/{want} uploaded",
                     )
                     continue
-                m = re.search(
-                    r"Restricted discovery is enabled,"
-                    r" but no authorized clients are configured",
-                    line,
-                )
-                if m:
+                if m := _rd_error_pattern.search(line):
                     self._most_recent_oniondesc_status = DirInfoStatus(
                         percent_or_code=DirInfoStatusCode.ONIONDESC_FAILED_TO_PUBLISH,
                         keyword=HSV3_KEYWORD,
@@ -301,7 +302,7 @@ class LocalArtiNodeController(NodeController):
             assert dir_pattern is not None
             with path.open(mode="r") as f:
                 for line in f:
-                    if re.search(dir_pattern, line):
+                    if dir_pattern.search(line):
                         return DirInfoStatusCode.SUCCESS
             return DirInfoStatusCode.NO_PROGRESS
         elif dir_fmt == DirFormat.MD:
@@ -329,7 +330,7 @@ class LocalArtiNodeController(NodeController):
                 raise
             for row in res:
                 for line in row[0].splitlines():
-                    if re.search(dir_pattern, line):
+                    if dir_pattern.search(line):
                         return DirInfoStatusCode.SUCCESS
             return DirInfoStatusCode.NO_PROGRESS
         return DirInfoStatusCode.NOT_YET_IMPLEMENTED
