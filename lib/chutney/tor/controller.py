@@ -22,7 +22,6 @@ from chutney.dirinfo import (
     DirInfoStatus,
     DirInfoStatusCode,
     DirFormat,
-    HSV2_KEYWORD,
     HSV3_KEYWORD,
 )
 from chutney.node_controller import NodeController
@@ -114,20 +113,17 @@ class LocalNodeController(NodeController):
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
         if self._node.is_hs:
-            # We don't check for onion service descriptors before verifying.
-            # See #33609 for details.
+            # This delay was originally added before we checked onion descriptor
+            # publishing status at all. We now do check that some are published,
+            # but it's a bit imprecise (see
+            # `_update_last_onion_service_desc_status` and #33609), so we keep
+            # this for now.
             return self._network.V3_AUTH_VOTING_INTERVAL + 10
-        elif self._node._config.bridge:
-            # The extra time after other descriptors have finished, and before
-            # verifying.
-            return 0
         elif self.isLegacyTorVersion():
             # Let everything propagate for another consensus period before verifying.
             return self._network.V3_AUTH_VOTING_INTERVAL
         else:
-            # We don't check for bridge descriptors before verifying.
-            # See #33581.
-            return 10
+            return 0
 
     def getPid(self) -> Optional[int]:
         """Read the pidfile, and return the pid of the running process.
@@ -291,7 +287,27 @@ class LocalNodeController(NodeController):
             logname = "notice.log"
         return datadir.joinpath(logname)
 
-    def _update_last_onion_service_desc_status(self) -> None:
+    def _update_last_onion_service_desc_status(
+        self,
+        *,
+        _created_pattern: re.Pattern[str] = re.compile(
+            r"Service ([^\s]+ [^\s]+ descriptor of revision .*)"
+        ),
+        _want_current_pattern: re.Pattern[str] = re.compile(
+            r"Service [^\s]+ just picked \d+ intro points"
+            r" and wanted (\d+) for current descriptor."
+            r" It currently has \d+ intro points.",
+        ),
+        _want_next_pattern: re.Pattern[str] = re.compile(
+            r"Service [^\s]+ just picked \d+ intro points"
+            r" and wanted (\d+) for next descriptor."
+            r" It currently has \d+ intro points.",
+        ),
+        _completed_upload_pattern: re.Pattern[str] = re.compile(
+            r"Uploading hidden service descriptor:"
+            r' finished with status 200 \("HS descriptor stored successfully."\)'
+        ),
+    ) -> None:
         """Look through the logs and cache the last onion service
         descriptor status received.
         """
@@ -309,26 +325,60 @@ class LocalNodeController(NodeController):
             message="No onion service descriptor messages yet.",
         )
         with open(logfname, "r") as f:
+            want_current: Optional[int] = None
+            want_next: Optional[int] = None
+            completed_uploads = 0
             for line in f:
-                m_v2 = re.search(r"Launching upload for hidden service (.*)", line)
-                if m_v2:
+                match = _created_pattern.search(line)
+                if match:
                     status = DirInfoStatus(
-                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
-                        keyword=HSV2_KEYWORD,
-                        message=m_v2.groups()[0],
-                    )
-                    break
-                # else check for HSv3
-                m_v3 = re.search(
-                    r"Service ([^\s]+ [^\s]+ descriptor of revision .*)", line
-                )
-                if m_v3:
-                    status = DirInfoStatus(
-                        percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                        percent_or_code=DirInfoStatusCode.ONIONDESC_CREATED,
                         keyword=HSV3_KEYWORD,
-                        message=m_v3.groups()[0],
+                        message=match.group(1),
                     )
-                    break
+                # Look for the first statement of how many current intro points
+                # we want. Don't reset based on subsequent matching lines, since
+                # we would have to also reset the corresponding "completed"
+                # count, but we can't, since we can't separate the "current"
+                # completed from the "next" completed.
+                if (
+                    want_current is None
+                    and (match := _want_current_pattern.search(line)) is not None
+                ):
+                    want_current = int(match.group(1))
+                    logger.debug(f"hs wants {want_current} current intro points")
+                # Look for the first statement of how many next intro points we want.
+                if (
+                    want_next is None
+                    and (match := _want_next_pattern.search(line)) is not None
+                ):
+                    want_next = int(match.group(1))
+                    logger.debug(f"hs wants {want_next} next intro points")
+                if _completed_upload_pattern.search(line):
+                    completed_uploads += 1
+                    logger.debug(
+                        f"hs has completed {completed_uploads} descriptor uploads"
+                    )
+                if want_current is not None and want_next is not None:
+                    wanted = want_current + want_next
+                    if completed_uploads >= wanted:
+                        # We've completed at least as many uploads as we initially wanted.
+                        # It's possible that some of these are now-expired and we're not actually
+                        # completely up to date, but this is about the best we can reasonably do
+                        # with the available log messages.
+                        # See #33609.
+                        status = DirInfoStatus(
+                            percent_or_code=DirInfoStatusCode.ONIONDESC_PUBLISHED,
+                            keyword=HSV3_KEYWORD,
+                            message="published",
+                        )
+                        break
+                    status = DirInfoStatus(
+                        percent_or_code=int(completed_uploads / wanted),
+                        keyword=HSV3_KEYWORD,
+                        message=f"published {completed_uploads}/{wanted}",
+                    )
+
         self.most_recent_oniondesc_status = status
 
     def getLastOnionServiceDescStatus(self) -> DirInfoStatus:
@@ -345,7 +395,12 @@ class LocalNodeController(NodeController):
         assert rv is not None
         return rv
 
-    def _update_last_bootstrap_status(self) -> None:
+    def _update_last_bootstrap_status(
+        self,
+        _bootstrap_pattern: re.Pattern[str] = re.compile(
+            r"Bootstrapped (\d+)%(?: \(([^\)]*)\))?: (.*)"
+        ),
+    ) -> None:
         logfname = self.getLogfile()
         if not logfname.exists():
             self.most_recent_bootstrap_status = DirInfoStatus(
@@ -361,7 +416,7 @@ class LocalNodeController(NodeController):
         )
         with logfname.open(mode="r") as f:
             for line in f:
-                m = re.search(r"Bootstrapped (\d+)%(?: \(([^\)]*)\))?: (.*)", line)
+                m = _bootstrap_pattern.search(line)
                 if m:
                     percent_s, keyword, message = m.groups()
                     status = DirInfoStatus(
@@ -444,7 +499,7 @@ class LocalNodeController(NodeController):
             for line in f:
                 line_count = line_count + 1
                 if dir_pattern:
-                    m = re.search(dir_pattern, line)
+                    m = dir_pattern.search(line)
                     if m:
                         return DirInfoStatusCode.SUCCESS
         if line_count == 0:
