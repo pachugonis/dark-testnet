@@ -162,21 +162,9 @@ def _verify_traffic(
         timeout=timeout,
         repetitions=reps,
     )
-    client_list = list(
-        filter(
-            lambda n: n.tag.startswith("c")
-            or n.tag.startswith("bc")
-            or n._config.client,
-            network._nodes,
-        )
-    )
+    client_list = list(filter(lambda n: n.is_client, network._nodes))
     exit_list = list(filter(lambda n: n._config.exit, network._nodes))
-    hs_list = list(
-        filter(
-            lambda n: n.tag.startswith("h") or n._config.hs,
-            network._nodes,
-        )
-    )
+    hs_list = list(filter(lambda n: n.is_hs, network._nodes))
     if len(client_list) == 0:
         print("  Unable to verify network: no client nodes available")
         return False

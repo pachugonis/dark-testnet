@@ -439,12 +439,29 @@ class Node(ToCustomJsonable):
     @property
     def is_client(self) -> bool:
         """Whether this node is configured as a client"""
-        return self._config.client
+        new_explicit_method = self._config.client
+        tag = self.tag
+        # TODO: stop paying attention to the legacy method
+        legacy_tag_method = tag.startswith("c") or tag.startswith("bc")
+        if legacy_tag_method != new_explicit_method:
+            raise ChutneyError(
+                f"{self.nick}: is_client according to tag:{legacy_tag_method};"
+                f" according to explicit field:{new_explicit_method}"
+            )
+        return new_explicit_method
 
     @property
     def is_hs(self) -> bool:
         """Is this node an onion service?"""
-        return self._config.hs
+        new_explicit_method = self._config.hs
+        # TODO: stop paying attention to the legacy method
+        legacy_tag_method = self.tag.startswith("h")
+        if legacy_tag_method != new_explicit_method:
+            raise ChutneyError(
+                f"{self.nick}: is_hs according to tag:{legacy_tag_method};"
+                f" according to explicit field:{new_explicit_method}"
+            )
+        return new_explicit_method
 
     @property
     def hs_hostname(self) -> Option[str]:
