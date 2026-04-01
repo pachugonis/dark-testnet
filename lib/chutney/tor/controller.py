@@ -381,14 +381,8 @@ class LocalNodeController(NodeController):
 
         self.most_recent_oniondesc_status = status
 
+    @override
     def getLastOnionServiceDescStatus(self) -> DirInfoStatus:
-        """Return the last onion descriptor message fetched by
-        updateLastOnionServiceDescStatus as a 3-tuple of percentage
-        complete, the hidden service version, and message.
-
-        The return status depends on the last time updateLastStatus()
-        was called; that function must be called before this one.
-        """
         rv = self.most_recent_oniondesc_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
@@ -442,17 +436,6 @@ class LocalNodeController(NodeController):
     def updateLastStatus(self) -> None:
         self._update_last_onion_service_desc_status()
         self._update_last_bootstrap_status()
-
-    @override
-    def isBootstrapped(self) -> bool:
-        status = self.getLastBootstrapStatus()
-        if status.percent_or_code != DirInfoStatusCode.SUCCESS:
-            return False
-        if self._node.is_hs:
-            status = self.getLastOnionServiceDescStatus()
-            if status.percent_or_code != DirInfoStatusCode.ONIONDESC_PUBLISHED:
-                return False
-        return True
 
     def getNodeCacheDirInfoPaths(self) -> dict[DirFormat, Path]:
         """Return a dict with the expected paths to this node's consensus files.
