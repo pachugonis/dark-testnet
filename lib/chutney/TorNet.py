@@ -2154,7 +2154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     Raises an exception derived from `ChutneyError` on failure.
     """
     level = logging.DEBUG if envvars.DEBUG.get() else logging.INFO
-    logging.basicConfig(level=level)
+    logging.basicConfig(level=level, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
 
     args = _parse_args(argv)
     network = _network_from_args(args)
