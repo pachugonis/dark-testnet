@@ -158,7 +158,7 @@ class TestSuite(object):
         self.successes += 1
 
     def failure(self, name: str) -> None:
-        logger.info("Failure for %s" % name)
+        logger.warning("Failure for %s" % name)
         self.tests[name].set_result("failure")
         self.not_done -= 1
         self.failures += 1
