@@ -50,6 +50,7 @@ import time
 import tomli_w
 import json
 
+import chutney.chutney_logging as chutney_logging
 import chutney.network_tests.verify
 
 from chutney.node_builder import NodeBuilder
@@ -2153,8 +2154,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     Raises an exception derived from `ChutneyError` on failure.
     """
-    level = logging.DEBUG if envvars.DEBUG.get() else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s')
+    chutney_logging.logging_basic_config()
 
     args = _parse_args(argv)
     network = _network_from_args(args)
