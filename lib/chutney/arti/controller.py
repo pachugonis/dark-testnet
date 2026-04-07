@@ -317,6 +317,9 @@ class LocalArtiNodeController(NodeController):
                     # Table hasn't been created yet
                     logging.debug("Looks like no such table Microdescs yet")
                     return DirInfoStatusCode.MISSING_FILE
+                if str(oe).startswith("unable to open database file"):
+                    logging.debug("Database file doesn't exist yet")
+                    return DirInfoStatusCode.MISSING_FILE
                 raise
             for row in res:
                 for line in row[0].splitlines():
