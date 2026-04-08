@@ -178,11 +178,13 @@ class LocalArtiNodeController(NodeController):
     ) -> None:
         logfname = self._debug_log_path()
         if not logfname.exists():
-            self._most_recent_bootstrap_status = DirInfoStatus(
-                percent_or_code=DirInfoStatusCode.MISSING_FILE,
-                keyword="no_logfile",
-                message="There is no logfile yet.",
+            status = DirInfoStatus(
+                percent_or_code=DirInfoStatusCode.NO_RECORDS,
+                keyword="no_message",
+                message="No bootstrap messages yet.",
             )
+            self._most_recent_bootstrap_status = status
+            self._most_recent_oniondesc_status = status
             return
         status = DirInfoStatus(
             percent_or_code=DirInfoStatusCode.NO_RECORDS,

@@ -153,13 +153,13 @@ class TestSuite(object):
     def success(self, name: str) -> None:
         logger.info("Success for %s" % name)
         self.tests[name].set_result("success")
-        logger.debug("Succeeded %s" % name)
         self.not_done -= 1
         self.successes += 1
 
-    def failure(self, name: str) -> None:
-        logger.info("Failure for %s" % name)
+    def failure(self, name: str, reason: str) -> None:
+        logger.warning(f"Failure for {name}: {reason}")
         self.tests[name].set_result("failure")
+        self.note(name, f"failure: {reason}")
         self.not_done -= 1
         self.failures += 1
 
@@ -167,8 +167,7 @@ class TestSuite(object):
         """Declare that a test won't complete, if it hasn't already"""
         if self.tests[name].done():
             return
-        self.failure(name)
-        self.note(name, note)
+        self.failure(name, note)
 
     def failure_count(self) -> int:
         return self.failures
@@ -448,22 +447,17 @@ class EchoClient(object):
             if not data:
                 # We would have already stopped reading earlier if we'd gotten
                 # all the data we expected.
-                self.enote("Unexpected EOF")
-                self.tt.failure(self.testname_check)
+                self.tt.failure(self.testname_check, "Unexpected EOF")
                 return
             self.data_checker.consume(data)
             self.enote(
                 f"consumed some. remaining:{self.data_checker.bytes_remaining()}"
             )
             if self.data_checker.succeeded:
-                self.enote("successful verification")
-                logger.debug("successful verification")
                 self.tt.success(self.testname_check)
                 return
             elif self.data_checker.failed:
-                logger.debug("receive comparison failed")
-                self.enote("receive comparison failed")
-                self.tt.failure(self.testname_check)
+                self.tt.failure(self.testname_check, "receive comparison failed")
                 return
 
     async def _write_outgoing(self) -> None:
@@ -578,9 +572,9 @@ class TrafficTester(object):
         """Declare that a single test has passed."""
         self.tests.success(name)
 
-    def failure(self, name: str) -> None:
+    def failure(self, name: str, reason: str) -> None:
         """Declare that a single test has failed."""
-        self.tests.failure(name)
+        self.tests.failure(name, reason)
 
     def wont_complete(self, name: str, note: str) -> None:
         """Declare that a test won't complete, if it hasn't already"""
