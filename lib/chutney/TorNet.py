@@ -877,6 +877,9 @@ class NetworkConfig(ToCustomJsonable, FromDecodedJson):
     # generating family keys.
     tor_bin: str
 
+    # Authorities' preferred voting interval.
+    v3_auth_voting_interval: float = 20.0
+
     @staticmethod
     def register_argparser(parser: argparse.ArgumentParser) -> None:
         # We already register TorBin.config_envvar() globally
@@ -899,8 +902,6 @@ class NetworkConfig(ToCustomJsonable, FromDecodedJson):
 
 class Network(ToCustomJsonable, FromDecodedJson):
     """A network of Tor nodes, plus functions to manipulate them"""
-
-    V3_AUTH_VOTING_INTERVAL: float = 20.0
 
     def __init__(self, config: Optional[NetworkConfig] = None) -> None:
         self._config = config or NetworkConfig.from_envargs()
@@ -940,6 +941,10 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.extorport_base: int = 9500
         self.ptport_base: int = 9900
         self.dnsport_base: int = 10000
+
+    @property
+    def v3_auth_voting_interval(self) -> float:
+        return self._config.v3_auth_voting_interval
 
     @property
     def dir(self) -> Path:
@@ -1462,9 +1467,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
             print()
         return all_bootstrapped
 
-    CHECK_NETWORK_STATUS_DELAY = 1.0
-    PRINT_NETWORK_STATUS_DELAY = V3_AUTH_VOTING_INTERVAL / 2.0
-
     # There are 7 v3 directory document types, but some networks only use 6,
     # because they don't have a bridge authority
     DOC_TYPE_DISPLAY_LIMIT_BRIDGEAUTH = 7
@@ -1489,10 +1491,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
         Raises `TimeoutException` on timeout.
         """
+        CHECK_NETWORK_STATUS_DELAY: Final = 1.0
+        PRINT_NETWORK_STATUS_DELAY: Final = self.v3_auth_voting_interval / 2.0
+
         print("Waiting for nodes to bootstrap...\n")
         start = time.time()
         limit = start + limit_secs
-        next_print_status = start + Network.PRINT_NETWORK_STATUS_DELAY
+        next_print_status = start + PRINT_NETWORK_STATUS_DELAY
 
         nodes = [n for n in self._nodes if n._config.launch_phase <= launch_phase]
         while True:
@@ -1512,7 +1517,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             elapsed = now - start
             print_status = now >= next_print_status
             if print_status:
-                next_print_status = now + Network.PRINT_NETWORK_STATUS_DELAY
+                next_print_status = now + PRINT_NETWORK_STATUS_DELAY
             all_bootstrapped = self._all_bootstrapped(
                 nodes,
                 most_recent_desc_status,
@@ -1573,7 +1578,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             if now >= limit:
                 break
 
-            time.sleep(Network.CHECK_NETWORK_STATUS_DELAY)
+            time.sleep(CHECK_NETWORK_STATUS_DELAY)
 
         self._all_bootstrapped(
             nodes,
