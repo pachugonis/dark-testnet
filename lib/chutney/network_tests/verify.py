@@ -90,7 +90,7 @@ def run_test(
 
     config = config or VerifyConfig.from_envargs()
     # Try to verify twice each consensus, but don't verify too fast
-    V3_AUTH_VOTING_INTERVAL = network.v3_auth_voting_interval
+    V3_AUTH_VOTING_INTERVAL = network.v3_auth_voting_interval_seconds
     VERIFY_ATTEMPT_INTERVAL = V3_AUTH_VOTING_INTERVAL / 2.0 - 1.0
     TIMEOUT_INTERVAL = max(VERIFY_ATTEMPT_INTERVAL - 1.0, 5.0)
 

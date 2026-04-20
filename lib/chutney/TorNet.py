@@ -878,7 +878,7 @@ class NetworkConfig(ToCustomJsonable, FromDecodedJson):
     tor_bin: str
 
     # Authorities' preferred voting interval.
-    v3_auth_voting_interval: float = 20.0
+    v3_auth_voting_interval_seconds: float = 20.0
 
     @staticmethod
     def register_argparser(parser: argparse.ArgumentParser) -> None:
@@ -943,8 +943,8 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.dnsport_base: int = 10000
 
     @property
-    def v3_auth_voting_interval(self) -> float:
-        return self._config.v3_auth_voting_interval
+    def v3_auth_voting_interval_seconds(self) -> float:
+        return self._config.v3_auth_voting_interval_seconds
 
     @property
     def dir(self) -> Path:
@@ -1492,7 +1492,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         Raises `TimeoutException` on timeout.
         """
         CHECK_NETWORK_STATUS_DELAY: Final = 1.0
-        PRINT_NETWORK_STATUS_DELAY: Final = self.v3_auth_voting_interval / 2.0
+        PRINT_NETWORK_STATUS_DELAY: Final = self.v3_auth_voting_interval_seconds / 2.0
 
         print("Waiting for nodes to bootstrap...\n")
         start = time.time()

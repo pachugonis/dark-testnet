@@ -118,10 +118,10 @@ class LocalNodeController(NodeController):
             # but it's a bit imprecise (see
             # `_update_last_onion_service_desc_status` and #33609), so we keep
             # this for now.
-            return self._network.v3_auth_voting_interval + 10
+            return self._network.v3_auth_voting_interval_seconds + 10
         elif self.isLegacyTorVersion():
             # Let everything propagate for another consensus period before verifying.
-            return self._network.v3_auth_voting_interval
+            return self._network.v3_auth_voting_interval_seconds
         else:
             return 0
 
