@@ -878,16 +878,31 @@ class NetworkConfig(ToCustomJsonable, FromDecodedJson):
     tor_bin: str
 
     # Authorities' preferred voting interval.
-    v3_auth_voting_interval_seconds: float = 20.0
+    V3_AUTH_VOTING_INTERVAL_SECONDS_ENV: ClassVar[envvars.EnvVarInt] = (
+        envvars.EnvVarInt(
+            "CHUTNEY_V3_AUTH_VOTING_INTERVAL_SECONDS",
+            20,
+            "Configures Authorities' preferred voting interval."
+            " See tor's V3_AUTH_VOTING_INTERVAL.",
+        )
+    )
+    v3_auth_voting_interval_seconds: int = dataclasses.field(
+        default_factory=lambda: NetworkConfig.V3_AUTH_VOTING_INTERVAL_SECONDS_ENV.get()
+    )
 
     @staticmethod
     def register_argparser(parser: argparse.ArgumentParser) -> None:
+        NetworkConfig.V3_AUTH_VOTING_INTERVAL_SECONDS_ENV.register_argparser(parser)
         # We already register TorBin.config_envvar() globally
-        pass
 
     @staticmethod
     def from_envargs(ns: Optional[argparse.Namespace] = None) -> NetworkConfig:
-        return NetworkConfig(tor_bin=TorBin().config_envvar().get(ns=ns))
+        return NetworkConfig(
+            tor_bin=TorBin().config_envvar().get(ns=ns),
+            v3_auth_voting_interval_seconds=NetworkConfig.V3_AUTH_VOTING_INTERVAL_SECONDS_ENV.get(
+                ns=ns
+            ),
+        )
 
     @override
     def to_custom_jsonable(self) -> CustomJsonable:
@@ -943,7 +958,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
         self.dnsport_base: int = 10000
 
     @property
-    def v3_auth_voting_interval_seconds(self) -> float:
+    def v3_auth_voting_interval_seconds(self) -> int:
         return self._config.v3_auth_voting_interval_seconds
 
     @property
