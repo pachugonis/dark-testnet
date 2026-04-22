@@ -170,25 +170,22 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         res += f" {addr_and_port_str(auth.ipv4, auth.dirport)} {auth.fingerprint}\n"
     if n._config.relay:
         res += textwrap.dedent(f"""
-            ExitRelay {int(n._config.exit)}
-
-            # These options are set here so they apply to IPv4 and IPv6 Exits
-            #
-            # Tell Exits to avoid using DNS: otherwise, chutney will fail if DNS fails
-            # (Chutney only accesses 127.0.0.1 and ::1, so it doesn't need DNS)
-            ServerDNSDetectHijacking 0
-            ServerDNSTestAddresses
-
             DirPort {n.dirport.unwrap_or(0)}
+            ExitRelay {int(n._config.exit)}
             """)
-
-        if resolv_conf_path := n._config.server_dns_resolv_conf_path:
-            # If this option is /dev/null, or any other empty or unreadable file, tor exits
-            # will not use DNS. Otherwise, DNS is enabled with this config.
-            res += f"ServerDNSResolvConfFile {resolv_conf_path}\n"
-        else:
-            # Use default (/etc/resolv.conf)
-            pass
+        if n._config.exit:
+            res += textwrap.dedent("""
+                # These options are set here so they apply to IPv4 and IPv6 Exits
+                #
+                # Tell Exits to avoid using DNS: otherwise, chutney will fail if DNS fails
+                # (Chutney only accesses 127.0.0.1 and ::1, so it doesn't need DNS)
+                ServerDNSDetectHijacking 0
+                ServerDNSTestAddresses
+                """)
+            if resolv_conf_path := n._config.server_dns_resolv_conf_path:
+                # If this option is /dev/null, or any other empty or unreadable file, tor exits
+                # will not use DNS. Otherwise, DNS is enabled with this config.
+                res += f"ServerDNSResolvConfFile {resolv_conf_path}\n"
 
     family_member_fps = _family_member_fps(n)
     if family_member_fps:
