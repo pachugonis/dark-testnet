@@ -761,9 +761,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         else:
             return ocp_line
 
-    # if we can't find the specified file, use this one as a substitute
-    OFFLINE_DNS_RESOLV_CONF = Path("/dev/null")
-
     @property
     def server_dns_resolv_conf_path(self) -> Optional[Path]:
         """DNS resolver config that exits should use.
@@ -773,17 +770,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         if self.dns_conf == "":
             return None
         dns_conf = Path(self.dns_conf).resolve()
-        # work around Tor bug #21900, where exits fail when the DNS conf
-        # file does not exist, or is a broken symlink
-        # (Path.exists returns False for broken symbolic links)
-        if not dns_conf.exists():
-            # Issue a warning so the user notices
-            logger.warning(
-                "CHUTNEY_DNS_CONF '{}' does not exist, using '{}'.".format(
-                    dns_conf, NodeConfig.OFFLINE_DNS_RESOLV_CONF
-                )
-            )
-            return NodeConfig.OFFLINE_DNS_RESOLV_CONF
         return dns_conf
 
     @property
