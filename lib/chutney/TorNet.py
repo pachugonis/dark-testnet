@@ -764,16 +764,14 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # if we can't find the specified file, use this one as a substitute
     OFFLINE_DNS_RESOLV_CONF = Path("/dev/null")
 
-    # XXX Move template logic into template
     @property
-    def server_dns_resolv_conf(self) -> str:
-        """the ServerDNSResolvConfFile torrc line,
-        disabled if tor should use the default DNS conf.
-        If the dns_conf file is missing, this option is also disabled:
-        otherwise, exits would not work due to tor bug #21900."""
+    def server_dns_resolv_conf_path(self) -> Optional[Path]:
+        """DNS resolver config that exits should use.
+
+        `None` indicates not to specify, allowing default to be used.
+        """
         if self.dns_conf == "":
-            # if the user asked for tor's default
-            return "#ServerDNSResolvConfFile using tor's compile-time default"
+            return None
         dns_conf = Path(self.dns_conf).resolve()
         # work around Tor bug #21900, where exits fail when the DNS conf
         # file does not exist, or is a broken symlink
@@ -785,8 +783,8 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
                     dns_conf, NodeConfig.OFFLINE_DNS_RESOLV_CONF
                 )
             )
-            dns_conf = NodeConfig.OFFLINE_DNS_RESOLV_CONF
-        return "ServerDNSResolvConfFile %s" % (dns_conf)
+            return NodeConfig.OFFLINE_DNS_RESOLV_CONF
+        return dns_conf
 
     @property
     def consensus_authority(self) -> bool:

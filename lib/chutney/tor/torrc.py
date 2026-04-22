@@ -178,13 +178,18 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             # (Chutney only accesses 127.0.0.1 and ::1, so it doesn't need DNS)
             ServerDNSDetectHijacking 0
             ServerDNSTestAddresses
-            # If this option is /dev/null, or any other empty or unreadable file, tor exits
-            # will not use DNS. Otherwise, DNS is enabled with this config.
-            # (If the following line is commented out, tor uses /etc/resolv.conf.)
-            {n._config.server_dns_resolv_conf}
 
             DirPort {n.dirport.unwrap_or(0)}
             """)
+
+        if resolv_conf_path := n._config.server_dns_resolv_conf_path:
+            # If this option is /dev/null, or any other empty or unreadable file, tor exits
+            # will not use DNS. Otherwise, DNS is enabled with this config.
+            res += f"ServerDNSResolvConfFile {resolv_conf_path}\n"
+        else:
+            # Use default (/etc/resolv.conf)
+            pass
+
     family_member_fps = _family_member_fps(n)
     if family_member_fps:
         res += "MyFamily {}\n".format(", ".join(family_member_fps))
