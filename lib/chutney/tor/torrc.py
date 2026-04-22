@@ -71,13 +71,13 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         # your glibc.
         Sandbox {int(n._config.sandbox)}
 
+        UseMicrodescriptors {int(n._config.use_microdescriptors)}
+        """)
+    if pid := n._config.owning_controller_process:
         # Ask all child tor processes to exit when chutney's test-network.sh exits
         # (if the CHUTNEY_*_TIME options leave the network running, this option is
         # disabled)
-        {n._config.owning_controller_process}
-
-        UseMicrodescriptors {int(n._config.use_microdescriptors)}
-        """)
+        res += f"__OwningControllerProcess {pid}\n"
     res += _directive_for_endpoints("SocksPort", n.socksport_endpoints())
     res += _directive_for_endpoints("DnsPort", n.dnsport_endpoints())
     res += _directive_for_endpoints("ControlPort", n.controlport_endpoints())

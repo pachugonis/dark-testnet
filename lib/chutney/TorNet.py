@@ -747,19 +747,16 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # configuration options.
     extra_raw_torrc: str = ""
 
-    # XXX Move template logic into template
     @property
-    def owning_controller_process(self) -> str:
-        """The __OwningControllerProcess torrc line,
-        disabled if tor should continue after the script exits"""
-        cpid = self.controlling_pid
-        ocp_line = "__OwningControllerProcess %d" % (cpid)
-        # if we want to leave the network running, or controlling_pid is 1
-        # (or invalid)
-        if cpid <= 1:
-            return "#" + ocp_line
+    def owning_controller_process(self) -> Optional[int]:
+        """Owning controller process pid. Exit when this process dies.
+
+        For __OwningControllerProcess directing in `tor`; not supported in arti.
+        """
+        if self.controlling_pid <= 1:
+            return None
         else:
-            return ocp_line
+            return self.controlling_pid
 
     @property
     def server_dns_resolv_conf_path(self) -> Optional[Path]:
