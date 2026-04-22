@@ -771,16 +771,10 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         disabled if tor should use the default DNS conf.
         If the dns_conf file is missing, this option is also disabled:
         otherwise, exits would not work due to tor bug #21900."""
-        my_dns_conf = self.dns_conf
-        # To be set below
-        dns_conf: Path
-
-        if my_dns_conf == "":
+        if self.dns_conf == "":
             # if the user asked for tor's default
             return "#ServerDNSResolvConfFile using tor's compile-time default"
-        else:
-            dns_conf = Path(my_dns_conf)
-        dns_conf = dns_conf.resolve()
+        dns_conf = Path(self.dns_conf).resolve()
         # work around Tor bug #21900, where exits fail when the DNS conf
         # file does not exist, or is a broken symlink
         # (Path.exists returns False for broken symbolic links)
