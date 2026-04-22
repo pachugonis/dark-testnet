@@ -42,11 +42,6 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     res = textwrap.dedent(f"""
         TestingTorNetwork 1
 
-        # We need at least 3 descriptors to build circuits.
-        # In a 3 relay network, 0.67 > 2/3, so we try hard to get 3 descriptors.
-        # In larger networks, 0.67 > 2/N, so we try hard to get >=3 descriptors.
-        PathsNeededToBuildCircuits 0.67
-
         ## Options that we always want to test ##
         DataDirectory {n.dir}
         ConnLimit {n._config.connlimit}
