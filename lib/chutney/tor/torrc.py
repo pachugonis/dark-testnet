@@ -42,27 +42,10 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     res = textwrap.dedent(f"""
         TestingTorNetwork 1
 
-        ## Rapid Bootstrap Testing Options ##
-        # These typically launch a working minimal Tor network in ~20s
-        # These parameters make tor networks bootstrap fast,
-        # but can cause consensus instability and network unreliability
-        # (Some are also bad for security.)
-        #
         # We need at least 3 descriptors to build circuits.
         # In a 3 relay network, 0.67 > 2/3, so we try hard to get 3 descriptors.
         # In larger networks, 0.67 > 2/N, so we try hard to get >=3 descriptors.
         PathsNeededToBuildCircuits 0.67
-        TestingDirAuthVoteExit *
-        TestingDirAuthVoteHSDir *
-        V3AuthNIntervalsValid 2
-
-        ## Always On Testing Options ##
-        # We enable TestingDirAuthVoteGuard to avoid Guard stability requirements
-        TestingDirAuthVoteGuard *
-        # We set TestingMinExitFlagThreshold to 0 to avoid Exit bandwidth requirements
-        TestingMinExitFlagThreshold 0
-        # VoteOnHidServDirectoriesV2 needs to be set for HSDirs to get the HSDir flag
-        #Default VoteOnHidServDirectoriesV2 1
 
         ## Options that we always want to test ##
         DataDirectory {n.dir}
@@ -287,6 +270,12 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         res += textwrap.dedent(f"""
             V3AuthoritativeDirectory 1
 
+            ## Rapid Bootstrap Testing Options ##
+            # These typically launch a working minimal Tor network in ~20s
+            # These parameters make tor networks bootstrap fast,
+            # but can cause consensus instability and network unreliability
+            # (Some are also bad for security.)
+
             # Disable authority to relay/bridge reachability checks
             # These checks happen every half hour, even in testing networks
             # As of tor 0.4.3, there is no way to speed up these checks
@@ -315,6 +304,15 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             V3AuthVotingInterval {n._network.V3_AUTH_VOTING_INTERVAL}
             V3AuthVoteDelay 4
             V3AuthDistDelay 4
+
+            # We enable TestingDirAuthVoteGuard to avoid Guard stability requirements
+            TestingDirAuthVoteGuard *
+            TestingDirAuthVoteExit *
+            TestingDirAuthVoteHSDir *
+
+            # We set TestingMinExitFlagThreshold to 0 to avoid Exit bandwidth requirements
+            TestingMinExitFlagThreshold 0
+            V3AuthNIntervalsValid 2
 
             ConsensusParams cc_alg=2
             """)
