@@ -298,7 +298,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             # Vote + Dist must be less than Interval/2, because when there's no consensus,
             # tor uses Interval/2 as the voting interval
             #
-            V3AuthVotingInterval {n._network.V3_AUTH_VOTING_INTERVAL}
+            V3AuthVotingInterval {n._network.v3_auth_voting_interval_seconds} seconds
             V3AuthVoteDelay 4
             V3AuthDistDelay 4
 
