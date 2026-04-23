@@ -42,28 +42,6 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     res = textwrap.dedent(f"""
         TestingTorNetwork 1
 
-        ## Rapid Bootstrap Testing Options ##
-        # These typically launch a working minimal Tor network in ~20s
-        # These parameters make tor networks bootstrap fast,
-        # but can cause consensus instability and network unreliability
-        # (Some are also bad for security.)
-        #
-        # We need at least 3 descriptors to build circuits.
-        # In a 3 relay network, 0.67 > 2/3, so we try hard to get 3 descriptors.
-        # In larger networks, 0.67 > 2/N, so we try hard to get >=3 descriptors.
-        PathsNeededToBuildCircuits 0.67
-        TestingDirAuthVoteExit *
-        TestingDirAuthVoteHSDir *
-        V3AuthNIntervalsValid 2
-
-        ## Always On Testing Options ##
-        # We enable TestingDirAuthVoteGuard to avoid Guard stability requirements
-        TestingDirAuthVoteGuard *
-        # We set TestingMinExitFlagThreshold to 0 to avoid Exit bandwidth requirements
-        TestingMinExitFlagThreshold 0
-        # VoteOnHidServDirectoriesV2 needs to be set for HSDirs to get the HSDir flag
-        #Default VoteOnHidServDirectoriesV2 1
-
         ## Options that we always want to test ##
         DataDirectory {n.dir}
         ConnLimit {n._config.connlimit}
@@ -93,13 +71,13 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         # your glibc.
         Sandbox {int(n._config.sandbox)}
 
+        UseMicrodescriptors {int(n._config.use_microdescriptors)}
+        """)
+    if pid := n._config.owning_controller_process:
         # Ask all child tor processes to exit when chutney's test-network.sh exits
         # (if the CHUTNEY_*_TIME options leave the network running, this option is
         # disabled)
-        {n._config.owning_controller_process}
-
-        UseMicrodescriptors {int(n._config.use_microdescriptors)}
-        """)
+        res += f"__OwningControllerProcess {pid}\n"
     res += _directive_for_endpoints("SocksPort", n.socksport_endpoints())
     res += _directive_for_endpoints("DnsPort", n.dnsport_endpoints())
     res += _directive_for_endpoints("ControlPort", n.controlport_endpoints())
@@ -192,21 +170,23 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         res += f" {addr_and_port_str(auth.ipv4, auth.dirport)} {auth.fingerprint}\n"
     if n._config.relay:
         res += textwrap.dedent(f"""
-            ExitRelay {int(n._config.exit)}
-
-            # These options are set here so they apply to IPv4 and IPv6 Exits
-            #
-            # Tell Exits to avoid using DNS: otherwise, chutney will fail if DNS fails
-            # (Chutney only accesses 127.0.0.1 and ::1, so it doesn't need DNS)
-            ServerDNSDetectHijacking 0
-            ServerDNSTestAddresses
-            # If this option is /dev/null, or any other empty or unreadable file, tor exits
-            # will not use DNS. Otherwise, DNS is enabled with this config.
-            # (If the following line is commented out, tor uses /etc/resolv.conf.)
-            {n._config.server_dns_resolv_conf}
-
             DirPort {n.dirport.unwrap_or(0)}
+            ExitRelay {int(n._config.exit)}
             """)
+        if n._config.exit:
+            res += textwrap.dedent("""
+                # These options are set here so they apply to IPv4 and IPv6 Exits
+                #
+                # Tell Exits to avoid using DNS: otherwise, chutney will fail if DNS fails
+                # (Chutney only accesses 127.0.0.1 and ::1, so it doesn't need DNS)
+                ServerDNSDetectHijacking 0
+                ServerDNSTestAddresses
+                """)
+            if resolv_conf_path := n._config.server_dns_resolv_conf_path:
+                # If this option is /dev/null, or any other empty or unreadable file, tor exits
+                # will not use DNS. Otherwise, DNS is enabled with this config.
+                res += f"ServerDNSResolvConfFile {resolv_conf_path}\n"
+
     family_member_fps = _family_member_fps(n)
     if family_member_fps:
         res += "MyFamily {}\n".format(", ".join(family_member_fps))
@@ -287,6 +267,12 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         res += textwrap.dedent(f"""
             V3AuthoritativeDirectory 1
 
+            ## Rapid Bootstrap Testing Options ##
+            # These typically launch a working minimal Tor network in ~20s
+            # These parameters make tor networks bootstrap fast,
+            # but can cause consensus instability and network unreliability
+            # (Some are also bad for security.)
+
             # Disable authority to relay/bridge reachability checks
             # These checks happen every half hour, even in testing networks
             # As of tor 0.4.3, there is no way to speed up these checks
@@ -315,6 +301,15 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             V3AuthVotingInterval {n._network.V3_AUTH_VOTING_INTERVAL}
             V3AuthVoteDelay 4
             V3AuthDistDelay 4
+
+            # We enable TestingDirAuthVoteGuard to avoid Guard stability requirements
+            TestingDirAuthVoteGuard *
+            TestingDirAuthVoteExit *
+            TestingDirAuthVoteHSDir *
+
+            # We set TestingMinExitFlagThreshold to 0 to avoid Exit bandwidth requirements
+            TestingMinExitFlagThreshold 0
+            V3AuthNIntervalsValid 2
 
             ConsensusParams cc_alg=2
             """)

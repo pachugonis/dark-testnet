@@ -747,52 +747,27 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # configuration options.
     extra_raw_torrc: str = ""
 
-    # XXX Move template logic into template
     @property
-    def owning_controller_process(self) -> str:
-        """The __OwningControllerProcess torrc line,
-        disabled if tor should continue after the script exits"""
-        cpid = self.controlling_pid
-        ocp_line = "__OwningControllerProcess %d" % (cpid)
-        # if we want to leave the network running, or controlling_pid is 1
-        # (or invalid)
-        if cpid <= 1:
-            return "#" + ocp_line
+    def owning_controller_process(self) -> Optional[int]:
+        """Owning controller process pid. Exit when this process dies.
+
+        For __OwningControllerProcess directing in `tor`; not supported in arti.
+        """
+        if self.controlling_pid <= 1:
+            return None
         else:
-            return ocp_line
+            return self.controlling_pid
 
-    # if we can't find the specified file, use this one as a substitute
-    OFFLINE_DNS_RESOLV_CONF = Path("/dev/null")
-
-    # XXX Move template logic into template
     @property
-    def server_dns_resolv_conf(self) -> str:
-        """the ServerDNSResolvConfFile torrc line,
-        disabled if tor should use the default DNS conf.
-        If the dns_conf file is missing, this option is also disabled:
-        otherwise, exits would not work due to tor bug #21900."""
-        my_dns_conf = self.dns_conf
-        # To be set below
-        dns_conf: Path
+    def server_dns_resolv_conf_path(self) -> Optional[Path]:
+        """DNS resolver config that exits should use.
 
-        if my_dns_conf == "":
-            # if the user asked for tor's default
-            return "#ServerDNSResolvConfFile using tor's compile-time default"
-        else:
-            dns_conf = Path(my_dns_conf)
-        dns_conf = dns_conf.resolve()
-        # work around Tor bug #21900, where exits fail when the DNS conf
-        # file does not exist, or is a broken symlink
-        # (Path.exists returns False for broken symbolic links)
-        if not dns_conf.exists():
-            # Issue a warning so the user notices
-            logger.warning(
-                "CHUTNEY_DNS_CONF '{}' does not exist, using '{}'.".format(
-                    dns_conf, NodeConfig.OFFLINE_DNS_RESOLV_CONF
-                )
-            )
-            dns_conf = NodeConfig.OFFLINE_DNS_RESOLV_CONF
-        return "ServerDNSResolvConfFile %s" % (dns_conf)
+        `None` indicates not to specify, allowing default to be used.
+        """
+        if self.dns_conf == "":
+            return None
+        dns_conf = Path(self.dns_conf).resolve()
+        return dns_conf
 
     @property
     def consensus_authority(self) -> bool:
