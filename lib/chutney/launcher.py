@@ -15,8 +15,10 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import IO, Union, Optional, Literal
+from typing import IO, Union, Optional, Literal, Callable
 from typing_extensions import TypeAlias, override
+
+import rpyc  # type: ignore
 
 import chutney.errors
 from chutney.known_bins import KnownBin
@@ -889,3 +891,132 @@ class SshLauncher(Launcher):
             window_size=window_size,
             capture_strategy=capture_strategy,
         )
+
+
+class RpycPopen(Popen):
+    """Specialization of Popen returnced by `LocalLauncher`"""
+
+    def __init__(
+        self, launcher: RpycLauncher, inner: rpyc.core.netref.subprocess.Popen[str]
+    ) -> None:
+        self._launcher = launcher
+        # We coerce the type to "plain" subprocess.Popen so that mypy can understand it.
+        self._inner: subprocess.Popen[str] = inner
+
+    @override
+    def launcher(self) -> Launcher:
+        """Launcher used  to launch this process"""
+        return self._launcher
+
+    @override
+    def communicate(
+        self, input: Optional[str] = None, timeout: Optional[float] = None
+    ) -> CompletedProcess[str]:
+        try:
+            stdout, stderr = self._inner.communicate(input=input, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise chutney.errors.ChutneyTimeoutError
+        return CompletedProcess(
+            args=self._inner.args,
+            returncode=self._inner.returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    @override
+    def pid(self) -> int:
+        return self._inner.pid
+
+    @override
+    def running(self) -> bool:
+        return self._inner.poll() is None
+
+    @override
+    def send_signal(self, sig: int) -> None:
+        self._inner.send_signal(sig)
+
+
+class RpycLauncher(Launcher):
+    """
+    Connect to the (potentially remote) node via an rpyc "classic" service.
+
+    WARNING: this assumes full trust in *both* directions - we can execute
+    arbitrary code on the remote end, AND the remote end can execute remote
+    code locally.
+
+    The remote daemon can be started via the `rpyc_classic` bin, provided in the
+    "rpyc" python package.
+
+    See <https://rpyc.readthedocs.io/en/latest/tutorial/tut1.html>
+    """
+
+    def __init__(
+        self, conn_factory: Callable[[], rpyc.core.protocol.Connection]
+    ) -> None:
+        """Create an instance.
+
+        We take a factory instead of the connection itself to allow creating the
+        connection lazily the first time we actually need it.
+
+        In the simplest (and least secure) setup, the connection can be created
+        with `rpyc.classic.connect(host=str(host))`, which uses an unencrypted,
+        unauthenticated, TCP connection.
+
+        rpyc also supports creating connections that use SSL-based encryption
+        and authentication, which we should do if we want to support usage
+        outside of a secured private network.
+        """
+        self._conn_factory = conn_factory
+        self._conn: Optional[rpyc.core.protocol.Connection] = None
+
+    def _get_conn(self) -> rpyc.core.protocol.Connection:
+        """Get the connection, creating it if needed"""
+        if self._conn is None:
+            self._conn = self._conn_factory()
+        return self._conn
+
+    @override
+    def popen(
+        self,
+        args: CMD,
+        *,
+        # bufsize: int = -1,
+        capture_strategy: Capture = Capture.SEPARATE,
+        text: Literal[True],
+        known_bin: Optional[KnownBin],
+        cwd: Optional[Path] = None,
+    ) -> Popen:
+        assert text is True
+
+        # handle to the *remote* subprocess module.
+        rsubprocess = self._get_conn().modules.subprocess
+
+        stdin = rsubprocess.PIPE
+        stdout = rsubprocess.PIPE
+        if capture_strategy is Capture.SEPARATE:
+            stderr = rsubprocess.PIPE
+        elif capture_strategy is Capture.MERGED:
+            stderr = rsubprocess.STDOUT
+        else:
+            raise chutney.errors.ChutneyInternalError(
+                "Unhandled capture strategy " + capture_strategy
+            )
+        if cwd is not None:
+            cwd_str = str(cwd)
+        else:
+            # Default to our local working directory. We may need to rethink
+            # this to support "real" distributed chutney where nodes aren't
+            # sharing the same file system.
+            cwd_str = os.getcwd()
+        try:
+            inner = rsubprocess.Popen(
+                args,
+                stdin=stdin,
+                stdout=stdout,
+                stderr=stderr,
+                text=text,
+                cwd=cwd_str,
+            )
+        except FileNotFoundError as e:
+            raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
+        return RpycPopen(self, inner)
