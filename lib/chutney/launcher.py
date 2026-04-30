@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import enum
 import errno
-
 import logging
 import paramiko
 import os
@@ -14,14 +13,12 @@ import shlex
 import subprocess
 import sys
 import time
-
-import chutney.errors
-
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Union, Optional, Literal
 from typing_extensions import TypeAlias, override
 
+import chutney.errors
 from chutney.known_bins import KnownBin
 
 # These are basically just "dumb structs". We can just reuse directly.
