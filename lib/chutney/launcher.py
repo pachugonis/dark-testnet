@@ -91,7 +91,6 @@ class Popen(ABC):
 class Launcher(ABC):
     """Launches and manages processes"""
 
-    @abstractmethod
     def launch_detached(
         self,
         cmd: Path,
@@ -131,7 +130,49 @@ class Launcher(ABC):
         signal it. That's not so bad, but there might be other surprising corner
         cases.
         """
-        ...
+        args = [str(cmd)] + args
+
+        # Since there's no easy way to validate that `exec`ing the target
+        # command succeeds, do our best to validate that it *will* succeed.
+        if (
+            self.run(
+                ["test", "-x", str(cmd), "-a", "-f", str(cmd)],
+                text=True,
+                cwd=cwd,
+                known_bin=None,
+            ).returncode
+            != 0
+        ):
+            raise chutney.errors.ChutneyMissingBinaryError(known_bin, args)
+
+        # shell script to execute the command while recording to the requested paths.
+        # Note the use of `exec` to ensure the command's pid is the same as the recorded pid.
+        inner_shell_script = (
+            f"echo $$ > {shlex.quote(str(pid_path))};"
+            f" exec {shlex.join(args)}"
+            " </dev/null"
+            f" >{shlex.quote(str(stdout_path))}"
+            f" 2>{shlex.quote(str(stderr_path))}"
+        )
+        self.run(
+            # Execute the above shell script using `setsid` to execute it in its
+            # own session, s.t. it can outlive the ssh connection. We
+            # also force it to fork to ensure that it's orphaned, which allows us
+            # to test whether it's still running using `kill -0`.
+            # (Conversely, if it weren't orphaned and weren't awaited it would
+            # become a zombie on completion, and `kill -0` can't distinguish
+            # between the zombie and running states)
+            ["setsid", "-f", "sh", "-c", inner_shell_script],
+            # We expect setsid to always succeed. It forks and exits
+            # immediately, unfortunately without validating that the child is
+            # even able to successfully exec, though in this case even that
+            # wouldn't help us validate that the target process is successfully
+            # exec'd, since the immediate child is a shell.
+            check=True,
+            text=True,
+            known_bin=None,
+            cwd=cwd,
+        )
 
     def run(
         self,
@@ -380,6 +421,12 @@ class LocalLauncher(Launcher):
         known_bin: KnownBin,
         cwd: Optional[Path] = None,
     ) -> None:
+        # Implementation that uses fork and exec directly.
+        #
+        # A bit more complex than the base-class implementation, but:
+        # * doesn't rely on external programs other than the one being launched.
+        # * detects if the exec fails
+
         # We use this to signal back if exec failed.
         # TODO: Consider communicating via the sd_notify(3) protocol instead (e.g.
         # ERRNO=x), particularly if and when arti itself supports it.
@@ -841,59 +888,4 @@ class SshLauncher(Launcher):
             buffered_stdout=addtl_stdout,
             window_size=window_size,
             capture_strategy=capture_strategy,
-        )
-
-    @override
-    def launch_detached(
-        self,
-        cmd: Path,
-        args: list[str],
-        stdout_path: Path,
-        stderr_path: Path,
-        pid_path: Path,
-        known_bin: KnownBin,
-        cwd: Optional[Path] = None,
-    ) -> None:
-        args = [str(cmd)] + args
-
-        # Since there's no easy way to validate that `exec`ing the target
-        # command succeeds, do our best to validate that it *will* succeed.
-        if (
-            self.run(
-                ["test", "-x", str(cmd), "-a", "-f", str(cmd)],
-                text=True,
-                cwd=cwd,
-                known_bin=None,
-            ).returncode
-            != 0
-        ):
-            raise chutney.errors.ChutneyMissingBinaryError(known_bin, args)
-
-        # shell script to execute the command while recording to the requested paths.
-        # Note the use of `exec` to ensure the command's pid is the same as the recorded pid.
-        inner_shell_script = (
-            f"echo $$ > {shlex.quote(str(pid_path))};"
-            f" exec {shlex.join(args)}"
-            " </dev/null"
-            f" >{shlex.quote(str(stdout_path))}"
-            f" 2>{shlex.quote(str(stderr_path))}"
-        )
-        self.run(
-            # Execute the above shell script using `setsid` to execute it in its
-            # own session, s.t. it can outlive the ssh connection. We
-            # also force it to fork to ensure that it's orphaned, which allows us
-            # to test whether it's still running using `kill -0`.
-            # (Conversely, if it weren't orphaned and weren't awaited it would
-            # become a zombie on completion, and `kill -0` can't distinguish
-            # between the zombie and running states)
-            ["setsid", "-f", "sh", "-c", inner_shell_script],
-            # We expect setsid to always succeed. It forks and exits
-            # immediately, unfortunately without validating that the child is
-            # even able to successfully exec, though in this case even that
-            # wouldn't help us validate that the target process is successfully
-            # exec'd, since the immediate child is a shell.
-            check=True,
-            text=True,
-            known_bin=None,
-            cwd=cwd,
         )
