@@ -232,6 +232,9 @@ class Node(ToCustomJsonable):
         elif config.launcher_backend == LauncherBackend.RPYC_INSECURE:
             host = self.ip.as_optional() or self.ipv6_addr.as_optional()
             assert host, f"No ip address for {self.nick}"
+            assert self._address_in_trusted_net(
+                host
+            ), "RPYC_INSECURE can only be used on a trusted network"
             self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
 
         else:
