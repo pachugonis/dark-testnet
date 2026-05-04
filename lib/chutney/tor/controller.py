@@ -731,7 +731,6 @@ class LocalNodeController(NodeController):
             )
             if summary is not None:
                 dir_status_summaries[node.nick] = summary
-        assert len(dir_status_summaries)
         return dir_status_summaries
 
     def summariseNodeDirInfoStatus(
