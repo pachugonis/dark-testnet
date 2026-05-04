@@ -297,7 +297,9 @@ class LocalArtiNodeController(NodeController):
             dir_pattern = dir_fmt.status_pattern(
                 other_node.nick, other_node.fingerprint_ed25519
             )
-            assert dir_pattern is not None
+            assert (
+                dir_pattern is not None
+            ), "status_pattern unexpected unimplemented for fingerprint_ed25519"
             with path.open(mode="r") as f:
                 for line in f:
                     if dir_pattern.search(line):

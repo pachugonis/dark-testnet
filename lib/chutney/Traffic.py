@@ -214,7 +214,9 @@ class Listener(object):
             # Try resolving it an ipv4 address by default.
             # TODO: Maybe don't support hostnames here, and push this
             # logic/decision up to caller.
-            assert isinstance(self._endpoint[0], str)
+            assert isinstance(
+                self._endpoint[0], str
+            ), f"addr_to_family should have succeeded for '{self._endpoint[0]}'"
             family = socket.AF_INET
 
         try:
@@ -609,7 +611,9 @@ class TrafficTester(object):
         await self.tests.wait_done()
         status_task.cancel()
 
-        assert self.tests.all_done()
+        assert (
+            self.tests.all_done()
+        ), "wait_done completed without marking all tests done"
         return self.tests.failure_count() == 0
 
     async def _run_with_timeout(self) -> bool:

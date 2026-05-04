@@ -186,7 +186,9 @@ class LocalNodeController(NodeController):
             # this requires that RunAsDaemon is set.
             res = p.communicate()
             logger.debug(res.stdout)
-            assert res.stderr is None
+            assert (
+                res.stderr is None
+            ), "Specified MERGED output but still got separate stderr"
             # We expect the parent process to have exited with code 0.
             if res.returncode != 0:
                 raise chutney.errors.ChutneyError(
@@ -206,7 +208,9 @@ class LocalNodeController(NodeController):
             # avoid writing a newline or space when polling
             # so output comes out neatly
             print(".", end="", flush=True)
-            assert self._node._config.poll_launch_time is not None
+            assert (
+                self._node._config.poll_launch_time is not None
+            ), "waitOnLaunch should have returned True"
             time.sleep(self._node._config.poll_launch_time)
             if not self.isRunning():
                 # Process unexpectedly exited
@@ -785,7 +789,9 @@ class LocalNodeController(NodeController):
 
             if comb_status is not None:
                 comb_code, comb_format_set = comb_status
-                assert comb_code == status_code
+                assert (
+                    comb_code == status_code
+                ), f"combineDirInfoStatuses returned {comb_code} instead of {status_code}"
 
                 node_status[status_code] = (
                     status_code,
@@ -842,10 +848,12 @@ class LocalNodeController(NodeController):
         # (or a bridge in a network with no bridge authority,
         # and no bridge clients, but chutney doesn't have networks like
         # that)
-        consensus_member = self._node._config.consensus_member
-        bridge_member = self._node._config.bridge
-        assert not consensus_member
-        assert not bridge_member
+        assert (
+            not self._node._config.consensus_member
+        ), f"Unexpected None dirinfo summary for consensus member {self._node.nick}"
+        assert (
+            not self._node._config.bridge
+        ), f"Unexpected None dirinfo summary for bridge {self._node.nick}"
         return None
 
     def isInExpectedDirInfoDocs(self, *, launch_phase: int) -> Optional[bool]:
