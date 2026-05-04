@@ -150,7 +150,10 @@ class LocalArtiNodeController(NodeController):
         status = self._most_recent_oniondesc_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert status is not None
+        if status is None:
+            raise chutney.errors.ChutneyInternalError(
+                "Caller failed to call `updateLastStatus`"
+            )
         return status
 
     @override
@@ -158,7 +161,10 @@ class LocalArtiNodeController(NodeController):
         rv = self._most_recent_bootstrap_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
+        if rv is None:
+            raise chutney.errors.ChutneyInternalError(
+                "Caller failed to call `updateLastStatus`"
+            )
         return rv
 
     @override

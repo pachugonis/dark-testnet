@@ -4,7 +4,7 @@ import textwrap
 
 from typing import TYPE_CHECKING, Iterable, Iterator, Tuple
 
-from chutney.errors import ChutneyError
+from chutney.errors import ChutneyError, ChutneyInternalError
 from chutney.Util import find_executable_on_path, addr_and_port_str, IPAddress
 
 if TYPE_CHECKING:
@@ -154,7 +154,10 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         elif auth.alt_bridge_auth:
             directive = "AlternateBridgeAuthority"
         else:
-            assert auth.alt_dir_auth
+            if not auth.alt_dir_auth:
+                raise ChutneyInternalError(
+                    f"non-authority in authorities list: {n.nick}"
+                )
             directive = "AlternateDirAuthority"
         # This is currently ~always "no-v2"; none of the built-in templates or
         # networks override it.

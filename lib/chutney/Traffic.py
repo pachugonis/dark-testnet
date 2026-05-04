@@ -38,7 +38,7 @@ import struct
 import textwrap
 import time
 
-from chutney.errors import ChutneyUnimplementedError
+from chutney.errors import ChutneyUnimplementedError, ChutneyInternalError
 from chutney.Util import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
@@ -276,7 +276,8 @@ class DataSource(object):
         self.sent_any = False
 
     def copy(self) -> DataSource:
-        assert not self.sent_any
+        if self.sent_any:
+            raise ChutneyInternalError("DataSource cannot be copied after use")
         return DataSource(self.data, self.repetitions)
 
     def more(self) -> bytes:

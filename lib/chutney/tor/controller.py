@@ -52,7 +52,10 @@ class LocalNodeController(NodeController):
 
     def _loadPtExtraObfs4(self) -> Option[str]:
         """_loadPtExtra impl for the obfs4 transport"""
-        assert self._node._config.pt_transport == "obfs4"
+        if self._node._config.pt_transport != "obfs4":
+            raise chutney.errors.ChutneyInternalError(
+                f"Called for wrong transport {self._node._config.pt_transport}"
+            )
         location = Path(self._node.dir, "pt_state", "obfs4_bridgeline.txt")
         if not location.exists():
             return Option(None)
@@ -386,7 +389,10 @@ class LocalNodeController(NodeController):
         rv = self.most_recent_oniondesc_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
+        if rv is None:
+            raise chutney.errors.ChutneyInternalError(
+                "caller failed to call updateLastStatus"
+            )
         return rv
 
     def _update_last_bootstrap_status(
@@ -429,7 +435,10 @@ class LocalNodeController(NodeController):
         rv = self.most_recent_bootstrap_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
+        if rv is None:
+            raise chutney.errors.ChutneyInternalError(
+                "caller failed to call updateLastStatus"
+            )
         return rv
 
     @override
