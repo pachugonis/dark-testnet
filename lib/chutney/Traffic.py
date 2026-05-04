@@ -520,7 +520,6 @@ class EchoClient(object):
 
     async def fileno(self) -> int:
         socket = await self._socket()
-        assert socket is not None
         return socket.fileno()
 
 
