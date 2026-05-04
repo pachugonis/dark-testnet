@@ -150,7 +150,10 @@ class LocalArtiNodeController(NodeController):
         status = self._most_recent_oniondesc_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert status is not None
+        if status is None:
+            raise chutney.errors.ChutneyInternalError(
+                "Caller failed to call `updateLastStatus`"
+            )
         return status
 
     @override
@@ -158,7 +161,10 @@ class LocalArtiNodeController(NodeController):
         rv = self._most_recent_bootstrap_status
         # Caller is required to have set this via `updateLastStatus` first.
         # TODO: just call it ourselves if None, or use a default value?
-        assert rv is not None
+        if rv is None:
+            raise chutney.errors.ChutneyInternalError(
+                "Caller failed to call `updateLastStatus`"
+            )
         return rv
 
     @override
@@ -291,7 +297,9 @@ class LocalArtiNodeController(NodeController):
             dir_pattern = dir_fmt.status_pattern(
                 other_node.nick, other_node.fingerprint_ed25519
             )
-            assert dir_pattern is not None
+            assert (
+                dir_pattern is not None
+            ), "status_pattern unexpected unimplemented for fingerprint_ed25519"
             with path.open(mode="r") as f:
                 for line in f:
                     if dir_pattern.search(line):

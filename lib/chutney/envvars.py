@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TypeVar, Generic, Optional, cast
 from typing_extensions import override
 
+from chutney.errors import ChutneyInternalError
 from chutney.Util import IPAddress, IPNetwork
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,10 @@ class EnvVar(Generic[C], ABC):
     _PREFIX = "CHUTNEY_"
 
     def __init__(self, varname: str, default: C, help: str) -> None:
-        assert varname.startswith(EnvVar._PREFIX)
+        if not varname.startswith(EnvVar._PREFIX):
+            raise ChutneyInternalError(
+                f"varname '{varname}' missing prefix '{EnvVar._PREFIX}'"
+            )
         self._varname = varname
         self._default = default
         self._help = help
@@ -38,9 +42,8 @@ class EnvVar(Generic[C], ABC):
         # Multiple instances with the same variable name would defeat the
         # purpose a bit. Especially if they have conflicting types, help
         # strings, etc.
-        assert not any(
-            (iv._varname == varname for iv in self._all_instances)
-        ), f"{varname} is already registered"
+        if any((iv._varname == varname for iv in self._all_instances)):
+            raise ChutneyInternalError(f"{varname} is already registered")
 
         # Register this instance
         EnvVar._all_instances.append(self)

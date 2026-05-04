@@ -387,7 +387,7 @@ class LocalLauncher(Launcher):
         known_bin: Optional[KnownBin],
         cwd: Optional[Path] = None,
     ) -> Popen:
-        assert text is True
+        assert text is True, "type checker should have ensured"
         stdin = subprocess.PIPE
         stdout = subprocess.PIPE
         if capture_strategy is Capture.SEPARATE:
@@ -637,7 +637,17 @@ class SshPopen(Popen):
                     self._buffered_stdout.append(data)
                     did_something = True
                 if self._channel.recv_stderr_ready():
-                    assert self._capture_strategy != Capture.MERGED
+                    # When using the MERGED strategy, we call
+                    # `set_combine_stderr` when setting up the channel. This
+                    # *should* result in no data ever showing up on stderr
+                    # <https://docs.paramiko.org/en/3.3/api/channel.html#paramiko.channel.Channel.set_combine_stderr>.
+                    # We could skip checking whether stderr is ever ready at all
+                    # in this case, but just to be safe we try to detect if data
+                    # doesn't unexpectedly show up there after all.
+                    assert self._capture_strategy != Capture.MERGED, (
+                        "Data showed up on stderr,"
+                        " despite us having requested it be merged with stdout"
+                    )
                     data = self._channel.recv_stderr(self._window_size)
                     self._buffered_stderr.append(data)
                     did_something = True
@@ -705,14 +715,18 @@ class SshPopen(Popen):
                     this_timeout = None
                 sel.select(timeout=this_timeout)
 
-        assert self._channel.exit_status_ready()
+        assert (
+            self._channel.exit_status_ready()
+        ), "Shouldn't have exited processing loop before exit status was ready"
         returncode = self._channel.recv_exit_status()
         stdout = b"".join(self._buffered_stdout).decode()
         stderr: Optional[str]
         if self._capture_strategy == Capture.SEPARATE:
             stderr = b"".join(self._buffered_stderr).decode()
         elif self._capture_strategy == Capture.MERGED:
-            assert len(self._buffered_stderr) == 0
+            assert (
+                len(self._buffered_stderr) == 0
+            ), "There shouldn't be any separate stderr data"
             stderr = None
         else:
             raise chutney.errors.ChutneyInternalError(
@@ -814,7 +828,7 @@ class SshLauncher(Launcher):
         known_bin: Optional[KnownBin],
         cwd: Optional[Path] = None,
     ) -> Popen:
-        assert text is True
+        assert text is True, "type checker should have ensured"
 
         if cwd is not None:
             cwd_str = str(cwd)
@@ -986,7 +1000,7 @@ class RpycLauncher(Launcher):
         known_bin: Optional[KnownBin],
         cwd: Optional[Path] = None,
     ) -> Popen:
-        assert text is True
+        assert text is True, "type checker should have ensured"
 
         # handle to the *remote* subprocess module.
         rsubprocess = self._get_conn().modules.subprocess

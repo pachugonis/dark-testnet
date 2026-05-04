@@ -46,7 +46,8 @@ def get_torrc_options(launcher: chutney.launcher.Launcher, tor: str) -> list[str
     ]
     opts = run_tor(launcher, cmdline)
     # check we received a list of options, and nothing else
-    assert re.match(r"(^\w+$)+", opts, flags=re.MULTILINE)
+    if not re.match(r"(^\w+$)+", opts, flags=re.MULTILINE):
+        raise ChutneyError(f"Unexpected tor output for --list-torrc-options: '{opts}'")
     torrc_opts = opts.split()
 
     return torrc_opts
@@ -472,7 +473,8 @@ class LocalNodeBuilder(NodeBuilder):
                     v3id = line.split()[1].strip()
                     break
 
-        assert v3id is not None
+        if v3id is None:
+            raise ChutneyError(f"Failed to find v3id in '{certfile}'")
 
         return AuthorityLine(
             nick=self._node.nick,
@@ -589,8 +591,12 @@ class LocalNodeBuilder(NodeBuilder):
             )
         private_key_descriptor = priv_key_path.read_text()
         private_key_descriptor_parts = private_key_descriptor.split(":")
-        assert private_key_descriptor_parts[1] == "descriptor"
-        assert private_key_descriptor_parts[2] == "x25519"
+        if private_key_descriptor_parts[1] != "descriptor":
+            raise ChutneyError(
+                f"Missing 'descriptor' kw in {private_key_descriptor_parts}"
+            )
+        if private_key_descriptor_parts[2] != "x25519":
+            raise ChutneyError(f"Missing 'x25519' kw in {private_key_descriptor_parts}")
         # `b32decode` insists on the padding suffix, which we removed when saving
         # the private key. So add it back.
         private_key32 = private_key_descriptor_parts[3] + "===="

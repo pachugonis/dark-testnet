@@ -38,7 +38,7 @@ import struct
 import textwrap
 import time
 
-from chutney.errors import ChutneyUnimplementedError
+from chutney.errors import ChutneyUnimplementedError, ChutneyInternalError
 from chutney.Util import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
@@ -214,7 +214,9 @@ class Listener(object):
             # Try resolving it an ipv4 address by default.
             # TODO: Maybe don't support hostnames here, and push this
             # logic/decision up to caller.
-            assert isinstance(self._endpoint[0], str)
+            assert isinstance(
+                self._endpoint[0], str
+            ), f"addr_to_family should have succeeded for '{self._endpoint[0]}'"
             family = socket.AF_INET
 
         try:
@@ -276,7 +278,8 @@ class DataSource(object):
         self.sent_any = False
 
     def copy(self) -> DataSource:
-        assert not self.sent_any
+        if self.sent_any:
+            raise ChutneyInternalError("DataSource cannot be copied after use")
         return DataSource(self.data, self.repetitions)
 
     def more(self) -> bytes:
@@ -519,7 +522,6 @@ class EchoClient(object):
 
     async def fileno(self) -> int:
         socket = await self._socket()
-        assert socket is not None
         return socket.fileno()
 
 
@@ -609,7 +611,9 @@ class TrafficTester(object):
         await self.tests.wait_done()
         status_task.cancel()
 
-        assert self.tests.all_done()
+        assert (
+            self.tests.all_done()
+        ), "wait_done completed without marking all tests done"
         return self.tests.failure_count() == 0
 
     async def _run_with_timeout(self) -> bool:

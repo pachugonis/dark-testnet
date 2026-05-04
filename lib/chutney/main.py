@@ -9,5 +9,6 @@ import it.
 
 import chutney.TorNet
 
-assert __name__ == "__main__", "This module should *only* be used as a stub entry-point"
+if __name__ != "__main__":
+    raise Exception("This module should *only* be used as a stub entry-point")
 chutney.TorNet.__main__()

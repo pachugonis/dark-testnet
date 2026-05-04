@@ -85,7 +85,7 @@ class DirFormat(enum.Enum):
         desc = self in [DirFormat.DESC, DirFormat.DESC_NEW]
         md = self in [DirFormat.MD, DirFormat.MD_NEW]
 
-        assert cons or desc or md
+        assert cons or desc or md, f"DirFormat {self} unexpected not implemented"
 
         if cons:
             # Disabled due to bug #33407: chutney bridge authorities don't

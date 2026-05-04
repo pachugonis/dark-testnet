@@ -67,7 +67,10 @@ class LocalArtiNodeBuilder(NodeBuilder):
         # We're adding several sections that we expect not to exist in `config`.
         # If they do exist, then we need to consider how to merge our updates here.
         def get_new_section(d: dict[str, object], name: str) -> dict[str, object]:
-            assert name not in d
+            if name in d:
+                raise ChutneyInternalError(
+                    f"Tried to define section {d} multiple times"
+                )
             return check_type(d.setdefault(name, {}), dict[str, object])
 
         get_new_section(config, "application").update(

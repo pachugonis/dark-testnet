@@ -67,6 +67,7 @@ from chutney.dirinfo import (
 )
 from chutney.errors import (
     ChutneyError,
+    ChutneyInternalError,
     ChutneyErrorGroup,
     ChutneyTimeoutError,
 )
@@ -227,14 +228,17 @@ class Node(ToCustomJsonable):
             self._launcher = LocalLauncher()
         elif config.launcher_backend == LauncherBackend.SSH:
             host = self.ip.as_optional() or self.ipv6_addr.as_optional()
-            assert host, f"No ip address for {self.nick}"
+            if not host:
+                raise ChutneyError(f"No ip address for {self.nick}")
             self._launcher = SshLauncher(str(host))
         elif config.launcher_backend == LauncherBackend.RPYC_INSECURE:
             host = self.ip.as_optional() or self.ipv6_addr.as_optional()
-            assert host, f"No ip address for {self.nick}"
-            assert self._address_in_trusted_net(
-                host
-            ), "RPYC_INSECURE can only be used on a trusted network"
+            if not host:
+                raise ChutneyError(f"No ip address for {self.nick}")
+            if not self._address_in_trusted_net(host):
+                raise ChutneyError(
+                    "RPYC_INSECURE can only be used on a trusted network"
+                )
             self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
 
         else:
@@ -1555,13 +1559,16 @@ class Network(ToCustomJsonable, FromDecodedJson):
             )
             if all_bootstrapped:
                 print("Everything bootstrapped after {} sec".format(int(elapsed)))
-                assert self._all_bootstrapped(
+                if not self._all_bootstrapped(
                     nodes,
                     most_recent_desc_status,
                     print_status=True,
                     elapsed=elapsed,
                     msg="Bootstrap finished",
-                ), "Went from bootstrapped to not-bootstrapped"
+                ):
+                    raise ChutneyInternalError(
+                        "Shouldn't be possible to go from bootstrapped to not-bootstrapped"
+                    )
 
                 # Potentially wait a bit longer to let other things finish that
                 # we don't explicitly check for, including a timing bug in Tor 0.3.5.
@@ -2137,7 +2144,10 @@ def _network_from_args(ns: argparse.Namespace) -> Network:
             script_path, config=net_config, node_config_defaults=node_config_defaults
         )
 
-    assert ns.net_from_data_dir
+    if not ns.net_from_data_dir:
+        raise ChutneyInternalError(
+            "command parser should have ensured net_from_data_dir was set"
+        )
 
     unresolved_nodes_dir = _get_absolute_nodes_path(data_dir=data_dir)
     nodes_dir = unresolved_nodes_dir.resolve()
