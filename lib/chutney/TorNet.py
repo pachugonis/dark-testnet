@@ -50,6 +50,8 @@ import time
 import tomli_w
 import json
 
+import rpyc  # type: ignore
+
 import chutney.chutney_logging as chutney_logging
 import chutney.network_tests.verify
 
@@ -69,7 +71,7 @@ from chutney.errors import (
     ChutneyTimeoutError,
 )
 from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
-from chutney.launcher import Launcher, LocalLauncher, SshLauncher
+from chutney.launcher import Launcher, LocalLauncher, SshLauncher, RpycLauncher
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
@@ -107,6 +109,10 @@ class LauncherBackend(FromDecodedJson, Enum):
     # Connect to the (potentially remote) node via ssh and use that to run
     # processes.
     SSH = 2
+    # Connect to the (potentially remote) node via an rpyc "classic" service.
+    # No encryption or authentication, and the remote service can execute
+    # arbitrary code locally.
+    RPYC_INSECURE = 3
 
     @override
     @classmethod
@@ -223,6 +229,14 @@ class Node(ToCustomJsonable):
             host = self.ip.as_optional() or self.ipv6_addr.as_optional()
             assert host, f"No ip address for {self.nick}"
             self._launcher = SshLauncher(str(host))
+        elif config.launcher_backend == LauncherBackend.RPYC_INSECURE:
+            host = self.ip.as_optional() or self.ipv6_addr.as_optional()
+            assert host, f"No ip address for {self.nick}"
+            assert self._address_in_trusted_net(
+                host
+            ), "RPYC_INSECURE can only be used on a trusted network"
+            self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
+
         else:
             assert_never(config.launcher_backend)
         self._builder: NodeBuilder

@@ -29,7 +29,10 @@ classifiers = [
 license = {file = "LICENSE"}
 dependencies = [
   'cryptography~=3.4',
+  # for the ssh launcher backend
   'paramiko~=4.0',
+  # for the rpyc launcher backend
+  'rpyc~=6.0.2',
   'typeguard==4.3.0',
   'tomli-w~=1.2.0',
 ]
