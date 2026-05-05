@@ -36,7 +36,7 @@ class ChutneyMissingBinaryError(ChutneyError):
 
         self._name = known_bin.name()
         self._help = (
-            f"Set the '{known_bin.config_envvar()}' environment variable"
+            f"Set the '{known_bin.config_envvar().varname()}' environment variable"
             + f" to the path of '{known_bin.name()}'."
         )
 
