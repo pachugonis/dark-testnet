@@ -107,14 +107,14 @@ class LocalArtiNodeBuilder(NodeBuilder):
             }
         )
         if self._node.is_hs:
-            ip = self._node.ip.as_optional() or self._node.ipv6_addr.as_optional()
-            if not ip:
-                raise ChutneyError("No usable local address")
             svc: dict[str, object] = {}
             svc["proxy_ports"] = [
                 [
                     self._node.hs_virtport.unwrap(),
-                    addr_and_port_str(ip, self._node.hs_targetport.unwrap()),
+                    addr_and_port_str(
+                        self._node.hs_target_address.unwrap(),
+                        self._node.hs_targetport.unwrap(),
+                    ),
                 ]
             ]
             if self._node._config.hs_restricted_discovery:
