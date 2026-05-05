@@ -266,15 +266,23 @@ shadow-test-network:
   # install chutney
   - python3 -m pip install .
   # run the test
-  # TODO(arti#1986): re-add `hs-v3-arti` when it passes consistently.
+  # Test most networks. Omitted:
+  # - arti hidden services, pending arti#1986
+  # - ipv6 (including "mixed" ipv4 + ipv6), because shadow doesn't support it
   - |
     for flavor in \
           basic \
           basic-arti \
           basic-families \
+          basic-min \
+          bridges+hs-v3 \
           bridges-min \
           bridges-min-arti \
           bridges-obfs4 \
+          hs-ob-v3 \
+          hs-v3 \
+          hs-v3-min \
+          single-onion-v3 \
           ; do
       shadow-exec \
         --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
