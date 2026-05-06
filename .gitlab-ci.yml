@@ -266,6 +266,8 @@ shadow-test-network:
   # install chutney
   - python3 -m pip install .
   # run the test
+  # Parallelization index, used in the loop below. CI_NODE_INDEX is assigned 1..N.
+  - i=$(($CI_NODE_INDEX - 1))
   # Test most networks. Omitted:
   # - arti hidden services, pending arti#1986
   # - ipv6 (including "mixed" ipv4 + ipv6), because shadow doesn't support it
@@ -284,31 +286,36 @@ shadow-test-network:
           hs-v3-min \
           single-onion-v3 \
           ; do
-      shadow-exec \
-        --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
-        -- \
-      bash -c \
-      "
-        set -x
-        set -euo pipefail
-        # Too noisy
-        export CHUTNEY_DEBUG=0
-        # Tell the "verify" test to connect to hidden services with *every*
-        # client. We want this to e.g. validate cross-compatibility between tor
-        # and arti clients and servers.
-        export CHUTNEY_HS_MULTI_CLIENT=1
-        export PATH=\"$PATH\"
-        export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
-        tools/test-network.sh \
-        --chutney-path \"$CI_PROJECT_DIR\" \
-        --net-dir \"$CI_PROJECT_DIR\"/net/\"$flavor\" \
-        --sandbox 0 \
-        --no-controlsocket \
-        --no-ipv6 \
-        --tor \"$(which tor)\" \
-        --tor-gencert \"$(which tor-gencert)\" \
-        --stop-time 0 \
-        --flavor \"$flavor\""
+      # CI_NODE_TOTAL is set to the number of jobs specified via `parallel` below.
+      # Only actually run $CI_NODE_TOTAL'th flavor.
+      if [ $(($i % $CI_NODE_TOTAL)) -eq 0 ]; then
+        shadow-exec \
+          --shadow-args="--model-unblocked-syscall-latency=true --max-unapplied-cpu-latency=10ms" \
+          -- \
+        bash -c \
+        "
+          set -x
+          set -euo pipefail
+          # Too noisy
+          export CHUTNEY_DEBUG=0
+          # Tell the "verify" test to connect to hidden services with *every*
+          # client. We want this to e.g. validate cross-compatibility between tor
+          # and arti clients and servers.
+          export CHUTNEY_HS_MULTI_CLIENT=1
+          export PATH=\"$PATH\"
+          export CHUTNEY_ARTI=\"$CI_PROJECT_DIR\"/opt/arti/bin/arti
+          tools/test-network.sh \
+          --chutney-path \"$CI_PROJECT_DIR\" \
+          --net-dir \"$CI_PROJECT_DIR\"/net/\"$flavor\" \
+          --sandbox 0 \
+          --no-controlsocket \
+          --no-ipv6 \
+          --tor \"$(which tor)\" \
+          --tor-gencert \"$(which tor-gencert)\" \
+          --stop-time 0 \
+          --flavor \"$flavor\""
+      fi
+    (( i++ )) || true
     done
 
   artifacts:
@@ -316,6 +323,7 @@ shadow-test-network:
     when: on_failure
     paths:
       - net
+  parallel: 3
 
 network-config-tests-diff:
   <<: *debian-template
