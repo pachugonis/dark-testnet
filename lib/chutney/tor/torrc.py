@@ -105,7 +105,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         if n.ipv6_addr.is_some():
             res += f"OrPort {addr_and_port_str(n.ipv6_addr.unwrap(), n.orport)}\n"
     if n._config.hs:
-        res += f"HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}\n"
+        res += f"HiddenServiceDir {n.hs_directory.unwrap()}\n"
         res += (
             "HiddenServicePort"
             f" {n.hs_virtport.unwrap()}"

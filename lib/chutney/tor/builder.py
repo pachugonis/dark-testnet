@@ -18,12 +18,13 @@ import chutney.known_bins
 import chutney.launcher
 
 from chutney.dirinfo import AuthorityLine, BridgeLine
-from chutney.errors import ChutneyError, ChutneyInternalError
+from chutney.errors import ChutneyError
 from chutney.node_builder import NodeBuilder
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     mkdir_p,
     Option,
+    validate_onion_address,
 )
 
 if TYPE_CHECKING:
@@ -288,7 +289,7 @@ class LocalNodeBuilder(NodeBuilder):
                 str(self._node.dir),
                 # Do generate our hidden service state
                 "-HiddenServiceDir",
-                str(self._node.dir.joinpath(self._node._config.hs_directory)),
+                str(self._node.hs_directory.unwrap()),
                 # Dummy ports; tor won't try to bind to them since the
                 # network is disabled.
                 "-HiddenServicePort",
@@ -363,14 +364,9 @@ class LocalNodeBuilder(NodeBuilder):
         make_datadir_subdirectory(datadir, "keys")
 
     def _makeHiddenServiceDir(self) -> None:
-        """Create the hidden service subdirectory for this node.
-
-        The directory name is stored under the 'hs_directory' environment
-        key. It is combined with the 'dir' data directory key to yield the
-        path to the hidden service directory.
-        """
+        """Create the hidden service subdirectory for this node."""
         datadir = self._node.dir
-        make_datadir_subdirectory(datadir, self._node._config.hs_directory)
+        make_datadir_subdirectory(datadir, self._node.hs_directory.unwrap())
 
     def _genAuthorityKey(self) -> None:
         """Generate an authority identity and signing key for this authority,
@@ -539,7 +535,7 @@ class LocalNodeBuilder(NodeBuilder):
 
     def _hs_hostname_path(self) -> Path:
         """The path to the hostname file, if this node has a hidden service"""
-        return self._node.dir.joinpath(self._node._config.hs_directory, "hostname")
+        return self._node.hs_directory.unwrap().joinpath("hostname")
 
     @override
     def get_hs_hostname(self) -> Option[str]:
@@ -557,11 +553,7 @@ class LocalNodeBuilder(NodeBuilder):
             raise ChutneyError(f"Error opening hostname file {hs_hostname_file}") from e
         # the hostname file ends with a newline
         hostname = hostname_file_contents.strip()
-        # shouldn't be empty
-        if not hostname:
-            raise ChutneyInternalError(
-                f"Unexpectedly empty hostname in {hs_hostname_file}"
-            )
+        validate_onion_address(hostname)
         return Option(hostname)
 
     def _client_onion_auth_dir(self) -> Path:
@@ -614,7 +606,7 @@ class LocalNodeBuilder(NodeBuilder):
 
     @override
     def set_hs_client_pubkey(self, client_id: str, client_pubkey: str) -> None:
-        path = self._node.dir.joinpath(
-            self._node._config.hs_directory, "authorized_clients", client_id + ".auth"
+        path = self._node.hs_directory.unwrap().joinpath(
+            "authorized_clients", client_id + ".auth"
         )
         path.write_text(client_pubkey)

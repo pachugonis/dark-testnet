@@ -7,6 +7,9 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import base64
+import binascii
+import hashlib
 import ipaddress
 import logging
 import os
@@ -14,10 +17,11 @@ import stat
 
 from collections.abc import Iterable, Collection
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, Generic, Union, TypeAlias
+from typing import Callable, TypeVar, Any, Optional, Generic, Union, TypeAlias, Final
 from typing_extensions import ParamSpec, override
 
 from chutney.jsonable import ToCustomJsonable, CustomJsonable
+from chutney.errors import ChutneyError
 
 logger = logging.getLogger(__name__)
 
@@ -208,3 +212,55 @@ def mkdir_p(*d: Union[str, Path], mode: int = 448) -> None:
 
 def values_for_keys(d: dict[K, V], keys: Collection[K]) -> list[V]:
     return [kv[1] for kv in d.items() if kv[0] in keys]
+
+
+def validate_onion_address(s: str) -> None:
+    """Validate that `s` is a valid onion address, raising ChutneyError if it isn't.
+
+    Currently only v3 addresses are supported"""
+    # From
+    # <https://spec.torproject.org/rend-spec/encoding-onion-addresses.html>:
+    #
+    # onion_address = base32(PUBKEY | CHECKSUM | VERSION) + ".onion"
+    # CHECKSUM = SHA3_256(".onion checksum" | PUBKEY | VERSION)[:2]
+    #
+    # where:
+    #   - PUBKEY is the 32 bytes ed25519 master pubkey (KP_hs_id) of the hidden service.
+    #   - VERSION is a one byte version field (default value '\x03')
+    #   - ".onion checksum" is a constant string
+    #   - CHECKSUM is truncated to two bytes before inserting it in onion_address
+    dot_onion: Final = ".onion"
+    if not s.endswith(dot_onion):
+        raise ChutneyError(f"Invalid onion address '{s}': missing .onion suffix")
+    try:
+        decoded: Final[bytes] = base64.b32decode(
+            s.removesuffix(dot_onion), casefold=True
+        )
+    except binascii.Error as e:
+        raise ChutneyError(f"Couldn't b32decode onion address '{s}'") from e
+    try:
+        version: Final = decoded[-1]
+    except IndexError as e:
+        raise ChutneyError(
+            f"Invalid onion address '{s}': decoded to empty string"
+        ) from e
+    if version != 3:
+        raise ChutneyError(
+            f"Invalid onion address '{s}': unsupported version: {version}"
+        )
+    try:
+        pubkey: Final = decoded[:32]
+        # The rest, except for the last (version) byte.
+        truncd_checksum: Final = decoded[32:-1]
+    except IndexError as e:
+        raise ChutneyError(f"Invalid onion-v3 address '{s}': too short") from e
+    calcd_checksum: Final = hashlib.sha3_256(
+        b".onion checksum" + pubkey + version.to_bytes(1, "big")
+    ).digest()
+    calcd_truncd_checksum: Final = calcd_checksum[:2]
+    if calcd_truncd_checksum != truncd_checksum:
+        raise ChutneyError(
+            f"Invalid onion-v3 address '{s}':"
+            f" included checksum: 0x{truncd_checksum.hex()}"
+            f" doesn't match calc'd checksum: 0x{calcd_truncd_checksum.hex()}"
+        )

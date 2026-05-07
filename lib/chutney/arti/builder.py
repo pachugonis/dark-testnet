@@ -23,6 +23,7 @@ from chutney.node_builder import NodeBuilder
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
+    validate_onion_address,
     Option,
 )
 
@@ -50,6 +51,13 @@ class LocalArtiNodeBuilder(NodeBuilder):
 
     def _hs_client_key_dir(self) -> Path:
         return self._node.dir.joinpath("client-keys")
+
+    def _hs_hostname_path(self) -> Path:
+        """The path to the hostname file, if this node has a hidden service.
+
+        We generate this when `preConfig` is called.
+        """
+        return self._node.hs_directory.unwrap().joinpath("hostname")
 
     def _gen_config(self, net: TorNet.Network) -> dict[str, object]:
         if self._node._config.exit:
@@ -166,6 +174,15 @@ class LocalArtiNodeBuilder(NodeBuilder):
     def preConfig(self, net: TorNet.Network) -> None:
         mkdir_p(self._node.dir)
         self._generate_early_config(net)
+        if self._node.is_hs:
+            # arti normally doesn't have the concept of a "hidden service directory",
+            # but we use it to conveniently stash the hostname, so create it.
+            self._node.hs_directory.unwrap().mkdir(0o700)
+
+            # generate and write out the hostname.
+            hs_address = self._generate_hs_hostname()
+            hs_hostname_path = self._hs_hostname_path()
+            hs_hostname_path.write_text(hs_address + "\n")
         if self._node._config.hs_restricted_discovery:
             client_key_dir = self._hs_client_key_dir()
             client_key_dir.mkdir(mode=0o700)
@@ -203,10 +220,17 @@ class LocalArtiNodeBuilder(NodeBuilder):
             raise ChutneyInternalError("arti bridges unimplemented")
         return []
 
-    @override
-    def get_hs_hostname(self) -> Option[str]:
-        if not self._node._config.hs:
-            return Option(None)
+    def _generate_hs_hostname(self) -> str:
+        """Generate the hidden service hostname (and key), and return the hostname.
+
+        Should only be called for hidden services.
+
+        If the key for the hidden service has already been generated (e.g. by
+        calling this function), it is retained, not regenerated.
+        """
+        assert (
+            self._node._config.hs
+        ), "Caller should have ensured this is a hidden service"
         sp = self._launcher.run(
             [
                 self._node._config.arti,
@@ -225,14 +249,43 @@ class LocalArtiNodeBuilder(NodeBuilder):
             capture_strategy=chutney.launcher.Capture.SEPARATE,
             text=True,
             known_bin=ArtiBin(),
+            check=True,
         )
-        # TODO: recognize specific return codes?
-        if sp.returncode != 0:
-            logger.debug(
-                f"Couldn't get onion address. stdout:{sp.stdout}\n\tstderr:{sp.stderr}"
-            )
+        hostname = sp.stdout.strip()
+        validate_onion_address(hostname)
+        return hostname
+
+    @override
+    def get_hs_hostname(self) -> Option[str]:
+        # Instead of trying to query the arti bin here to get the hostname, we
+        # generate and write it out in the `preConfig` step. This lets us
+        # correctly return None if this function is called before `preConfig` is
+        # called, instead of trying to generate it. In particular, we don't want
+        # to accidentally try to generate it in the "chutney init" step of a
+        # multi-host network, since we may not be set up yet to remotely launch
+        # processes on the destination host.
+
+        if not self._node._config.hs:
             return Option(None)
-        return Option(sp.stdout.strip())
+        hs_hostname_file = self._hs_hostname_path()
+        try:
+            hostname_file_contents = hs_hostname_file.read_text()
+        except FileNotFoundError:
+            # The file isn't ready yet.
+            logger.debug(f"hostname file {hs_hostname_file} not found")
+            return Option(None)
+        except IOError as e:
+            # Unexpected error
+            raise ChutneyError(f"Error opening hostname file {hs_hostname_file}") from e
+        # the hostname file ends with a newline
+        hostname = hostname_file_contents.strip()
+        # shouldn't be empty
+        if not hostname:
+            raise ChutneyInternalError(
+                f"Unexpectedly empty hostname in {hs_hostname_file}"
+            )
+        validate_onion_address(hostname)
+        return Option(hostname)
 
     @override
     def get_hs_client_pubkey(self, hs_address: str) -> str:

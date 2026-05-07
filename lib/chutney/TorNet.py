@@ -306,6 +306,12 @@ class Node(ToCustomJsonable):
         else:
             raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
 
+    @property
+    def hs_directory(self) -> Option[Path]:
+        if not self.is_hs:
+            return Option(None)
+        return Option(self.dir.joinpath(self._config.hs_directory))
+
     def _address_in_trusted_net(self, addr: IPAddress) -> bool:
         """Return whether `addr` is an any of the configured trusted networks"""
         return any(map(lambda net: addr in net, self._config.trusted_networks))
