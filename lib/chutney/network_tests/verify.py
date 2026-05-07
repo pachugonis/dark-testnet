@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Union, ClassVar, Optional
 from . import NetworkTestFailure
 from chutney import envvars
 from chutney.Util import IPAddress
-from chutney.errors import ChutneyInternalError
+from chutney.errors import ChutneyError, ChutneyInternalError
 
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet
@@ -278,7 +278,7 @@ def _configure_hs(
     reps: int,
     client_list: list[TorNet.Node],
     hs_list: list[TorNet.Node],
-    listen_addr: Union[str, IPAddress],
+    listen_addr: IPAddress,
     LISTEN_PORT: int,
     connection_count: int,
     hs_multi_client: bool,
@@ -310,6 +310,13 @@ def _configure_hs(
             raise ChutneyInternalError(
                 f"Node {hs.nick} uses unsupported hs targetport {hs.hs_targetport}; "
                 + f"expected {LISTEN_PORT}"
+            )
+        # Similarly we require all hidden services to forward to the verifier's `listen_addr`.
+        hs_target_address = hs.hs_target_address.unwrap()
+        if hs_target_address != listen_addr:
+            raise ChutneyError(
+                f"Node {hs.nick} has hs_target_address {hs_target_address}"
+                f" but verifier is configured to listen on {listen_addr}"
             )
         for client in hs_client_list:
             proxy = next(client.socksport_endpoints())

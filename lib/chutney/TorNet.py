@@ -407,6 +407,18 @@ class Node(ToCustomJsonable):
             return Option(None)
 
     @property
+    def hs_target_address(self) -> Option[IPAddress]:
+        """Target address of this node's hidden service, if any."""
+        if not self._config.hs:
+            return Option(None)
+        addr = self._config.hs_target_address
+        if not addr.is_loopback and not self._address_in_trusted_net(addr):
+            raise ChutneyError(
+                f"hs_target_address {addr} isn't in a loopback or trusted net"
+            )
+        return Option(addr)
+
+    @property
     def hs_targetport(self) -> Option[int]:
         """Target port of this node's hidden service, if any."""
         if self._config.hs:
@@ -553,6 +565,7 @@ class Node(ToCustomJsonable):
             is_client=self.is_client,
             is_hs=self.is_hs,
             hs_virtport=self.hs_virtport.as_optional(),
+            hs_target_address=self.hs_target_address.map(str).as_optional(),
             hs_targetport=self.hs_targetport.as_optional(),
             hs_hostname=self.hs_hostname.as_optional(),
             _config=self._config,
@@ -617,6 +630,15 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     # hidden services having these tags.
     hs_client_restricted_discovery_server_tags: set[str] = dataclasses.field(
         default_factory=set
+    )
+    _HS_TARGET_ADDRESS_ENV: ClassVar[envvars.EnvVarIPAddress] = envvars.EnvVarIPAddress(
+        "CHUTNEY_HS_TARGET_ADDRESS",
+        ipaddress.ip_address("127.0.0.1"),
+        "Target address for incoming hidden service connections."
+        " Must be on a loopback or trusted network.",
+    )
+    hs_target_address: IPAddress = dataclasses.field(
+        default_factory=lambda: NodeConfig._HS_TARGET_ADDRESS_ENV.get()
     )
     # subdirectory of data dir in which to store restricted discovery
     # client keys. aka ClientOnionAuthDir in torrc.
@@ -829,6 +851,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     def to_custom_jsonable(self) -> CustomJsonable:
         d = dataclasses.asdict(self)
         d["trusted_networks"] = [str(n) for n in d["trusted_networks"]]
+        d["hs_target_address"] = str(d["hs_target_address"])
         return d
 
     @override
@@ -841,6 +864,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
             d["address_assignment_strategy"]
         )
         d["trusted_networks"] = [ipaddress.ip_network(n) for n in d["trusted_networks"]]
+        d["hs_target_address"] = ipaddress.ip_address(d["hs_target_address"])
         return NodeConfig(**d)
 
     @staticmethod
@@ -860,6 +884,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         NodeConfig._ENABLE_CONTROLSOCKET_ENV.register_argparser(parser)
         NodeConfig._LAUNCHER_BACKEND_ENV.register_argparser(parser)
         NodeConfig._ADDRESS_ASSIGNMENT_ENV.register_argparser(parser)
+        NodeConfig._HS_TARGET_ADDRESS_ENV.register_argparser(parser)
         # We already register KnownBin envvars globally
 
     @staticmethod
@@ -870,6 +895,7 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
         using a parser previously passed to `NodeConfig.register_argparser`.
         """
         return NodeConfig(
+            hs_target_address=NodeConfig._HS_TARGET_ADDRESS_ENV.get(ns=ns),
             trusted_networks=NodeConfig._TRUSTED_NETWORKS_ENV.get(ns=ns),
             ip=NodeConfig._LISTEN_ADDRESS_ENV.get(ns=ns) or None,
             ipv6_addr=NodeConfig._LISTEN_ADDRESS_V6_ENV.get(ns=ns) or None,

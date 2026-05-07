@@ -105,15 +105,15 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         if n.ipv6_addr.is_some():
             res += f"OrPort {addr_and_port_str(n.ipv6_addr.unwrap(), n.orport)}\n"
     if n._config.hs:
-        res += textwrap.dedent(f"""
-            HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}
+        res += f"HiddenServiceDir {n.dir.joinpath(n._config.hs_directory)}\n"
+        res += (
+            "HiddenServicePort"
+            f" {n.hs_virtport.unwrap()}"
+            f" {n.hs_target_address.unwrap()}:{n.hs_targetport.unwrap()}\n"
+        )
+        # v3 is the only current supported version.
+        res += "HiddenServiceVersion 3\n"
 
-            # Redirect requests to the port used by chutney verify
-            HiddenServicePort {n.hs_virtport.unwrap()} 127.0.0.1:{n.hs_targetport.unwrap()}
-
-            # v3 is the only current supported version.
-            HiddenServiceVersion 3
-            """)
         if n._config.hs_singlehop:
             res += textwrap.dedent(f"""
                 # Make this hidden service instance a Single Onion Service
