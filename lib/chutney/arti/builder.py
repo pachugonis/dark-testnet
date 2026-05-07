@@ -23,6 +23,7 @@ from chutney.node_builder import NodeBuilder
 from chutney.Util import (
     addr_and_port_str,
     mkdir_p,
+    validate_onion_address,
     Option,
 )
 
@@ -250,7 +251,9 @@ class LocalArtiNodeBuilder(NodeBuilder):
             known_bin=ArtiBin(),
             check=True,
         )
-        return sp.stdout.strip()
+        hostname = sp.stdout.strip()
+        validate_onion_address(hostname)
+        return hostname
 
     @override
     def get_hs_hostname(self) -> Option[str]:
@@ -281,6 +284,7 @@ class LocalArtiNodeBuilder(NodeBuilder):
             raise ChutneyInternalError(
                 f"Unexpectedly empty hostname in {hs_hostname_file}"
             )
+        validate_onion_address(hostname)
         return Option(hostname)
 
     @override

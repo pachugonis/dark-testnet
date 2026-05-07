@@ -18,12 +18,13 @@ import chutney.known_bins
 import chutney.launcher
 
 from chutney.dirinfo import AuthorityLine, BridgeLine
-from chutney.errors import ChutneyError, ChutneyInternalError
+from chutney.errors import ChutneyError
 from chutney.node_builder import NodeBuilder
 from chutney.tor.util import get_tor_version, run_tor
 from chutney.Util import (
     mkdir_p,
     Option,
+    validate_onion_address,
 )
 
 if TYPE_CHECKING:
@@ -552,11 +553,7 @@ class LocalNodeBuilder(NodeBuilder):
             raise ChutneyError(f"Error opening hostname file {hs_hostname_file}") from e
         # the hostname file ends with a newline
         hostname = hostname_file_contents.strip()
-        # shouldn't be empty
-        if not hostname:
-            raise ChutneyInternalError(
-                f"Unexpectedly empty hostname in {hs_hostname_file}"
-            )
+        validate_onion_address(hostname)
         return Option(hostname)
 
     def _client_onion_auth_dir(self) -> Path:
