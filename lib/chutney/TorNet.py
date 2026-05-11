@@ -1072,7 +1072,7 @@ class Network(ToCustomJsonable, FromDecodedJson):
             logger.info(f"Loading network from nodes dir: '{nodes_dir}'")
         else:
             logger.info(
-                f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}"
+                f"Loading network from nodes dir: '{unresolved_nodes_dir}'->'{nodes_dir}'"
             )
         if not nodes_dir.exists():
             raise ChutneyError(
