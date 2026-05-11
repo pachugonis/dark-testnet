@@ -1804,11 +1804,13 @@ class SubParsers(Protocol):
 class CLICommand(ABC):
     """A chutney CLI command.
 
-    A chutney CLI program should, for every subcommand, define a subclass of this class,
-    instantiate that class once, passing the result of `argparse.ArgumentParser.add_subparsers`.
+    Expected usage is that a chutney CLI program should:
 
-    After parsing the command-line arguments, `CLICommand.run_command` will run the user-selected
-    subcommand.
+    * Create a root `argparse.ArgumentParser` object, registering any desired global options.
+    * Call `CLICommand.add_subparsers` to to get a `subparsers` object for the root parser.
+    * For each command create a subclass of `CLICommand`, and instantiate it once,
+      passing `subparsers` so that it can register itself.
+    * Call `CLICommand.run_selected_subcommand` to run the user-selected command.
     """
 
     # Attribute where we'll store the name of the selected subcommand.
@@ -1821,6 +1823,16 @@ class CLICommand(ABC):
         require_net_spec_group: Optional[bool] = None,
         node_config_overrides: Optional[Mapping[str, object]] = None,
     ) -> None:
+        """Initialize a CLI command.
+
+        * `subparsers`: the result of calling `CLICommand.add_subparsers`.
+        * `require_net_spec_group`: Whether to require a flag from the net-specification-group,
+          specifying a chutney network to use, for this command. `True` means required, `False`
+          means optional, and `None` means disallowed.
+        * `node_config_overrides`: Values to override `NodeConfig` for all nodes in the given
+          network. Any flags included here will *not* be registered as command-line flags for
+          this command.
+        """
         self._subparser = subparsers.add_parser(self.name(), help=self.help())
         self._net_builder = CLINetworkBuilder(
             self._get_subparser(),
@@ -1866,7 +1878,6 @@ class CLICommand(ABC):
     @staticmethod
     def run_selected_subcommand(args: argparse.Namespace) -> None:
         """Load the selected network and run the user-selected subcommand."""
-
         cmd = check_type(getattr(args, CLICommand._CMD_DEST), CLICommand)
         network = cmd._net_builder.build(args)
         cmd.run(network, args)
