@@ -1056,10 +1056,13 @@ class Network(ToCustomJsonable, FromDecodedJson):
 
     @staticmethod
     def from_nodes_dir(nodes_dir: Path) -> Network:
-        json_str = nodes_dir.joinpath("network.json").read_text()
-        json_obj = json.loads(json_str)
-        net = Network.from_decoded_json(json_obj)
-        net._dir = nodes_dir
+        try:
+            json_str = nodes_dir.joinpath("network.json").read_text()
+            json_obj = json.loads(json_str)
+            net = Network.from_decoded_json(json_obj)
+            net._dir = nodes_dir
+        except Exception as e:
+            raise ChutneyError(f"Couldn't load network from '{nodes_dir}'") from e
         return net
 
     @staticmethod
