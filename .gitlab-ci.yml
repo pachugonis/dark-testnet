@@ -272,7 +272,6 @@ shadow-test-network:
   # Parallelization index, used in the loop below. CI_NODE_INDEX is assigned 1..N.
   - i=$(($CI_NODE_INDEX - 1))
   # Test most networks. Omitted:
-  # - arti hidden services, pending arti#1986
   # - ipv6 (including "mixed" ipv4 + ipv6), because shadow doesn't support it
   - |
     for flavor in \
@@ -286,6 +285,7 @@ shadow-test-network:
           bridges-obfs4 \
           hs-ob-v3 \
           hs-v3 \
+          hs-v3-arti \
           hs-v3-min \
           single-onion-v3 \
           ; do
