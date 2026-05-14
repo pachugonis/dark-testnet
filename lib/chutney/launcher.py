@@ -332,6 +332,20 @@ class Launcher(ABC):
         shell_cmd = shlex.join(["kill", f"-{sig}", str(pid)])
         self.run(["sh", "-c", shell_cmd], text=True, known_bin=None)
 
+    def get_rpyc(self) -> Optional[rpyc.core.protocol.Connection]:
+        """
+        Get an rpyc connection to the target environment.
+
+        Not all backends support this; ones that don't return None.
+
+        Other Launcher methods with narrower scope should be used when feasible,
+        both because they are a bit more focused and straightforward to use, and
+        because using rpyc directly increases our dependence on that third party
+        module, which may be problematic if we ever want to migrate away from
+        it.
+        """
+        return None
+
 
 class LocalPopen(Popen):
     """Specialization of Popen returnced by `LocalLauncher`"""
@@ -988,6 +1002,10 @@ class RpycLauncher(Launcher):
         if self._conn is None:
             self._conn = self._conn_factory()
         return self._conn
+
+    @override
+    def get_rpyc(self) -> Optional[rpyc.core.protocol.Connection]:
+        return self._get_conn()
 
     @override
     def popen(
