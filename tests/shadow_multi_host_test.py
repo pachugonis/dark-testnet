@@ -5,6 +5,8 @@ the corresponding configuration, and running it under shadow.
 See --help.
 """
 
+from __future__ import annotations
+
 import atexit
 import argparse
 import ipaddress
@@ -24,6 +26,7 @@ import shadowtools.config as scfg
 import chutney.chutney_logging
 import chutney.envvars
 import chutney.network_tests.verify
+import chutney.shadow_util
 import chutney.TorNet
 from chutney.Util import IPAddress
 
@@ -32,7 +35,9 @@ logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 
 def configure_shadow(
     net: chutney.TorNet.Network,
+    *,
     controller_ip: ipaddress.IPv4Address,
+    network_graph: chutney.shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
     current_script = os.path.abspath(__file__)
     hosts = {}
@@ -47,13 +52,13 @@ def configure_shadow(
 
     # Each host just runs the `rpyc_classic` server, which we use to start
     # processes etc. from the controlling host.
-    for node in net._nodes:
+    for node in net.nodes:
         # Configure a Host in the shadow simulation for each chutney node.
         ip = str(node.ip.unwrap("missing IP"))
         hosts[node.nick] = scfg.Host(
             # All use the same network "node". shadow network nodes are
             # analogous to a router or ASN.
-            network_node_id=0,
+            network_node_id=network_graph.network_node_id_for_hostname(node.nick),
             ip_addr=ip,
             processes=[
                 scfg.Process(
@@ -66,8 +71,9 @@ def configure_shadow(
             ],
         )
     # The "controller" host, from which we'll run chutney etc.
-    hosts["controller"] = scfg.Host(
-        network_node_id=0,
+    controller_hostname = "controller"
+    hosts[controller_hostname] = scfg.Host(
+        network_node_id=network_graph.network_node_id_for_hostname(controller_hostname),
         ip_addr=str(controller_ip),
         processes=[
             scfg.Process(
@@ -109,7 +115,7 @@ def configure_shadow(
             use_cpu_pinning=False,
             use_worker_spinning=False,
         ),
-        network=scfg.Network(graph=scfg.Graph(type="1_gbit_switch")),
+        network=scfg.Network(graph=scfg.Graph(type="gml", inline=network_graph.gml())),
         hosts=hosts,
     )
 
@@ -208,11 +214,31 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
         network.init(data_dir=chutney.envvars.DATA_DIR.get(ns=ns))
+        default_net_label = "default-net"
+        # Equivalent to shadow's built-in
+        # ["1_gbit_switch"](https://shadow.github.io/docs/guide/shadow_config_spec.html#networkgraphtype)
+        # network. We construct it explicitly to exercise the graph-construction
+        # code, in preparation for supporting non-standard networks.
+        network_graph = chutney.shadow_util.ShadowNetworkGraph(
+            default_network_node=chutney.shadow_util.ShadowNetworkNode(
+                label=default_net_label,
+                host_bandwidth_up="1 Gbit",
+                host_bandwidth_down="1 Gbit",
+                self_edge_properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+                    latency="1 ms",
+                    packet_loss=0.0,
+                ),
+            ),
+            addtl_network_nodes=[],
+            edges=[],
+        )
         shadow_config = configure_shadow(
             network,
             controller_ip=self._controller_ip,
+            network_graph=network_graph,
         )
         shadow_config_path = network.dir.joinpath("shadow.yaml")
+
         with shadow_config_path.open("w") as shadow_yaml:
             yaml.dump(shadow_config, stream=shadow_yaml)
         shadow_path = "shadow"
