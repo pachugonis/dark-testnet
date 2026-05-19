@@ -9,6 +9,7 @@ import sqlite3
 
 from collections.abc import Collection
 from pathlib import Path
+from typeguard import check_type
 from typing import Optional, TYPE_CHECKING
 from typing_extensions import override
 
@@ -241,7 +242,16 @@ class LocalArtiNodeController(NodeController):
         db_path = self._node.dir.joinpath("cache", "dir.sqlite3")
         if not db_path.exists():
             return None
-        return sqlite3.connect(self._node.dir.joinpath("cache", "dir.sqlite3"))
+        rpyc_conn = self._launcher.get_rpyc()
+        if rpyc_conn:
+            # Use the *remote* sqlite3 module via rpyc.
+            # This is to address #40053 in particular, and partially
+            # addresses #40054.
+            rsqlite3 = rpyc_conn.modules.sqlite3
+        else:
+            rsqlite3 = sqlite3
+        conn = rsqlite3.connect(self._node.dir.joinpath("cache", "dir.sqlite3"))
+        return check_type(conn, sqlite3.Connection)
 
     def _get_md_consensus_path(self) -> Optional[Path]:
         con = self._get_sqlite_conn()
