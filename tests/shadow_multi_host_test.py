@@ -22,6 +22,7 @@ from typing import Optional, Sequence
 from typing_extensions import override
 
 import shadowtools.config as scfg
+from typeguard import check_type
 
 import chutney.chutney_logging
 import chutney.envvars
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 def configure_shadow(
     net: chutney.TorNet.Network,
     *,
+    controller_hostname: str,
     controller_ip: ipaddress.IPv4Address,
     network_graph: chutney.shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
@@ -71,7 +73,6 @@ def configure_shadow(
             ],
         )
     # The "controller" host, from which we'll run chutney etc.
-    controller_hostname = "controller"
     hosts[controller_hostname] = scfg.Host(
         network_node_id=network_graph.network_node_id_for_hostname(controller_hostname),
         ip_addr=str(controller_ip),
@@ -161,9 +162,8 @@ class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
             subparsers=subparsers,
             require_net_spec_group=None,
         )
-        chutney.network_tests.verify.VerifyConfig.register_argparser(
-            self._get_subparser()
-        )
+        subparser = self._get_subparser()
+        chutney.network_tests.verify.VerifyConfig.register_argparser(subparser)
 
     @staticmethod
     @override
@@ -199,6 +199,21 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
             require_net_spec_group=True,
             node_config_overrides=overrides,
         )
+        subparser = self._get_subparser()
+        subparser.add_argument(
+            "--latency", help="network latency between chutney nodes", default="1 ms"
+        )
+        subparser.add_argument(
+            "--host-bandwidth",
+            help="bandwidth (up and down) for chutney nodes",
+            default="1 Gbit",
+        )
+        subparser.add_argument(
+            "--packet-loss",
+            type=float,
+            help="packet loss between chutney nodes [0, 1]",
+            default=0.0,
+        )
         self._controller_ip = controller_ip
 
     @staticmethod
@@ -215,25 +230,55 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
         network.init(data_dir=chutney.envvars.DATA_DIR.get(ns=ns))
         default_net_label = "default-net"
-        # Equivalent to shadow's built-in
-        # ["1_gbit_switch"](https://shadow.github.io/docs/guide/shadow_config_spec.html#networkgraphtype)
-        # network. We construct it explicitly to exercise the graph-construction
-        # code, in preparation for supporting non-standard networks.
+        controller_net_label = "controller-net"
+        controller_hostname = "controller-host"
+        latency = check_type(ns.latency, str)
+        bandwidth = check_type(ns.host_bandwidth, str)
+        packet_loss = check_type(ns.packet_loss, float)
+        # We let each chutney node be assigned to the default network node, which has
+        # configurable link properties for communicating with other network nodes.
+        #
+        # The "controller" node, from which we run chutney and remotely
+        # orchestrate the other nodes, is hard coded to have high bandwidth, and
+        # low latency to itself and other nodes.
         network_graph = chutney.shadow_util.ShadowNetworkGraph(
             default_network_node=chutney.shadow_util.ShadowNetworkNode(
                 label=default_net_label,
-                host_bandwidth_up="1 Gbit",
-                host_bandwidth_down="1 Gbit",
+                host_bandwidth_up=bandwidth,
+                host_bandwidth_down=bandwidth,
                 self_edge_properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
-                    latency="1 ms",
-                    packet_loss=0.0,
+                    latency=latency,
+                    packet_loss=packet_loss,
                 ),
             ),
-            addtl_network_nodes=[],
-            edges=[],
+            addtl_network_nodes=[
+                (
+                    chutney.shadow_util.ShadowNetworkNode(
+                        label=controller_net_label,
+                        host_bandwidth_up="1 Gbit",
+                        host_bandwidth_down="1 Gbit",
+                        self_edge_properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+                            latency="1 ms",
+                            packet_loss=0.0,
+                        ),
+                    ),
+                    [controller_hostname],
+                ),
+            ],
+            edges=[
+                chutney.shadow_util.ShadowNetworkEdge(
+                    src_label=controller_net_label,
+                    dst_label=default_net_label,
+                    properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+                        latency="1 ms",
+                        packet_loss=0.0,
+                    ),
+                ),
+            ],
         )
         shadow_config = configure_shadow(
             network,
+            controller_hostname=controller_hostname,
             controller_ip=self._controller_ip,
             network_graph=network_graph,
         )
