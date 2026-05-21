@@ -201,11 +201,18 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         )
         subparser = self._get_subparser()
         subparser.add_argument(
-            "--latency", help="network latency between chutney nodes", default="1 ms"
+            "--latency",
+            help="network latency between chutney nodes",
+            # Some not-entirely-trivial latency to exercise less-than-ideal
+            # conditions. Experimentally, more than this starts causing failures
+            # for some networks (which perhaps ought to be debugged).
+            default="10 ms",
         )
         subparser.add_argument(
             "--host-bandwidth",
             help="bandwidth (up and down) for chutney nodes",
+            # Experimentally, less than this starts causing failures for some
+            # networks (which perhaps ought to be debugged).
             default="1 Gbit",
         )
         subparser.add_argument(
