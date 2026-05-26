@@ -384,7 +384,7 @@ python-lint:
   - FAILURES=""
 
   - python3 -m pip install mypy=="$MYPY_VERSION"
-  - python3 -m pip install types-paramiko types-PyYAML
+  - python3 -m pip install types-paramiko types-PyYAML types-networkx
   - python3 -m pip install --no-index --find-links=./wheels shadowtools
   - if ! mypy --exclude build . ; then FAILURES+=" mypy"; fi
 
