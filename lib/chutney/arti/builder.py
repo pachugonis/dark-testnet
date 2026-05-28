@@ -325,3 +325,11 @@ class LocalArtiNodeBuilder(NodeBuilder):
         if path.exists():
             logger.warning(f"Overwriting existing client key at {path}")
         path.write_text(client_pubkey)
+
+    @override
+    def getPtExtra(self) -> Option[str]:
+        if self._node._config.pt_bridge:
+            raise chutney.errors.ChutneyUnimplementedError(
+                "chutney pt_bridge unimplemented"
+            )
+        return Option(None)

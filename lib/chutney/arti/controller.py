@@ -20,10 +20,6 @@ import chutney.errors
 import chutney.known_bins
 import chutney.launcher
 
-from chutney.Util import (
-    Option,
-)
-
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet
 
@@ -45,14 +41,6 @@ class LocalArtiNodeController(NodeController):
     @property
     def _launcher(self) -> chutney.launcher.Launcher:
         return self._node._launcher
-
-    @override
-    def getPtExtra(self) -> Option[str]:
-        if self._node._config.pt_bridge:
-            raise chutney.errors.ChutneyUnimplementedError(
-                "chutney pt_bridge unimplemented"
-            )
-        return Option(None)
 
     @override
     def getUncheckedDirInfoWaitTime(self) -> float:
