@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Union, Optional, Literal, Callable
@@ -258,7 +259,7 @@ class Launcher(ABC):
         # close_fds: bool = True,
         # shell: bool = False,
         cwd: Optional[Path] = None,
-        # env: _ENV | None = None,
+        env: Optional[Mapping[str, str]] = None,
         # universal_newlines: bool | None = None,
         # startupinfo: Any | None = None,
         # creationflags: int = 0,
@@ -396,6 +397,7 @@ class LocalLauncher(Launcher):
         args: CMD,
         *,
         # bufsize: int = -1,
+        env: Optional[Mapping[str, str]] = None,
         capture_strategy: Capture = Capture.SEPARATE,
         text: Literal[True],
         known_bin: Optional[KnownBin],
@@ -420,6 +422,7 @@ class LocalLauncher(Launcher):
                 stderr=stderr,
                 text=text,
                 cwd=cwd,
+                env=env,
             )
         except FileNotFoundError as e:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
@@ -841,6 +844,7 @@ class SshLauncher(Launcher):
         text: Literal[True],
         known_bin: Optional[KnownBin],
         cwd: Optional[Path] = None,
+        env: Optional[Mapping[str, str]] = None,
     ) -> Popen:
         assert text is True, "type checker should have ensured"
 
@@ -862,6 +866,19 @@ class SshLauncher(Launcher):
         window_size = 2097152
 
         channel = self._transport().open_session(window_size=window_size)
+
+        env = env or os.environ
+        # This updates rather than replacing the environment. This is probably
+        # ok, or even preferable. e.g. we may not want to mess with ssh-related
+        # env vars.
+        #
+        # It may also silently ignore some env vars that the server doesn't
+        # allow to be overridden. Again this is probably ok, or even preferable.
+        # <https://docs.paramiko.org/en/latest/api/channel.html#paramiko.channel.Channel.update_environment>
+        #
+        # If we end up needing more power, we can set the environment variables
+        # in the wrapper shell-script below, intead.
+        channel.update_environment(env)
 
         if capture_strategy is Capture.SEPARATE:
             channel.set_combine_stderr(False)
@@ -1013,6 +1030,7 @@ class RpycLauncher(Launcher):
         args: CMD,
         *,
         # bufsize: int = -1,
+        env: Optional[Mapping[str, str]] = None,
         capture_strategy: Capture = Capture.SEPARATE,
         text: Literal[True],
         known_bin: Optional[KnownBin],
@@ -1048,6 +1066,7 @@ class RpycLauncher(Launcher):
                 stderr=stderr,
                 text=text,
                 cwd=cwd_str,
+                env=env,
             )
         except FileNotFoundError as e:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args) from e
