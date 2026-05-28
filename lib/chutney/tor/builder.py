@@ -495,17 +495,6 @@ class LocalNodeBuilder(NodeBuilder):
             port = self._node.ptport
             pt_transport = Option(self._node._config.pt_transport)
             pt_extra = self._node._controller.getPtExtra()
-            if pt_extra.is_none():
-                # obfs4 pt bridges (and possibly others) don't generate their
-                # `pt_extra` until after they've *started*.  We should probably
-                # return `[]` here, or avoid calling this function at all for a
-                # pt bridge that hasn't started yet.  For now we preserve legacy
-                # behavior of just setting pt_extra to an empty string, which
-                # causes validation to pass, but a pt bridge client won't
-                # actually be able to connect.
-                # TODO(#40023): Once #40023 is fixed, revisit doing something else here.
-                logger.debug(f"Couldn't load pt_extra from {self._node.dir}")
-                pt_extra = Option("")
         else:
             # the orport is the same on IPv4 and IPv6
             port = self._node.orport
