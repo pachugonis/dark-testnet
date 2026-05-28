@@ -494,7 +494,7 @@ class LocalNodeBuilder(NodeBuilder):
         if self._node._config.pt_bridge:
             port = self._node.ptport
             pt_transport = Option(self._node._config.pt_transport)
-            pt_extra = self.getPtExtra()
+            pt_extra = Option(self._get_pt_extra())
         else:
             # the orport is the same on IPv4 and IPv6
             port = self._node.orport
@@ -600,29 +600,25 @@ class LocalNodeBuilder(NodeBuilder):
         )
         path.write_text(client_pubkey)
 
-    @override
-    def getPtExtra(self) -> Option[str]:
+    def _get_pt_extra(self) -> str:
         """Load extra bridge info to use this node as a PT bridge.
 
         Returns an empty string if there is no such info (e.g. this isn't a PT bridge).
-        Returns None if we *expect* there to be such info but couldn't locate it (yet).
         """
         # `match` would be nice here, but requires python 3.10.
         ptt = self._node._config.pt_transport
         if ptt == "":
-            return Option("")
+            return ""
         elif ptt == "obfs4":
             # c-tor expects/requires this path. Doesn't appear to be documented,
             # as it's meant to be an opaque implementation detail. We have to
             # use it though, to be able to generate and get the bridge
             # parameters before actually launching.
             pt_state_path = Path(self._node.dir, "pt_state")
-            return Option(
-                _get_obfs4_extra_args(
-                    launcher=self._launcher,
-                    obfs4proxy_exe=str(self._node._config.pt_executable),
-                    pt_state_path=pt_state_path,
-                )
+            return _get_obfs4_extra_args(
+                launcher=self._launcher,
+                obfs4proxy_exe=str(self._node._config.pt_executable),
+                pt_state_path=pt_state_path,
             )
         else:
             raise chutney.errors.ChutneyError("Unhandled pt_transport: " + ptt)
