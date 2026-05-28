@@ -240,7 +240,6 @@ class Node(ToCustomJsonable):
                     "RPYC_INSECURE can only be used on a trusted network"
                 )
             self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
-
         else:
             assert_never(config.launcher_backend)
         self._builder: NodeBuilder
