@@ -292,7 +292,13 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         shadow_config_path = network.dir.joinpath("shadow.yaml")
 
         with shadow_config_path.open("w") as shadow_yaml:
-            yaml.dump(shadow_config, stream=shadow_yaml)
+            yaml.dump(
+                shadow_config,
+                stream=shadow_yaml,
+                # Force strings to be quoted.
+                # <https://github.com/yaml/pyyaml/issues/860>
+                default_style='"',
+            )
         shadow_path = "shadow"
         try:
             subprocess.check_call(
