@@ -1398,6 +1398,38 @@ class Network(ToCustomJsonable, FromDecodedJson):
             n._builder.postConfig(network)
 
         self._exchange_restricted_discovery_keys(config_phase=config_phase)
+        self._write_v3_bandwidths(config_phase=config_phase)
+
+    def v3_bandwidths_path(self) -> Path:
+        return self.dir.joinpath("v3bandwidths")
+
+    def _write_v3_bandwidths(self, *, config_phase: int) -> None:
+        """Generate a v3 bandwidth file.
+
+        We give all relays equal, non-trivial, bandwidth.  This is primarily to
+        ensure that relays get the Fast flag, fixing
+        <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40055>.
+
+        format: <https://spec.torproject.org/bandwidth-file-spec/index.html>
+        """
+        # From tor manpage "To avoid inconsistent reads, bandwidth data should
+        # be written to temporary file, then renamed to the configured
+        # filename."
+        #
+        # TODO: consider getting rid of config_phases. We'd then only need to write
+        # this file once, before the authorities are started.
+        # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40056>
+        tmppath = self.v3_bandwidths_path().with_suffix(".tmp")
+        with tmppath.open("w") as f:
+            f.write(f"{int(time.time())}\n")
+            for n in self.nodes:
+                if (
+                    n._config.config_phase > config_phase
+                    or not n._config.consensus_relay
+                ):
+                    continue
+                f.write(f"node_id=${n.fingerprint.unwrap()} bw=4096 nick={n.nick}\n")
+        tmppath.rename(self.v3_bandwidths_path())
 
     def _write_network_json(self) -> None:
         """Write out the json file describing this network."""

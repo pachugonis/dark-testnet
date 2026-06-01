@@ -316,6 +316,7 @@ def format(n: TorNet.Node, tor_version: str) -> str:
 
             ConsensusParams cc_alg=2
             """)
+        res += f"V3BandwidthsFile {n._network.v3_bandwidths_path()}\n"
     if n._config.bridgeauthority:
         if not n._config.authority:
             raise ChutneyError(
