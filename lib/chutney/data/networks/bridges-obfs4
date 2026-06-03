@@ -18,7 +18,6 @@ BridgeClient = Node(
     client=1,
     bridgeclient=1,
     pt_transport="obfs4",
-    config_phase=2,
     launch_phase=2,
     # incompatible with pt_transport
     sandbox=0,
