@@ -307,7 +307,6 @@ def format(n: TorNet.Node, tor_version: str) -> str:
 
             # We enable TestingDirAuthVoteGuard to avoid Guard stability requirements
             TestingDirAuthVoteGuard *
-            TestingDirAuthVoteExit *
             TestingDirAuthVoteHSDir *
 
             # We set TestingMinExitFlagThreshold to 0 to avoid Exit bandwidth requirements
@@ -317,6 +316,28 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             ConsensusParams cc_alg=2
             """)
         res += f"V3BandwidthsFile {n._network.v3_bandwidths_path()}\n"
+        # Ensure that intended exits get the exit flag.
+        #
+        # Alternatively we could just use '*' here, but this results in
+        # non-exits getting the Exit flag, which can be confusing.
+        exit_fps = [
+            other.fingerprint.unwrap_or_raise(
+                # Likely reason fingerprint would be unavailable is if the exit has
+                # a later config phase than the authority. Currently no reason to do that.
+                #
+                # TODO: consider getting rid of config_phases altogether:
+                # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40056>
+                #
+                # Alternatively, we could rewrite the authority torrc when exits
+                # are added and force a reload via sighup.
+                lambda: ChutneyError(
+                    f"authority {n.nick} couldn't get fingeprint for exit {other.nick}."
+                )
+            )
+            for other in n._network.nodes
+            if other._config.exit
+        ]
+        res += f"TestingDirAuthVoteExit {','.join(exit_fps)}\n"
     if n._config.bridgeauthority:
         if not n._config.authority:
             raise ChutneyError(
