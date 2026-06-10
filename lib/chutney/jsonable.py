@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 
 from abc import ABC, abstractmethod
@@ -29,6 +30,10 @@ CustomJsonable: TypeAlias = Union[
     "ToCustomJsonable",
     # We convert to str.
     Path,
+    ipaddress.IPv4Address,
+    ipaddress.IPv6Address,
+    ipaddress.IPv4Network,
+    ipaddress.IPv6Network,
     # We use the enumerator name.
     Enum,
 ]
@@ -95,7 +100,16 @@ class CustomEncoder(json.JSONEncoder):
             return {k: v for k, v in obj.items()}
         elif isinstance(obj, Collection):
             return [x for x in obj]
-        elif isinstance(obj, Path):
+        elif isinstance(
+            obj,
+            (
+                Path,
+                ipaddress.IPv4Address,
+                ipaddress.IPv6Address,
+                ipaddress.IPv4Network,
+                ipaddress.IPv6Network,
+            ),
+        ):
             return str(obj)
         elif isinstance(obj, Enum):
             return obj.name
