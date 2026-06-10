@@ -1862,7 +1862,9 @@ class CLICommand(ABC):
           network. Any flags included here will *not* be registered as command-line flags for
           this command.
         """
-        self._subparser = subparsers.add_parser(self.name(), help=self.help())
+        self._subparser = subparsers.add_parser(
+            self.name(), help=self.help(), description=self.description()
+        )
         self._net_builder = CLINetworkBuilder(
             self._get_subparser(),
             require_net_spec_group=require_net_spec_group,
@@ -1879,8 +1881,13 @@ class CLICommand(ABC):
     @staticmethod
     @abstractmethod
     def help() -> str:
-        """Help string of the command"""
+        """Short help string of the command (displayed in command list)"""
         ...
+
+    @classmethod
+    def description(cls) -> str:
+        """Longer description of the command (displayed in subcommand --help)"""
+        return cls.help()
 
     @abstractmethod
     def run(self, network: Network, ns: argparse.Namespace) -> None:
