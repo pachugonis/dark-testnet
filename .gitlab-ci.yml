@@ -298,6 +298,7 @@ shadow-test-network:
           --arti="$arti" \
           --tor="$tor" \
           --tor-gencert="$tor_gencert" \
+          --controller-shell-code='chutney verify --verify-listen-address=$SHADOW_IP --hs-multi-client=true' \
           --net="$flavor"
       fi
       (( i++ )) || true
