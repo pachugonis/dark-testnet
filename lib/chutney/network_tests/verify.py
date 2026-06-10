@@ -355,10 +355,21 @@ def _report_bandwidth(
     MIN_ELAPSED_TIME = 1.0  # Seconds.
     cumulative_data_sent = total_path_node_count * data_length
     elapsed_time = end_time - start_time
-    if cumulative_data_sent >= MIN_BWDATA and elapsed_time >= MIN_ELAPSED_TIME:
-        # Report megabytes per second
-        BWDIVISOR = 1024 * 1024
-        single_stream_bandwidth = data_length / elapsed_time / BWDIVISOR
-        overall_bandwidth = cumulative_data_sent / elapsed_time / BWDIVISOR
-        print("Single Stream Bandwidth: %.2f MBytes/s" % single_stream_bandwidth)
-        print("Overall tor Bandwidth: %.2f MBytes/s" % overall_bandwidth)
+    if cumulative_data_sent < MIN_BWDATA:
+        print(
+            f"Not enough data sent to calculate meaningful bandwidth"
+            f" ({cumulative_data_sent} < {MIN_BWDATA})"
+        )
+        return
+    if elapsed_time < MIN_ELAPSED_TIME:
+        print(
+            f"Didn't send data for long enough to calculate meaningful bandwidth"
+            f" ({elapsed_time} < {MIN_ELAPSED_TIME})"
+        )
+        return
+    # Report megabytes per second
+    BWDIVISOR = 1024 * 1024
+    single_stream_bandwidth = data_length / elapsed_time / BWDIVISOR
+    overall_bandwidth = cumulative_data_sent / elapsed_time / BWDIVISOR
+    print("Single Stream Bandwidth: %.2f MBytes/s" % single_stream_bandwidth)
+    print("Overall tor Bandwidth: %.2f MBytes/s" % overall_bandwidth)
