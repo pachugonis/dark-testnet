@@ -544,8 +544,8 @@ class Node(ToCustomJsonable):
         # json output that is consumed by other tools.
         return dict(
             nick=self.nick,
-            ip=self.ip.map(str).as_optional(),
-            ipv6_addr=self.ipv6_addr.map(str).as_optional(),
+            ip=self.ip,
+            ipv6_addr=self.ipv6_addr,
             auth_passphrase=self.auth_passphrase,
             dir=str(self.dir.absolute()),
             fingerprint=self.fingerprint.as_optional(),
@@ -855,8 +855,6 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     @override
     def to_custom_jsonable(self) -> CustomJsonable:
         d = dataclasses.asdict(self)
-        d["trusted_networks"] = [str(n) for n in d["trusted_networks"]]
-        d["hs_target_address"] = str(d["hs_target_address"])
         return d
 
     @override
