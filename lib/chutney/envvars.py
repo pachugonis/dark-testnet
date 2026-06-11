@@ -196,7 +196,10 @@ DEBUG = EnvVarBool("CHUTNEY_DEBUG", False, "Enable additional debug output")
 DATA_DIR = EnvVarPath(
     "CHUTNEY_DATA_DIR",
     Path("net"),
-    "Directory in which 'nodes' directories are stored. (Absolute, or relative to CHUTNEY_PATH)",
+    (
+        "Directory in which 'nodes' directories are stored."
+        " (Absolute, or relative to current directory)"
+    ),
 )
 
 # TODO: it might be nice to register these with the command-line parser.
