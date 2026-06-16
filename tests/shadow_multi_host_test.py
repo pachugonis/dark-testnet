@@ -7,7 +7,6 @@ See --help.
 
 from __future__ import annotations
 
-import atexit
 import argparse
 import ipaddress
 import logging
@@ -38,6 +37,7 @@ def configure_shadow(
     net: chutney.TorNet.Network,
     *,
     controller_hostname: str,
+    controller_shell_code: str,
     controller_ip: ipaddress.IPv4Address,
     network_graph: chutney.shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
@@ -83,9 +83,18 @@ def configure_shadow(
                 args=[
                     f"--data-dir={net.dir.parent}",
                     ControllerNodeCLICommand.name(),
-                    f"--verify-listen-address={str(controller_ip)}",
+                    f"--controller-shell-code={controller_shell_code}",
+                    # By default, shadow processes start executing in their
+                    # per-host directory. The controller-shell-code might expect
+                    # to run from the directory, though.
+                    f"--cwd={os.getcwd()}",
                 ],
-                environment=dict(os.environ),
+                environment=dict(
+                    **os.environ,
+                    CHUTNEY_DATA_DIR=str(net.dir.parent),
+                    SHADOW_HOSTNAME=controller_hostname,
+                    SHADOW_IP=str(controller_ip),
+                ),
                 # Give a little (simulated) time for the rpyc servers to start listening
                 start_time="1m",
             ),
@@ -163,7 +172,16 @@ class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
             require_net_spec_group=None,
         )
         subparser = self._get_subparser()
-        chutney.network_tests.verify.VerifyConfig.register_argparser(subparser)
+        subparser.add_argument(
+            "--controller-shell-code",
+            type=str,
+            help="shell code to run on controller node",
+        )
+        subparser.add_argument(
+            "--cwd",
+            type=str,
+            help="working directory from which to start executing",
+        )
 
     @staticmethod
     @override
@@ -177,12 +195,26 @@ class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
 
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
-        atexit.register(network.stop)
-        network.bootstrap()
-
-        verify_config = chutney.network_tests.verify.VerifyConfig.from_envargs(ns=ns)
-        verify_config.hs_multi_client = True
-        chutney.network_tests.verify.run_test(network, config=verify_config)
+        os.chdir(ns.cwd)
+        try:
+            network.bootstrap()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            subprocess.run(
+                [
+                    "/usr/bin/env",
+                    "sh",
+                    "-c",
+                    ns.controller_shell_code,
+                ],
+                check=True,
+            )
+        finally:
+            # whatever happens, we want to try to stop any running network node
+            # processes, allowing the simulation time to move quickly to the
+            # stop-time. Otherwise we'll just keep simulating consensus updates
+            # etc until the stop-time.
+            network.stop()
 
 
 class E2ECLICommand(chutney.TorNet.CLICommand):
@@ -221,6 +253,19 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
             help="packet loss between chutney nodes [0, 1]",
             default=0.0,
         )
+        subparser.add_argument(
+            "--controller-shell-code",
+            type=str,
+            help=(
+                "shell code to run on 'controller' shadow virtual host."
+                " It may make use of the following environment variables,"
+                " which will already be set: "
+                " CHUTNEY_DATA_DIR to point to the parent of the generated network dir;"
+                " SHADOW_IP to the 'public' IP of the controller host;"
+                " SHADOW_HOSTNAME to the hostname of the controller host."
+            ),
+            default="chutney verify --verify-listen-address=$SHADOW_IP --hs-multi-client=true",
+        )
         self._controller_ip = controller_ip
 
     @staticmethod
@@ -231,7 +276,24 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
     @staticmethod
     @override
     def help() -> str:
-        return "Run the test"
+        return "Runs a chutney network and some given shell code under shadow."
+
+    @classmethod
+    @override
+    def description(cls) -> str:
+        # Note that argparse removes extra whitespace on display, so we can't do
+        # multiple paragraphs, lists, etc.
+        return textwrap.dedent("""
+            Initializes a chutney network, as specified by command-line args.
+            Most of the options provided by "chutney --init" are allowed, except
+            for some options which are forced for shadow compatibility (such as
+            disabling ipv6). Then creates a shadow config file (shadow.yaml in
+            the network directory), with a virtual host associated with each
+            chutney node, as well as a "controller" host, which is configured to
+            bootstrap the network and run the provided shell code. Finally,
+            executes shadow using the generated configuration, with outputs
+            saved to 'shadow.log' and 'shadow.data' in the network directory.
+            """)
 
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
@@ -242,6 +304,7 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         latency = check_type(ns.latency, str)
         bandwidth = check_type(ns.host_bandwidth, str)
         packet_loss = check_type(ns.packet_loss, float)
+        controller_shell_code = check_type(ns.controller_shell_code, str)
         # We let each chutney node be assigned to the default network node, which has
         # configurable link properties for communicating with other network nodes.
         #
@@ -287,6 +350,7 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
             network,
             controller_hostname=controller_hostname,
             controller_ip=self._controller_ip,
+            controller_shell_code=controller_shell_code,
             network_graph=network_graph,
         )
         shadow_config_path = network.dir.joinpath("shadow.yaml")
@@ -325,8 +389,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(description=textwrap.dedent(f"""
             Test a chutney network under the shadow simulator.
 
-            Normal usage should use the subcommand "e2e". e.g.
-            `{argv[0]} e2e --net basic`
+            Normal usage should use the subcommand "e2e". See:
+            `{argv[0]} e2e --help`
             """))
     chutney.envvars.DATA_DIR.register_argparser(parser)
     subparsers = chutney.TorNet.CLICommand.add_subparsers(parser)
