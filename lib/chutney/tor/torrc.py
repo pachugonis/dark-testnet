@@ -313,6 +313,9 @@ def format(n: TorNet.Node, tor_version: str) -> str:
             TestingMinExitFlagThreshold 0
             V3AuthNIntervalsValid 2
 
+            # Ensure all relays get Stable flag, despite having low uptimes
+            AuthDirVoteStableGuaranteeMinUptime 0
+
             ConsensusParams cc_alg=2
             """)
         res += f"V3BandwidthsFile {n._network.v3_bandwidths_path()}\n"
