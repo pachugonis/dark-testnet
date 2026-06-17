@@ -94,6 +94,49 @@ class Popen(ABC):
 class Launcher(ABC):
     """Launches and manages processes"""
 
+    def which(self, cmd: Path) -> Optional[Path]:
+        """Return the path (usable with this Launcher) of this cmd.
+
+        This is a replacement for `shutil.which`, which resolves the cmd
+        in the context of this Launcher (which e.g. may be a remote system).
+
+        Returns None if not found.
+        """
+        # command -v seems to be the best posix-shell approach, though there
+        # doesn't seem to be a way to tell it not to include shell builtins.
+        #
+        # bash has better options (type -p), but so far we've avoided depending
+        # on bash specifically.
+        #
+        # If we end up using pyrpc everywhere, we could just invoke os.which
+        # through that.
+        script = shlex.join(["command", "-v", str(cmd)])
+        res = self.run(
+            ["sh", "-c", script],
+            text=True,
+            known_bin=None,
+            capture_strategy=Capture.SEPARATE,
+        )
+        if res.returncode != 0:
+            return None
+        if not res.stdout:
+            _logger.warning(
+                f"Unexpectedly empty stdout from '{script}'. stderr: '{res.stderr}'"
+            )
+            return None
+        if res.stdout[-1] != "\n":
+            _logger.warning(
+                f"Missing newline from output of '{script}': '{res.stdout}'"
+            )
+            return None
+        # strip the newline. don't call 'strip' though, in the (unlikely) case
+        # that there's additional leading or trailing whitespace.
+        output = res.stdout[:-1]
+        if output[0] != "/":
+            _logger.debug(f"{cmd} resolved, but not to a path: '{output}''")
+            return None
+        return Path(output)
+
     def launch_detached(
         self,
         cmd: Path,
@@ -136,16 +179,11 @@ class Launcher(ABC):
         args = [str(cmd)] + args
 
         # Since there's no easy way to validate that `exec`ing the target
-        # command succeeds, do our best to validate that it *will* succeed.
-        if (
-            self.run(
-                ["test", "-x", str(cmd), "-a", "-f", str(cmd)],
-                text=True,
-                cwd=cwd,
-                known_bin=None,
-            ).returncode
-            != 0
-        ):
+        # command succeeds, pre-check that the command will be found.
+        #
+        # We *don't* use the resolved path in the actual `exec` below, to avoid
+        # changing argv[0] in the launched process.
+        if self.which(cmd) is None:
             raise chutney.errors.ChutneyMissingBinaryError(known_bin, args)
 
         # shell script to execute the command while recording to the requested paths.
@@ -508,7 +546,7 @@ class LocalLauncher(Launcher):
 
                 # replace ourselves with the specified process.
                 try:
-                    os.execv(cmd, [str(cmd)] + args)
+                    os.execvp(cmd, [str(cmd)] + args)
                 except OSError as e:
                     # exec failed. Write the errno as text into our pipe, using a
                     # file object wrapper to (paranoid-ly) handle looping if somehow
