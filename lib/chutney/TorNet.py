@@ -1799,6 +1799,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
             self._final_cleanup(wrote_dot, False, False)
         # wait for tor to exit, but don't cleanup logging
         self._final_cleanup(False, any_tor_was_running, True)
+        still_running = [n.nick for n in self._nodes if n._controller.isRunning()]
+        if still_running:
+            logger.warning(
+                f"Giving up, but some nodes appear to still be running: {still_running}"
+            )
 
     def bootstrap(self) -> None:
         """Bootstrap the network.
