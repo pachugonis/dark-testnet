@@ -1738,17 +1738,9 @@ class Network(ToCustomJsonable, FromDecodedJson):
         )
         raise ChutneyTimeoutError()
 
-    # Keep in sync with ShutdownWaitLength in torrc
-    SHUTDOWN_WAIT_LENGTH = 2
-    # Wait for at least two event loops to elapse
-    EVENT_LOOP_SLOP = 3
-    # Wait for this long after signalling tor
-    STOP_WAIT_TIME = SHUTDOWN_WAIT_LENGTH + EVENT_LOOP_SLOP
-
     def stop(self) -> None:
         """Stop our network's running tor nodes."""
         still_running = [n for n in self._nodes if n._controller.isRunning()]
-        any_tor_was_running: Final = bool(still_running)
         for sig, desc in [
             (signal.SIGINT, "SIGINT"),
             (signal.SIGINT, "another SIGINT"),
@@ -1768,13 +1760,6 @@ class Network(ToCustomJsonable, FromDecodedJson):
                         n._controller.cleanupRunFiles()
                 still_running = next_still_running
                 if not still_running:
-                    if any_tor_was_running:
-                        # TODO: Unclear whether we still need this extra wait.
-                        print(
-                            f"Waiting an additional {Network.STOP_WAIT_TIME}s"
-                            " to ensure nodes have fully exited"
-                        )
-                        time.sleep(Network.STOP_WAIT_TIME)
                     return
             for n in still_running:
                 print(f"{n.nick} is running")
