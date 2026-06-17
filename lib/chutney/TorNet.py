@@ -1738,72 +1738,48 @@ class Network(ToCustomJsonable, FromDecodedJson):
         )
         raise ChutneyTimeoutError()
 
-    # Keep in sync with ShutdownWaitLength in common.i
+    # Keep in sync with ShutdownWaitLength in torrc
     SHUTDOWN_WAIT_LENGTH = 2
     # Wait for at least two event loops to elapse
     EVENT_LOOP_SLOP = 3
     # Wait for this long after signalling tor
     STOP_WAIT_TIME = SHUTDOWN_WAIT_LENGTH + EVENT_LOOP_SLOP
 
-    def _final_cleanup(
-        self, wrote_dot: bool, any_tor_was_running: bool, cleanup_runfiles: bool
-    ) -> None:
-        """Perform final cleanup actions, based on the arguments:
-        - wrote_dot: end a series of logged dots with a newline
-        - any_tor_was_running: wait for STOP_WAIT_TIME for tor to stop
-        - cleanup_runfiles: delete old lockfiles from crashed tors
-                            rename old pid files from stopped tors
-        """
-        # make the output clearer by adding a newline
-        if wrote_dot:
-            sys.stdout.write("\n")
-            sys.stdout.flush()
-
-        # wait for tor to actually exit
-        if any_tor_was_running:
-            print("Waiting for nodes to cleanup and exit.")
-            time.sleep(Network.STOP_WAIT_TIME)
-
-        # clean up unwanted left-over file system state
-        if cleanup_runfiles:
-            for n in self._nodes:
-                n._controller.cleanupRunFiles()
-
     def stop(self) -> None:
         """Stop our network's running tor nodes."""
-        any_tor_was_running = False
+        still_running = [n for n in self._nodes if n._controller.isRunning()]
+        any_tor_was_running: Final = bool(still_running)
         for sig, desc in [
             (signal.SIGINT, "SIGINT"),
             (signal.SIGINT, "another SIGINT"),
             (signal.SIGKILL, "SIGKILL"),
         ]:
             print("Sending %s to nodes" % desc)
-            for n in self._nodes:
-                if n._controller.isRunning():
-                    any_tor_was_running = True
-                    n._controller.stop(sig=sig)
-            print("Waiting for nodes to finish.")
-            wrote_dot = False
+            for n in still_running:
+                n._controller.stop(sig=sig)
             for _ in range(15):
+                print(f"Waiting for {len(still_running)} nodes to exit", flush=True)
                 time.sleep(1)
-                if all(not n._controller.isRunning() for n in self._nodes):
-                    self._final_cleanup(wrote_dot, any_tor_was_running, True)
+                next_still_running = []
+                for n in still_running:
+                    if n._controller.isRunning():
+                        next_still_running.append(n)
+                    else:
+                        n._controller.cleanupRunFiles()
+                still_running = next_still_running
+                if not still_running:
+                    if any_tor_was_running:
+                        # TODO: Unclear whether we still need this extra wait.
+                        print(
+                            f"Waiting an additional {Network.STOP_WAIT_TIME}s"
+                            " to ensure nodes have fully exited"
+                        )
+                        time.sleep(Network.STOP_WAIT_TIME)
                     return
-                sys.stdout.write(".")
-                wrote_dot = True
-                sys.stdout.flush()
-            for n in self._nodes:
-                if n._controller.isRunning():
-                    print(f"{n.nick} is running")
-            # cleanup chutney's logging, but don't wait or cleanup files
-            self._final_cleanup(wrote_dot, False, False)
-        # wait for tor to exit, but don't cleanup logging
-        self._final_cleanup(False, any_tor_was_running, True)
-        still_running = [n.nick for n in self._nodes if n._controller.isRunning()]
-        if still_running:
-            logger.warning(
-                f"Giving up, but some nodes appear to still be running: {still_running}"
-            )
+            for n in still_running:
+                print(f"{n.nick} is running")
+        still_running_nicks = [n.nick for n in still_running]
+        raise ChutneyError(f"Failed to stop nodes: {still_running_nicks}")
 
     def bootstrap(self) -> None:
         """Bootstrap the network.
