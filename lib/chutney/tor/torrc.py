@@ -54,7 +54,6 @@ def format(n: TorNet.Node, tor_version: str) -> str:
         # Use ControlSocket rather than ControlPort unix: to support older tors
         ControlSocket {n.controlsocket or 0}
         CookieAuthentication 1
-        PidFile {n.pidfile}
 
         Log notice file {n.dir}/notice.log
         Log info file {n.dir}/info.log
@@ -81,13 +80,13 @@ def format(n: TorNet.Node, tor_version: str) -> str:
     res += _directive_for_endpoints("SocksPort", n.socksport_endpoints())
     res += _directive_for_endpoints("DnsPort", n.dnsport_endpoints())
     res += _directive_for_endpoints("ControlPort", n.controlport_endpoints())
-    if (
-        "0.4.9.1-alpha-dev" in tor_version or "0.4.9.2-alpha-dev" in tor_version
-    ) and n._config.pt_transport:
-        res += "# Work around tor#41088\n"
-        res += "RunAsDaemon 0\n"
-    else:
-        res += "RunAsDaemon 1\n"
+    # Never have tor daemonize itself.
+    # * We want to manage the pidfile externally, so that it doesn't disappear in the
+    #   middle of the the tor shutdown process, and for consistency with how we manage
+    #   arti processes. (chutney#40059)
+    # * We also previously disabled it for "0.4.9.1-alpha-dev" and "0.4.9.2-alpha-dev"
+    #   when using pluggable transports, to work around tor#41088.
+    res += "RunAsDaemon 0\n"
     if n.ip.is_some():
         if n._config.hs or n._config.relay:
             res += f"Address {n.ip.unwrap()}\n"

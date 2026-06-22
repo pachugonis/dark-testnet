@@ -128,56 +128,32 @@ class LocalNodeController(NodeController):
         if self.isRunning():
             print("{:12} is already running".format(self._node.nick))
             return
-        cmdline = [
-            self._node._config.tor,
+        cmd = Path(self._node._config.tor)
+        args = [
             "-f",
             str(self._node.torrc_path),
         ]
-        p = self._launcher.popen(
-            cmdline,
-            capture_strategy=chutney.launcher.Capture.MERGED,
+        self._launcher.launch_detached(
+            cmd=cmd,
+            args=args,
             known_bin=chutney.known_bins.TorBin(),
-            text=True,
+            # In theory nothing should go here, since we configure
+            # tor to log to files instead of stdout.
+            stdout_path=self._node.dir.joinpath("tor.stdout"),
+            # Some error messages can end up here, e.g. before setting up
+            # logging.
+            stderr_path=self._node.dir.joinpath("tor.stderr"),
+            pid_path=self._node.pidfile,
         )
-        if self.waitOnLaunch():
-            # this requires that RunAsDaemon is set.
-            res = p.communicate()
-            logger.debug(res.stdout)
-            assert (
-                res.stderr is None
-            ), "Specified MERGED output but still got separate stderr"
-            # We expect the parent process to have exited with code 0.
-            if res.returncode != 0:
-                raise chutney.errors.ChutneyError(
-                    f"Couldn't launch {self._node.nick:12}"
-                    + f" command '{' '.join(cmdline)}': "
-                    + f" exit {res.returncode},"
-                    + f" output '{res.stdout}'"
-                )
-        else:
-            # this requires RunAsDaemon to *not* be set, and is slower.
-            #
-            # poll() only catches failures before the call itself
-            # so let's sleep a little first
-            # this does, of course, slow down process launch
-            # which can require an adjustment to the voting interval
-            #
-            # avoid writing a newline or space when polling
-            # so output comes out neatly
-            print(".", end="", flush=True)
-            assert (
-                self._node._config.poll_launch_time is not None
-            ), "waitOnLaunch should have returned True"
-            time.sleep(self._node._config.poll_launch_time)
-            if not self.isRunning():
-                # Process unexpectedly exited
-                c = p.communicate()
-                # Process unexpectedly exited
-                raise chutney.errors.ChutneyError(
-                    f"'{self._node.nick:12}' unexpectedly exited with code {c.returncode}."
-                    + f" command '{' '.join(cmdline)}'"
-                    + f" after waiting {self._node._config.poll_launch_time} seconds for launch"
-                )
+        poll_launch_time = self._node._config.poll_launch_time or 0.0
+        time.sleep(poll_launch_time)
+        if not self.isRunning():
+            # Process unexpectedly exited
+            raise chutney.errors.ChutneyError(
+                f"'{self._node.nick:12}' unexpectedly exited."
+                + f" command '{' '.join([str(cmd)] + args)}'"
+                + f" after waiting {poll_launch_time} seconds for launch"
+            )
 
     @override
     def stop(self, sig: int = signal.SIGINT) -> None:
@@ -209,38 +185,6 @@ class LocalNodeController(NodeController):
         if not self.isRunning() and pidfile.exists():
             logger.debug("Renaming stale pid file for {} ...".format(self._node.nick))
             pidfile.rename(pidfile.with_suffix(".old"))
-
-    def waitOnLaunch(self) -> bool:
-        """Check whether we can wait() for the tor process to launch"""
-        # TODO: is this the best place for this code?
-        # RunAsDaemon default is 0
-        runAsDaemon = False
-        with self._node.torrc_path.open("r") as f:
-            for line in f.readlines():
-                stline = line.strip()
-                # if the line isn't all whitespace or blank
-                if len(stline) > 0:
-                    splline = stline.split()
-                    # if the line has at least two tokens on it
-                    if (
-                        len(splline) > 0
-                        and splline[0].lower() == "RunAsDaemon".lower()
-                        and splline[1] == "1"
-                    ):
-                        # use the RunAsDaemon value from the torrc
-                        # TODO: multiple values?
-                        runAsDaemon = True
-        if runAsDaemon:
-            # we must use wait() instead of poll()
-            self._node._config.poll_launch_time = None
-            return True
-        else:
-            # we must use poll() instead of wait()
-            if self._node._config.poll_launch_time is None:
-                self._node._config.poll_launch_time = (
-                    self._node._config.poll_launch_time_default
-                )
-            return False
 
     def getLogfile(self, info: bool = False) -> Path:
         """Return the expected path to the logfile for this instance."""
