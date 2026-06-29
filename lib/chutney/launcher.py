@@ -147,6 +147,7 @@ class Launcher(ABC):
         pid_path: Path,
         known_bin: KnownBin,
         cwd: Optional[Path] = None,
+        env: Optional[Mapping[str, str]] = None,
     ) -> None:
         """
         Launch a ~daemonized process.
@@ -213,6 +214,7 @@ class Launcher(ABC):
             text=True,
             known_bin=None,
             cwd=cwd,
+            env=env,
         )
 
     def run(
@@ -228,7 +230,7 @@ class Launcher(ABC):
         # close_fds: bool = True,
         # shell: bool = False,
         cwd: Optional[Path] = None,
-        # env: _ENV | None = None,
+        env: Optional[Mapping[str, str]] = None,
         # universal_newlines: Optional[bool] = None,
         # startupinfo: Any = None,
         # creationflags: int = 0,
@@ -268,7 +270,11 @@ class Launcher(ABC):
         arguments, and add extra debug info if the binary isn't found.
         """
         popen = self.popen(
-            args, capture_strategy=capture_strategy, text=True, known_bin=known_bin
+            args,
+            capture_strategy=capture_strategy,
+            text=True,
+            known_bin=known_bin,
+            env=env,
         )
         res = popen.communicate(input=input)
         if check and res.returncode != 0:
@@ -477,7 +483,9 @@ class LocalLauncher(Launcher):
         pid_path: Path,
         known_bin: KnownBin,
         cwd: Optional[Path] = None,
+        env: Optional[Mapping[str, str]] = None,
     ) -> None:
+        env = env or os.environ
         # Implementation that uses fork and exec directly.
         #
         # A bit more complex than the base-class implementation, but:
@@ -546,7 +554,7 @@ class LocalLauncher(Launcher):
 
                 # replace ourselves with the specified process.
                 try:
-                    os.execvp(cmd, [str(cmd)] + args)
+                    os.execvpe(cmd, [str(cmd)] + args, env)
                 except OSError as e:
                     # exec failed. Write the errno as text into our pipe, using a
                     # file object wrapper to (paranoid-ly) handle looping if somehow
