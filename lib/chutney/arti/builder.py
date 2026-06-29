@@ -141,6 +141,10 @@ class LocalArtiNodeBuilder(NodeBuilder):
         config["storage"] = {
             "cache_dir": str(self._node.dir.joinpath("cache")),
             "state_dir": str(self._node.dir.joinpath("state")),
+            # Workaround for arti#2576
+            "port_info_file": str(
+                self._node.dir.joinpath("state", "public", "port_info.json")
+            ),
         }
         # The "tor_network.bridges" section may exist in the base config, and may contain
         # bridge entries.  Here we just override whether bridges are enabled at

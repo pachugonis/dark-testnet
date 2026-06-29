@@ -30,6 +30,10 @@ def tor_config(net: TorNet.Network) -> dict[str, object]:
         "storage": {
             "cache_dir": str(net.dir.joinpath("arti", "cache")),
             "state_dir": str(net.dir.joinpath("arti", "state")),
+            # Workaround for arti#2576
+            "port_info_file": str(
+                net.dir.joinpath("arti", "state", "public", "port_info.json")
+            ),
         },
         "path_rules": {
             # These values disable enforce_distance entirely; we can replace them
