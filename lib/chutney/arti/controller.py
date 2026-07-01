@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import signal
 import sqlite3
@@ -85,6 +86,20 @@ class LocalArtiNodeController(NodeController):
         if self.isRunning():
             print("{:12} is already running".format(self._node.nick))
             return
+        env = dict(os.environ)
+
+        # Some arti storage paths are derived directly from XDG environment
+        # variables, rather than from base directories specified in the
+        # `storage` section (arti#1162).
+        # For now, work around by setting the XDG variables.
+
+        # sets ARTI_CACHE
+        env["XDG_CACHE_HOME"] = str(self._node.dir.joinpath("cache"))
+        # sets ARTI_CONFIG
+        env["XDG_CONFIG_HOME"] = str(self._node.dir.joinpath("config"))
+        # sets ARTI_SHARED_DATA and ARTI_LOCAL_DATA
+        env["XDG_DATA_HOME"] = str(self._node.dir.joinpath("state"))
+
         self._launcher.launch_detached(
             cmd=Path(self._node._config.arti),
             args=[
@@ -103,6 +118,7 @@ class LocalArtiNodeController(NodeController):
             stderr_path=self._node.dir.joinpath("arti.stderr"),
             pid_path=self._node.pidfile,
             known_bin=chutney.known_bins.ArtiBin(),
+            env=env,
         )
 
     @override
