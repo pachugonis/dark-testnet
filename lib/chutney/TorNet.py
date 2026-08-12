@@ -1333,6 +1333,34 @@ class Network(ToCustomJsonable, FromDecodedJson):
     def init(self, data_dir: Optional[Path] = None) -> None:
         """Create a nodes directory and metadata"""
         data_dir = data_dir or envvars.DATA_DIR.get()
+
+        # Attempt to stop the user from shooting themselves in the foot
+        # by "orphaning" a running chutney network, and then creating a new
+        # one that won't start due to ports already being in use.
+        #
+        # We ignore most errors, since we don't want to block initializing a new
+        # network if the previous one is missing or somehow corrupted.
+        running = 0
+        prev_network = None
+        try:
+            prev_network = Network.from_data_dir(data_dir)
+        except Exception as e:
+            logger.debug(f"Couldn't load previous network from {data_dir}: {e}")
+        if prev_network is not None:
+            for n in prev_network._nodes:
+                node_is_running = False
+                try:
+                    node_is_running = n._controller.isRunning()
+                except Exception as e:
+                    logger.debug(
+                        f"Couldn't determine whether {n.nick} in previous network"
+                        f" {prev_network.dir} is running: {e}"
+                    )
+                if node_is_running:
+                    running += 1
+        if running > 0:
+            raise ChutneyError("Previous network still running. Try running 'stop'.")
+
         self._create_new_nodes_dir(data_dir=data_dir)
         self._write_network_json()
 
