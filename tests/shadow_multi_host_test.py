@@ -17,10 +17,12 @@ import sys
 import textwrap
 import time
 import yaml
+from pathlib import Path
 from typing import Optional, Sequence
 from typing_extensions import override
 
 import shadowtools.config as scfg
+from shadowtools import shadow_exec
 from typeguard import check_type
 
 import chutney.chutney_logging
@@ -363,15 +365,13 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
                 # <https://github.com/yaml/pyyaml/issues/860>
                 default_style='"',
             )
-        shadow_path = "shadow"
+        shadow_path = Path("shadow")
         try:
-            subprocess.check_call(
-                [
-                    shadow_path,
-                    "--data-directory=" + str(network.dir.joinpath("shadow.data")),
-                    str(shadow_config_path),
-                ],
-                stdout=network.dir.joinpath("shadow.log").open("w"),
+            shadow_exec.run_shadow_watching_process(
+                shadow_bin=shadow_path,
+                shadow_config_path=shadow_config_path,
+                watch_host=controller_hostname,
+                dstdir=network.dir,
             )
         except FileNotFoundError:
             logger.error(
@@ -379,7 +379,7 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
                 " Try installing from <https://github.com/shadow/shadow/>"
                 " and ensuring it's on your path."
             )
-            raise
+            sys.exit(1)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

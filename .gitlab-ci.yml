@@ -131,6 +131,10 @@ network-config-tests:
   <<: *debian-template
   needs:
   - build-arti
+  variables:
+    # debug output is a bit too noisy here, exceeding the gitlab job log limit
+    # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40063>
+    CHUTNEY_DEBUG: 0
   script:
   - apt-get install
       obfs4proxy
@@ -147,8 +151,8 @@ build-shadow:
   variables:
     JOB_SHADOW_REPO: "https://github.com/shadow/shadow.git"
     JOB_SHADOW_BRANCH: "main"
-    # main @ 2025-12-10
-    JOB_SHADOW_COMMIT: "7b2d0c526b93594e9572a9f639faccd6a715e1f4"
+    # main @ 2026-07-22
+    JOB_SHADOW_COMMIT: "6599c7c7e1726bf621d10ef83f528575fcf0348d"
   artifacts:
     paths:
       - opt/shadow
@@ -313,6 +317,10 @@ shadow-test-network:
 
 network-config-tests-diff:
   <<: *debian-template
+  variables:
+    # debug output is a bit too noisy here, exceeding the gitlab job log limit
+    # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40063>
+    CHUTNEY_DEBUG: 0
   needs:
   - build-shadow
   - build-arti
