@@ -36,12 +36,12 @@ def run_tor(
     stdouterr = res.stdout
     if res.returncode != 0 and not tolerate_error:
         raise chutney.errors.ChutneyError(
-            f"Failed to run cmdline: {cmdline}. Output: {stdouterr}"
+            f"Failed to run cmdline: {launcher.hostname()}:{cmdline}. Output: {stdouterr}"
         )
     return stdouterr
 
 
-@chutney.Util.memoized
+@chutney.Util.memoized_for_launcher
 def get_tor_version(launcher: chutney.launcher.Launcher, tor: str) -> str:
     """Return the version of the tor binary.
     Versions are cached for each unique tor path.
@@ -62,4 +62,5 @@ def get_tor_version(launcher: chutney.launcher.Launcher, tor: str) -> str:
     if not re.match(r"^[-+.() A-Za-z0-9]+$", tor_version):
         raise chutney.errors.ChutneyError(f"Couldn't parse tor_version '{tor_version}'")
 
+    logger.debug(f"{launcher.hostname()}:{tor} is version {tor_version}")
     return tor_version

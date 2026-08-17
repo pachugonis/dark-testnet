@@ -36,7 +36,7 @@ TORRC_OPTION_WARN_LIMIT = 10
 torrc_option_warn_count = 0
 
 
-@chutney.Util.memoized
+@chutney.Util.memoized_for_launcher
 def get_torrc_options(launcher: chutney.launcher.Launcher, tor: str) -> list[str]:
     """Return the torrc options supported by the tor binary.
     Options are cached for each unique tor path.
@@ -51,17 +51,20 @@ def get_torrc_options(launcher: chutney.launcher.Launcher, tor: str) -> list[str
         raise ChutneyError(f"Unexpected tor output for --list-torrc-options: '{opts}'")
     torrc_opts = opts.split()
 
+    logger.debug(f"{launcher.hostname()}:{tor} got torrc options: {torrc_opts}")
     return torrc_opts
 
 
-@chutney.Util.memoized
+@chutney.Util.memoized_for_launcher
 def tor_exists(launcher: chutney.launcher.Launcher, tor: str) -> bool:
     """Return true iff this tor binary exists."""
     try:
         run_tor(launcher, [tor, "--hush", "--version"])
-        return True
+        exists = True
     except chutney.errors.ChutneyMissingBinaryError:
-        return False
+        exists = False
+    logger.debug(f"{launcher.hostname()}:{tor} exists: {exists}")
+    return exists
 
 
 @chutney.Util.memoized
@@ -74,9 +77,12 @@ def tor_gencert_exists(launcher: chutney.launcher.Launcher, gencert: str) -> boo
             capture_strategy=chutney.launcher.Capture.MERGED,
             text=True,
         )
-        return True
+        exists = True
     except chutney.errors.ChutneyMissingBinaryError:
-        return False
+        exists = False
+
+    logger.debug(f"{launcher.hostname()}:{gencert} exists: {exists}")
+    return exists
 
 
 @chutney.Util.memoized
@@ -101,6 +107,8 @@ def get_tor_modules(launcher: chutney.launcher.Launcher, tor: str) -> dict[str, 
         if not m:
             continue
         supported[m.group(1)] = m.group(2) == "yes"
+
+    logger.debug(f"{launcher.hostname()}:{tor} modules: {supported}")
 
     return supported
 
