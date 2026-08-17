@@ -50,8 +50,6 @@ import time
 import tomli_w
 import json
 
-import rpyc  # type: ignore
-
 import chutney.chutney_logging as chutney_logging
 import chutney.network_tests.verify
 
@@ -239,7 +237,7 @@ class Node(ToCustomJsonable):
                 raise ChutneyError(
                     "RPYC_INSECURE can only be used on a trusted network"
                 )
-            self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
+            self._launcher = RpycLauncher.make_classic(host)
         else:
             assert_never(config.launcher_backend)
         self._builder: NodeBuilder

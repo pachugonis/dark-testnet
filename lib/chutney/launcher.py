@@ -15,6 +15,7 @@ import sys
 import time
 from collections.abc import Mapping
 from abc import ABC, abstractmethod
+from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import IO, Union, Optional, Literal, Callable
 from typing_extensions import TypeAlias, override
@@ -399,6 +400,11 @@ class Launcher(ABC):
         """
         return None
 
+    @abstractmethod
+    def hostname(self) -> str:
+        """Name of the host where this Launcher launches processes"""
+        ...
+
 
 class LocalPopen(Popen):
     """Specialization of Popen returnced by `LocalLauncher`"""
@@ -442,6 +448,10 @@ class LocalPopen(Popen):
 
 class LocalLauncher(Launcher):
     """A `Launcher` that launches processes locally, akin to the `subprocess` module"""
+
+    @override
+    def hostname(self) -> str:
+        return "localhost"
 
     @override
     def popen(
@@ -890,6 +900,10 @@ class SshLauncher(Launcher):
         return t
 
     @override
+    def hostname(self) -> str:
+        return self._host
+
+    @override
     def popen(
         self,
         args: CMD,
@@ -1050,7 +1064,10 @@ class RpycLauncher(Launcher):
     """
 
     def __init__(
-        self, conn_factory: Callable[[], rpyc.core.protocol.Connection]
+        self,
+        *,
+        conn_factory: Callable[[], rpyc.core.protocol.Connection],
+        hostname: str,
     ) -> None:
         """Create an instance.
 
@@ -1064,9 +1081,25 @@ class RpycLauncher(Launcher):
         rpyc also supports creating connections that use SSL-based encryption
         and authentication, which we should do if we want to support usage
         outside of a secured private network.
+
+        `hostname` should be the name of the host at the other end of the
+        connection.
         """
         self._conn_factory = conn_factory
         self._conn: Optional[rpyc.core.protocol.Connection] = None
+        self._hostname = hostname
+
+    @staticmethod
+    def make_classic(host: str | IPv4Address | IPv6Address) -> RpycLauncher:
+        hostname = str(host)
+        return RpycLauncher(
+            conn_factory=lambda: rpyc.classic.connect(host=hostname),
+            hostname=hostname,
+        )
+
+    @override
+    def hostname(self) -> str:
+        return self._hostname
 
     def _get_conn(self) -> rpyc.core.protocol.Connection:
         """Get the connection, creating it if needed"""
