@@ -94,7 +94,13 @@ class Popen(ABC):
 class Launcher(ABC):
     """Launches and manages processes"""
 
-    def which(self, cmd: Path) -> Optional[Path]:
+    def which(
+        self,
+        cmd: Path,
+        *,
+        cwd: Optional[Path] = None,
+        env: Optional[Mapping[str, str]] = None,
+    ) -> Optional[Path]:
         """Return the path (usable with this Launcher) of this cmd.
 
         This is a replacement for `shutil.which`, which resolves the cmd
@@ -113,6 +119,8 @@ class Launcher(ABC):
         script = shlex.join(["command", "-v", str(cmd)])
         res = self.run(
             ["sh", "-c", script],
+            cwd=cwd,
+            env=env,
             text=True,
             known_bin=None,
             capture_strategy=Capture.SEPARATE,
