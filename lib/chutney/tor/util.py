@@ -1,6 +1,5 @@
 import logging
 import re
-import textwrap
 
 from typing import List
 
@@ -34,14 +33,12 @@ def run_tor(
         text=True,
         known_bin=TorBin(),
     )
+    logger.debug(f"Running '{cmdline}' finished with returncode {res.returncode}")
     stdouterr = res.stdout
     if res.returncode != 0 and not tolerate_error:
         raise chutney.errors.ChutneyError(
             f"Failed to run cmdline: {cmdline}. Output: {stdouterr}"
         )
-    logger.debug(
-        "Output for " + str(cmdline) + ":\n" + textwrap.indent(stdouterr, "    ")
-    )
     return stdouterr
 
 
