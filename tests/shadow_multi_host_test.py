@@ -30,7 +30,7 @@ import chutney.envvars
 import chutney.network_tests.verify
 import chutney.shadow_util
 import chutney.TorNet
-from chutney.Util import IPAddress
+from chutney.util.ipaddress import IPAddress
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 

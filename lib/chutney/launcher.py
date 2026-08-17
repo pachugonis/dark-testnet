@@ -15,7 +15,6 @@ import sys
 import time
 from collections.abc import Mapping
 from abc import ABC, abstractmethod
-from ipaddress import IPv4Address, IPv6Address
 from pathlib import Path
 from typing import IO, Union, Optional, Literal, Callable
 from typing_extensions import TypeAlias, override
@@ -24,6 +23,7 @@ import rpyc  # type: ignore
 
 import chutney.errors
 from chutney.known_bins import KnownBin
+from chutney.util.ipaddress import IPAddress
 
 # These are basically just "dumb structs". We can just reuse directly.
 CalledProcessError = subprocess.CalledProcessError
@@ -1090,7 +1090,7 @@ class RpycLauncher(Launcher):
         self._hostname = hostname
 
     @staticmethod
-    def make_classic(host: str | IPv4Address | IPv6Address) -> RpycLauncher:
+    def make_classic(host: Union[str, IPAddress]) -> RpycLauncher:
         hostname = str(host)
         return RpycLauncher(
             conn_factory=lambda: rpyc.classic.connect(host=hostname),

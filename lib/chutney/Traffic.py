@@ -39,7 +39,7 @@ import textwrap
 import time
 
 from chutney.errors import ChutneyUnimplementedError, ChutneyInternalError
-from chutney.Util import IPAddress
+from chutney.util.ipaddress import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
 from typing import Optional, Iterable, Union

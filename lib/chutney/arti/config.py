@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from chutney.errors import ChutneyError
-from chutney.Util import addr_and_port_str
+from chutney.util.ipaddress import addr_and_port_str
 
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet

@@ -72,12 +72,10 @@ from chutney.errors import (
 from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher, RpycLauncher
 from chutney.Util import (
-    addr_and_port_str,
     mkdir_p,
-    IPAddress,
-    IPNetwork,
     Option,
 )
+from chutney.util.ipaddress import addr_and_port_str, IPAddress, IPNetwork
 from collections.abc import Collection
 
 if sys.version_info >= (3, 11):

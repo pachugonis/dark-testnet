@@ -12,7 +12,7 @@ from typing import TypeVar, Generic, Optional, cast
 from typing_extensions import override
 
 from chutney.errors import ChutneyInternalError
-from chutney.Util import IPAddress, IPNetwork
+from chutney.util.ipaddress import IPAddress, IPNetwork
 
 logger = logging.getLogger(__name__)
 
