@@ -131,10 +131,6 @@ network-config-tests:
   <<: *debian-template
   needs:
   - build-arti
-  variables:
-    # debug output is a bit too noisy here, exceeding the gitlab job log limit
-    # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40063>
-    CHUTNEY_DEBUG: 0
   script:
   - apt-get install
       obfs4proxy
@@ -317,10 +313,6 @@ shadow-test-network:
 
 network-config-tests-diff:
   <<: *debian-template
-  variables:
-    # debug output is a bit too noisy here, exceeding the gitlab job log limit
-    # <https://gitlab.torproject.org/tpo/core/chutney/-/work_items/40063>
-    CHUTNEY_DEBUG: 0
   needs:
   - build-shadow
   - build-arti
