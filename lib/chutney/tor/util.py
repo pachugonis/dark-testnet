@@ -33,7 +33,6 @@ def run_tor(
         text=True,
         known_bin=TorBin(),
     )
-    logger.debug(f"Running '{cmdline}' finished with returncode {res.returncode}")
     stdouterr = res.stdout
     if res.returncode != 0 and not tolerate_error:
         raise chutney.errors.ChutneyError(
