@@ -50,8 +50,6 @@ import time
 import tomli_w
 import json
 
-import rpyc  # type: ignore
-
 import chutney.chutney_logging as chutney_logging
 import chutney.network_tests.verify
 
@@ -74,12 +72,10 @@ from chutney.errors import (
 from chutney.jsonable import ToCustomJsonable, FromDecodedJson, CustomJsonable
 from chutney.launcher import Launcher, LocalLauncher, SshLauncher, RpycLauncher
 from chutney.Util import (
-    addr_and_port_str,
     mkdir_p,
-    IPAddress,
-    IPNetwork,
     Option,
 )
+from chutney.util.ipaddress import addr_and_port_str, IPAddress, IPNetwork
 from collections.abc import Collection
 
 if sys.version_info >= (3, 11):
@@ -239,7 +235,7 @@ class Node(ToCustomJsonable):
                 raise ChutneyError(
                     "RPYC_INSECURE can only be used on a trusted network"
                 )
-            self._launcher = RpycLauncher(lambda: rpyc.classic.connect(host=str(host)))
+            self._launcher = RpycLauncher.make_classic(host)
         else:
             assert_never(config.launcher_backend)
         self._builder: NodeBuilder

@@ -7,7 +7,8 @@ from typing import Optional, Union
 
 import chutney.errors
 
-from chutney.Util import Option, IPAddress
+from chutney.util.ipaddress import IPAddress
+from chutney.Util import Option
 
 HSV3_KEYWORD = "hidden service v3"
 

@@ -39,7 +39,7 @@ import textwrap
 import time
 
 from chutney.errors import ChutneyUnimplementedError, ChutneyInternalError
-from chutney.Util import IPAddress
+from chutney.util.ipaddress import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
 from typing import Optional, Iterable, Union
@@ -139,6 +139,7 @@ class TestSuite(object):
         self.teststatus: dict[str, str] = {}
 
     def note(self, testname: str, status: str) -> None:
+        logging.debug(f"test '{testname}': status: {status}")
         self.teststatus[testname] = status
 
     def add(self, name: str) -> None:
@@ -438,7 +439,6 @@ class EchoClient(object):
         self.tt.success(self.testname)
 
     def note(self, s: str) -> None:
-        logger.debug(f"adding note: {s}")
         self.tt.tests.note(self.testname, s)
 
     async def _validate_incoming(self) -> None:

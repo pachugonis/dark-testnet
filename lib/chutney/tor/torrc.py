@@ -5,7 +5,8 @@ import textwrap
 from typing import TYPE_CHECKING, Iterable, Iterator, Tuple
 
 from chutney.errors import ChutneyError, ChutneyInternalError
-from chutney.Util import find_executable_on_path, addr_and_port_str, IPAddress
+from chutney.Util import find_executable_on_path
+from chutney.util.ipaddress import IPAddress, addr_and_port_str
 
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet

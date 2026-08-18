@@ -21,11 +21,11 @@ from chutney.errors import (
 from chutney.known_bins import ArtiBin
 from chutney.node_builder import NodeBuilder
 from chutney.Util import (
-    addr_and_port_str,
     mkdir_p,
     validate_onion_address,
     Option,
 )
+from chutney.util.ipaddress import addr_and_port_str
 
 if TYPE_CHECKING:
     import chutney.TorNet as TorNet

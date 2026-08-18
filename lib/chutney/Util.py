@@ -10,23 +10,29 @@ from __future__ import unicode_literals
 import base64
 import binascii
 import hashlib
-import ipaddress
 import logging
 import os
 import stat
 
 from collections.abc import Iterable, Collection
 from pathlib import Path
-from typing import Callable, TypeVar, Any, Optional, Generic, Union, TypeAlias, Final
+from typing import (
+    Callable,
+    TypeVar,
+    Any,
+    Optional,
+    Generic,
+    Union,
+    Final,
+    Concatenate,
+)
 from typing_extensions import ParamSpec, override
 
 from chutney.jsonable import ToCustomJsonable, CustomJsonable
+from chutney.launcher import Launcher
 from chutney.errors import ChutneyError
 
 logger = logging.getLogger(__name__)
-
-IPAddress: TypeAlias = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
-IPNetwork: TypeAlias = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -53,17 +59,29 @@ def memoized(fn: Callable[P, T]) -> Callable[P, T]:
     return memoized_fn
 
 
-def addr_and_port_str(ip_addr: IPAddress, port: int) -> str:
-    """Format an ip address and port pair.
+def memoized_for_launcher(
+    fn: Callable[Concatenate[Launcher, P], T],
+) -> Callable[Concatenate[Launcher, P], T]:
+    """Decorator: memoize a function that takes a `Launcher` as the first parameter.
 
-    Concretely, this surrounds ipv6 addresses with brackets, which is a common
-    convention for separating an ipv6 address from a port number.
+    For memoization purposes, considers `Launcher`s with the same hostname as
+    equivalent.
     """
+    # Keys are built from the launcher hostname, and the rest of the arg and
+    # kwarg parameters passed to the function.  It might be nice to somewhow
+    # replace the `Any`s below with the actual types derived from the parameter
+    # spec `P`, but probably not worth the complexity.
+    memory: dict[tuple[str, Iterable[Any], Iterable[tuple[Any, Any]]], T] = {}
 
-    if ip_addr.version == 4:
-        return f"{ip_addr}:{port}"
-    if ip_addr.version == 6:
-        return f"[{ip_addr}]:{port}"
+    def memoized_fn(launcher: Launcher, /, *args: P.args, **kwargs: P.kwargs) -> T:
+        key = (launcher.hostname(), args, tuple(sorted(kwargs.items())))
+        try:
+            result = memory[key]
+        except KeyError:
+            result = memory[key] = fn(launcher, *args, **kwargs)
+        return result
+
+    return memoized_fn
 
 
 CJ = TypeVar("CJ", bound=CustomJsonable)

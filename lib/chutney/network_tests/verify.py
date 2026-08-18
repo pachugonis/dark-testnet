@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Union, ClassVar, Optional
 
 from . import NetworkTestFailure
 from chutney import envvars
-from chutney.Util import IPAddress
+from chutney.util.ipaddress import IPAddress
 from chutney.errors import ChutneyError, ChutneyInternalError
 
 if TYPE_CHECKING:
