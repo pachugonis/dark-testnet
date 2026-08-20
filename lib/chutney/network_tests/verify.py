@@ -15,7 +15,7 @@ import chutney
 import chutney.Traffic
 
 from ipaddress import ip_address
-from typing import TYPE_CHECKING, Union, ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 from . import NetworkTestFailure
 from chutney import envvars
@@ -248,7 +248,7 @@ def _configure_exits(
     reps: int,
     client_list: list[TorNet.Node],
     exit_list: list[TorNet.Node],
-    listen_addr: Union[str, IPAddress],
+    listen_addr: str | IPAddress,
     LISTEN_PORT: int,
     connection_count: int,
 ) -> int:

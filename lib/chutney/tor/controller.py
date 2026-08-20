@@ -11,7 +11,7 @@ import time
 from collections.abc import Collection
 from pathlib import Path
 from typeguard import check_type
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 from typing_extensions import override
 
 import chutney.errors
@@ -643,7 +643,7 @@ class LocalNodeController(NodeController):
         dir_status: dict[str, tuple[DirInfoStatusCode, Collection[DirFormat]]],
     ) -> Optional[
         dict[
-            Union[DirInfoStatusCode, str],
+            DirInfoStatusCode | str,
             tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]],
         ]
     ]:
@@ -666,7 +666,7 @@ class LocalNodeController(NodeController):
         Returns None if no status is expected.
         """
         node_status: dict[
-            Union[DirInfoStatusCode, str],
+            DirInfoStatusCode | str,
             tuple[DirInfoStatusCode, Collection[str], Collection[DirFormat]],
         ] = dict()
 

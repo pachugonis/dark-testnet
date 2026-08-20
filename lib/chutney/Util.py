@@ -22,7 +22,6 @@ from typing import (
     Any,
     Optional,
     Generic,
-    Union,
     Final,
     Concatenate,
 )
@@ -105,9 +104,7 @@ class Option(Generic[T], ToCustomJsonable):
     def __init__(self, val: Optional[T]):
         self._val = val
 
-    def unwrap(
-        self, failure_msg: Union[str, Callable[[], str]] = "Unwrapped None"
-    ) -> T:
+    def unwrap(self, failure_msg: str | Callable[[], str] = "Unwrapped None") -> T:
         """Asserts v is not None and returns it"""
         if self._val is not None:
             return self._val
@@ -126,7 +123,7 @@ class Option(Generic[T], ToCustomJsonable):
     def unwrap_or(self, default: T) -> T:
         return self._val if self._val is not None else default
 
-    def unwrap_or_raise(self, exc: Union[Exception, Callable[[], Exception]]) -> T:
+    def unwrap_or_raise(self, exc: Exception | Callable[[], Exception]) -> T:
         if self._val is not None:
             return self._val
         if callable(exc):
@@ -166,7 +163,7 @@ class Option(Generic[T], ToCustomJsonable):
 
 
 def find_executable_on_path(
-    basename: Union[str, Path], path: Optional[Iterable[Path]] = None
+    basename: str | Path, path: Optional[Iterable[Path]] = None
 ) -> Optional[Path]:
     """Find the first executable file named `basename` in `path`
 
@@ -213,7 +210,7 @@ def find_executable_on_path(
     return None
 
 
-def mkdir_p(*d: Union[str, Path], mode: int = 448) -> None:
+def mkdir_p(*d: str | Path, mode: int = 448) -> None:
     """Create directory 'd' and all of its parents as needed.  Unlike
     os.makedirs, does not give an error if d already exists.
 

@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from pathlib import Path
 from typeguard import check_type
-from typing import List, Optional, Union, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from typing_extensions import override
 
 import chutney
@@ -122,9 +122,7 @@ def tor_has_module(
     return get_tor_modules(launcher, tor).get(modname, default)
 
 
-def make_datadir_subdirectory(
-    datadir: Union[str, Path], subdir: Union[str, Path]
-) -> None:
+def make_datadir_subdirectory(datadir: str | Path, subdir: str | Path) -> None:
     """
     Create a datadirectory (if necessary) and a subdirectory of
     that datadirectory.  Ensure that both are mode 700.

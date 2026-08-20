@@ -3,7 +3,7 @@ import enum
 import re
 
 from ipaddress import IPv4Address, IPv6Address
-from typing import Optional, Union
+from typing import Optional
 
 import chutney.errors
 
@@ -36,7 +36,7 @@ class DirInfoStatusCode(enum.Enum):
 
 @dataclasses.dataclass
 class DirInfoStatus:
-    percent_or_code: Union[int, DirInfoStatusCode]
+    percent_or_code: int | DirInfoStatusCode
     keyword: str
     message: str
 

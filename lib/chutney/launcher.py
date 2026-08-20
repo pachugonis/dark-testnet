@@ -16,7 +16,7 @@ import time
 from collections.abc import Mapping
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import IO, Union, Optional, Literal, Callable
+from typing import IO, Optional, Literal, Callable
 from typing_extensions import assert_never, TypeAlias, override
 
 import rpyc  # type: ignore
@@ -31,7 +31,7 @@ CompletedProcess = subprocess.CompletedProcess
 
 # Based on typeshed's _CMD, but more restrictive
 CMD: TypeAlias = list[str]
-TEXT_FILE: TypeAlias = Union[int, IO[str]]
+TEXT_FILE: TypeAlias = int | IO[str]
 
 _logger = logging.getLogger(__name__)
 
@@ -1087,7 +1087,7 @@ class RpycLauncher(Launcher):
         self._hostname = hostname
 
     @staticmethod
-    def make_classic(host: Union[str, IPAddress]) -> RpycLauncher:
+    def make_classic(host: str | IPAddress) -> RpycLauncher:
         hostname = str(host)
         return RpycLauncher(
             conn_factory=lambda: rpyc.classic.connect(host=hostname),
