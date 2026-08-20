@@ -613,23 +613,24 @@ class LocalNodeBuilder(NodeBuilder):
 
         Returns an empty string if there is no such info (e.g. this isn't a PT bridge).
         """
-        # `match` would be nice here, but requires python 3.10.
-        ptt = self._node._config.pt_transport
-        if ptt == "":
-            return ""
-        elif ptt == "obfs4":
-            # c-tor expects/requires this path. Doesn't appear to be documented,
-            # as it's meant to be an opaque implementation detail. We have to
-            # use it though, to be able to generate and get the bridge
-            # parameters before actually launching.
-            pt_state_path = Path(self._node.dir, "pt_state")
-            return _get_obfs4_extra_args(
-                launcher=self._launcher,
-                obfs4proxy_exe=str(self._node._config.pt_executable),
-                pt_state_path=pt_state_path,
-            )
-        else:
-            raise chutney.errors.ChutneyError("Unhandled pt_transport: " + ptt)
+        match self._node._config.pt_transport:
+            case "":
+                return ""
+            case "obfs4":
+                # c-tor expects/requires this path. Doesn't appear to be documented,
+                # as it's meant to be an opaque implementation detail. We have to
+                # use it though, to be able to generate and get the bridge
+                # parameters before actually launching.
+                pt_state_path = Path(self._node.dir, "pt_state")
+                return _get_obfs4_extra_args(
+                    launcher=self._launcher,
+                    obfs4proxy_exe=str(self._node._config.pt_executable),
+                    pt_state_path=pt_state_path,
+                )
+            case unhandled:
+                raise chutney.errors.ChutneyError(
+                    "Unhandled pt_transport: " + unhandled
+                )
 
 
 def _get_obfs4_extra_args_if_present(

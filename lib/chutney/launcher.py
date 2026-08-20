@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Union, Optional, Literal, Callable
-from typing_extensions import TypeAlias, override
+from typing_extensions import assert_never, TypeAlias, override
 
 import rpyc  # type: ignore
 
@@ -468,14 +468,13 @@ class LocalLauncher(Launcher):
         assert text is True, "type checker should have ensured"
         stdin = subprocess.PIPE
         stdout = subprocess.PIPE
-        if capture_strategy is Capture.SEPARATE:
-            stderr = subprocess.PIPE
-        elif capture_strategy is Capture.MERGED:
-            stderr = subprocess.STDOUT
-        else:
-            raise chutney.errors.ChutneyInternalError(
-                "Unhandled capture strategy " + capture_strategy
-            )
+        match capture_strategy:
+            case Capture.SEPARATE:
+                stderr = subprocess.PIPE
+            case Capture.MERGED:
+                stderr = subprocess.STDOUT
+            case unhandled:
+                assert_never(unhandled)
         try:
             inner = subprocess.Popen(
                 args,
@@ -802,17 +801,16 @@ class SshPopen(Popen):
         returncode = self._channel.recv_exit_status()
         stdout = b"".join(self._buffered_stdout).decode()
         stderr: Optional[str]
-        if self._capture_strategy == Capture.SEPARATE:
-            stderr = b"".join(self._buffered_stderr).decode()
-        elif self._capture_strategy == Capture.MERGED:
-            assert (
-                len(self._buffered_stderr) == 0
-            ), "There shouldn't be any separate stderr data"
-            stderr = None
-        else:
-            raise chutney.errors.ChutneyInternalError(
-                f"Unhandled capture mode: {self._capture_strategy}"
-            )
+        match self._capture_strategy:
+            case Capture.SEPARATE:
+                stderr = b"".join(self._buffered_stderr).decode()
+            case Capture.MERGED:
+                assert (
+                    len(self._buffered_stderr) == 0
+                ), "There shouldn't be any separate stderr data"
+                stderr = None
+            case unhandled:
+                assert_never(unhandled)
 
         if returncode == 127:
             # 127 is command-not-found according to
@@ -948,14 +946,13 @@ class SshLauncher(Launcher):
         # in the wrapper shell-script below, intead.
         channel.update_environment(env)
 
-        if capture_strategy is Capture.SEPARATE:
-            channel.set_combine_stderr(False)
-        elif capture_strategy == Capture.MERGED:
-            channel.set_combine_stderr(True)
-        else:
-            raise chutney.errors.ChutneyInternalError(
-                "Unhandled capture strategy " + capture_strategy
-            )
+        match capture_strategy:
+            case Capture.SEPARATE:
+                channel.set_combine_stderr(False)
+            case Capture.MERGED:
+                channel.set_combine_stderr(True)
+            case unhandled:
+                assert_never(unhandled)
 
         # Fail if any of the below "scaffolding" script commands go wrong.
         cmd_string = "set -eu\n"
@@ -1130,14 +1127,13 @@ class RpycLauncher(Launcher):
 
         stdin = rsubprocess.PIPE
         stdout = rsubprocess.PIPE
-        if capture_strategy is Capture.SEPARATE:
-            stderr = rsubprocess.PIPE
-        elif capture_strategy is Capture.MERGED:
-            stderr = rsubprocess.STDOUT
-        else:
-            raise chutney.errors.ChutneyInternalError(
-                "Unhandled capture strategy " + capture_strategy
-            )
+        match capture_strategy:
+            case Capture.SEPARATE:
+                stderr = rsubprocess.PIPE
+            case Capture.MERGED:
+                stderr = rsubprocess.STDOUT
+            case unhandled:
+                assert_never(unhandled)
         if cwd is not None:
             cwd_str = str(cwd)
         else:

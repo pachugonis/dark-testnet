@@ -220,43 +220,45 @@ class Node(ToCustomJsonable):
         self._config = config
 
         self._launcher: Launcher
-        if config.launcher_backend == LauncherBackend.LOCAL:
-            self._launcher = LocalLauncher()
-        elif config.launcher_backend == LauncherBackend.SSH:
-            host = self.ip.as_optional() or self.ipv6_addr.as_optional()
-            if not host:
-                raise ChutneyError(f"No ip address for {self.nick}")
-            self._launcher = SshLauncher(str(host))
-        elif config.launcher_backend == LauncherBackend.RPYC_INSECURE:
-            host = self.ip.as_optional() or self.ipv6_addr.as_optional()
-            if not host:
-                raise ChutneyError(f"No ip address for {self.nick}")
-            if not self._address_in_trusted_net(host):
-                raise ChutneyError(
-                    "RPYC_INSECURE can only be used on a trusted network"
-                )
-            self._launcher = RpycLauncher.make_classic(host)
-        else:
-            assert_never(config.launcher_backend)
+        match config.launcher_backend:
+            case LauncherBackend.LOCAL:
+                self._launcher = LocalLauncher()
+            case LauncherBackend.SSH:
+                host = self.ip.as_optional() or self.ipv6_addr.as_optional()
+                if not host:
+                    raise ChutneyError(f"No ip address for {self.nick}")
+                self._launcher = SshLauncher(str(host))
+            case LauncherBackend.RPYC_INSECURE:
+                host = self.ip.as_optional() or self.ipv6_addr.as_optional()
+                if not host:
+                    raise ChutneyError(f"No ip address for {self.nick}")
+                if not self._address_in_trusted_net(host):
+                    raise ChutneyError(
+                        "RPYC_INSECURE can only be used on a trusted network"
+                    )
+                self._launcher = RpycLauncher.make_classic(host)
+            case unhandled_launcher:
+                assert_never(unhandled_launcher)
         self._builder: NodeBuilder
         self._controller: NodeController
-        if config.backend == NodeBackend.TOR:
-            # We import these here instead of globally to avoid a circular reference.
-            from chutney.tor.builder import LocalNodeBuilder
-            from chutney.tor.controller import LocalNodeController
+        match config.backend:
+            case NodeBackend.TOR:
+                # We import these here instead of globally to avoid a circular reference.
+                from chutney.tor.builder import LocalNodeBuilder
+                from chutney.tor.controller import LocalNodeController
 
-            self._builder = LocalNodeBuilder(self)
-            self._controller = LocalNodeController(self._network, self)
-        elif config.backend == NodeBackend.ARTI:
-            import chutney.arti.builder
-            import chutney.arti.controller
+                self._builder = LocalNodeBuilder(self)
+                self._controller = LocalNodeController(self._network, self)
+            case NodeBackend.ARTI:
+                import chutney.arti.builder
+                import chutney.arti.controller
 
-            self._builder = chutney.arti.builder.LocalArtiNodeBuilder(self)
-            self._controller = chutney.arti.controller.LocalArtiNodeController(
-                self._network, self
-            )
-        else:
-            assert_never(config.backend)
+                self._builder = chutney.arti.builder.LocalArtiNodeBuilder(self)
+                self._controller = chutney.arti.controller.LocalArtiNodeController(
+                    self._network, self
+                )
+            case unhandled_backend:
+                assert_never(unhandled_backend)
 
     @property
     def fingerprint(self) -> Option[str]:
@@ -273,13 +275,13 @@ class Node(ToCustomJsonable):
         if not self._config.ip:
             return Option(None)
         base = IPv4Address(self._config.ip)
-        strategy = self._config.address_assignment_strategy
-        if strategy == AddressAssignmentStrategy.STATIC:
-            return Option(base)
-        elif strategy == AddressAssignmentStrategy.OFFSET:
-            return Option(IPv4Address(int(base) + self.nodenum))
-        else:
-            assert_never(strategy)
+        match self._config.address_assignment_strategy:
+            case AddressAssignmentStrategy.STATIC:
+                return Option(base)
+            case AddressAssignmentStrategy.OFFSET:
+                return Option(IPv4Address(int(base) + self.nodenum))
+            case unhandled:
+                assert_never(unhandled)
 
     @property
     def ipv6_addr(self) -> Option[IPv6Address]:
@@ -293,13 +295,13 @@ class Node(ToCustomJsonable):
         if base_str.startswith("[") and base_str.endswith("]"):
             base_str = base_str[1:-1]
         base = IPv6Address(base_str)
-        strategy = self._config.address_assignment_strategy
-        if strategy == AddressAssignmentStrategy.STATIC:
-            return Option(base)
-        elif strategy == AddressAssignmentStrategy.OFFSET:
-            return Option(IPv6Address(int(base) + self.nodenum))
-        else:
-            raise ChutneyError(f"Unrecognized AddressAssignmentStrategy {strategy}")
+        match self._config.address_assignment_strategy:
+            case AddressAssignmentStrategy.STATIC:
+                return Option(base)
+            case AddressAssignmentStrategy.OFFSET:
+                return Option(IPv6Address(int(base) + self.nodenum))
+            case unhandled:
+                assert_never(unhandled)
 
     @property
     def hs_directory(self) -> Option[Path]:
