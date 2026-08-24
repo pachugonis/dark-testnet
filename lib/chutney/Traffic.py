@@ -42,12 +42,12 @@ from chutney.errors import ChutneyUnimplementedError, ChutneyInternalError
 from chutney.util.ipaddress import IPAddress
 from ipaddress import IPv4Address, IPv6Address
 from typeguard import check_type
-from typing import Optional, Iterable, Union
+from typing import Optional, Iterable
 from typing_extensions import assert_never
 
 logger = logging.getLogger(__name__)
 
-HostPortTuple = tuple[Union[str, IPv4Address, IPv6Address], int]
+HostPortTuple = tuple[str | IPv4Address | IPv6Address, int]
 
 
 UNIQ_CTR = 0
@@ -60,7 +60,7 @@ def uniq(s: str) -> str:
 
 
 def addr_to_family(
-    addr: Union[str, IPAddress],
+    addr: str | IPAddress,
 ) -> Optional[socket.AddressFamily]:
     if isinstance(addr, IPv4Address):
         return socket.AF_INET

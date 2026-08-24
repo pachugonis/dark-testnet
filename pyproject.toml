@@ -13,9 +13,9 @@ authors = [
 ]
 description = "A tool for building local testing Tor networks"
 readme = "README.md"
-# Oldest tested version (default on debian bullseye).
+# Oldest tested version (default on debian bookworm).
 # May or may not work on older versions.
-requires-python = ">=3.9.2"
+requires-python = ">=3.11.2"
 # Strings from https://pypi.org/classifiers/
 classifiers = [
     "Development Status :: 1 - Planning",

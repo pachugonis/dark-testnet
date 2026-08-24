@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import TypeAlias, Union
+from typing import TypeAlias
 
-IPAddress: TypeAlias = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
-IPNetwork: TypeAlias = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+IPAddress: TypeAlias = ipaddress.IPv4Address | ipaddress.IPv6Address
+IPNetwork: TypeAlias = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
 def addr_and_port_str(ip_addr: IPAddress, port: int) -> str:
