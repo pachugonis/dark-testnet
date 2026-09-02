@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import json
 import logging
 import os
 import shutil
@@ -16,7 +17,6 @@ import subprocess
 import sys
 import textwrap
 import time
-import yaml
 from pathlib import Path
 from typing import Optional, Sequence
 from typing_extensions import override
@@ -358,12 +358,17 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         shadow_config_path = network.dir.joinpath("shadow.yaml")
 
         with shadow_config_path.open("w") as shadow_yaml:
-            yaml.dump(
+            # We avoid the 'pyyaml' serializer because shadow parses as yaml
+            # 1.2, and pyyaml generates output compliant with yaml 1.1, but not
+            # always yaml 1.2.
+            # <https://github.com/yaml/pyyaml/issues/860>
+            #
+            # yaml 1.2 is designed to be a strict superset of json, so we can
+            # use the json encoder instead.
+            json.dump(
                 shadow_config,
-                stream=shadow_yaml,
-                # Force strings to be quoted.
-                # <https://github.com/yaml/pyyaml/issues/860>
-                default_style='"',
+                shadow_yaml,
+                indent=4,
             )
         shadow_path = Path("shadow")
         try:
