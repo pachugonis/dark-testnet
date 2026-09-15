@@ -280,6 +280,80 @@ def _generate_shadow_network_graph(
     )
 
 
+def _run_e2e(
+    network: chutney.TorNet.Network,
+    node_latency: str,
+    node_bandwidth: str,
+    node_packet_loss: float,
+    controller_shell_code: str,
+    data_dir: Optional[Path] = None,
+) -> None:
+    ip_network: ipaddress.IPv4Network = ipaddress.IPv4Network("192.168.0.0/24")
+    host_ips = iter(ip_network.hosts())
+    controller_ip = next(host_ips)
+    starting_ip = next(host_ips)
+    network = _rewrite_network_for_shadow_multihost(
+        network,
+        ip_network=ip_network,
+        controller_ip=controller_ip,
+        starting_ip=starting_ip,
+    )
+
+    # Init the *new* network, creating a new nodes directory as usual.
+    # In principle it might be nice to support overwriting the
+    # previous nodes directory in-place, to avoid creating an "extra" one
+    # when the previous was generated specifically for this purpose, but
+    # would probably open the door to subtle bugs and footguns.
+    network.init(data_dir=data_dir)
+
+    controller_hostname = "controller-host"
+    network_graph = _generate_shadow_network_graph(
+        network,
+        controller_ip=controller_ip,
+        controller_hostname=controller_hostname,
+        node_latency=node_latency,
+        node_bandwidth=node_bandwidth,
+        node_packet_loss=node_packet_loss,
+    )
+    shadow_config = configure_shadow(
+        network,
+        controller_hostname=controller_hostname,
+        controller_ip=controller_ip,
+        controller_shell_code=controller_shell_code,
+        network_graph=network_graph,
+    )
+    shadow_config_path = network.dir.joinpath("shadow.yaml")
+
+    with shadow_config_path.open("w") as shadow_yaml:
+        # We avoid the 'pyyaml' serializer because shadow parses as yaml
+        # 1.2, and pyyaml generates output compliant with yaml 1.1, but not
+        # always yaml 1.2.
+        # <https://github.com/yaml/pyyaml/issues/860>
+        #
+        # yaml 1.2 is designed to be a strict superset of json, so we can
+        # use the json encoder instead.
+        json.dump(
+            shadow_config,
+            shadow_yaml,
+            indent=4,
+        )
+    shadow_path = Path("shadow")
+    try:
+        shadow_exec.run_shadow_watching_process(
+            shadow_bin=shadow_path,
+            shadow_config_path=shadow_config_path,
+            watch_host=controller_hostname,
+            dstdir=network.dir,
+        )
+    except FileNotFoundError:
+        logger.error(
+            f"shadow executable '{shadow_path}' not found."
+            " Try installing from <https://github.com/shadow/shadow/>"
+            " and ensuring it's on your path."
+        )
+        sys.exit(1)
+
+
 class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
     def __init__(self, subparsers: chutney.TorNet.SubParsers) -> None:
         super().__init__(
@@ -401,71 +475,13 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
 
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
-        ip_network: ipaddress.IPv4Network = ipaddress.IPv4Network("192.168.0.0/24")
-        host_ips = iter(ip_network.hosts())
-        controller_ip = next(host_ips)
-        starting_ip = next(host_ips)
-        network = _rewrite_network_for_shadow_multihost(
+        _run_e2e(
             network,
-            ip_network=ip_network,
-            controller_ip=controller_ip,
-            starting_ip=starting_ip,
-        )
-
-        # Init the *new* network, creating a new nodes directory as usual.
-        # In principle it might be nice to support overwriting the
-        # previous nodes directory in-place, to avoid creating an "extra" one
-        # when the previous was generated specifically for this purpose, but
-        # would probably open the door to subtle bugs and footguns.
-        network.init(data_dir=chutney.envvars.DATA_DIR.get(ns=ns))
-
-        controller_hostname = "controller-host"
-        network_graph = _generate_shadow_network_graph(
-            network,
-            controller_ip=controller_ip,
-            controller_hostname=controller_hostname,
             node_latency=check_type(ns.latency, str),
             node_bandwidth=check_type(ns.host_bandwidth, str),
             node_packet_loss=check_type(ns.packet_loss, float),
+            controller_shell_code=check_type(ns.controller_shell_code, str),
         )
-        controller_shell_code = check_type(ns.controller_shell_code, str)
-        shadow_config = configure_shadow(
-            network,
-            controller_hostname=controller_hostname,
-            controller_ip=controller_ip,
-            controller_shell_code=controller_shell_code,
-            network_graph=network_graph,
-        )
-        shadow_config_path = network.dir.joinpath("shadow.yaml")
-
-        with shadow_config_path.open("w") as shadow_yaml:
-            # We avoid the 'pyyaml' serializer because shadow parses as yaml
-            # 1.2, and pyyaml generates output compliant with yaml 1.1, but not
-            # always yaml 1.2.
-            # <https://github.com/yaml/pyyaml/issues/860>
-            #
-            # yaml 1.2 is designed to be a strict superset of json, so we can
-            # use the json encoder instead.
-            json.dump(
-                shadow_config,
-                shadow_yaml,
-                indent=4,
-            )
-        shadow_path = Path("shadow")
-        try:
-            shadow_exec.run_shadow_watching_process(
-                shadow_bin=shadow_path,
-                shadow_config_path=shadow_config_path,
-                watch_host=controller_hostname,
-                dstdir=network.dir,
-            )
-        except FileNotFoundError:
-            logger.error(
-                f"shadow executable '{shadow_path}' not found."
-                " Try installing from <https://github.com/shadow/shadow/>"
-                " and ensuring it's on your path."
-            )
-            sys.exit(1)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
