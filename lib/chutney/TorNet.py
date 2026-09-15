@@ -261,6 +261,11 @@ class Node(ToCustomJsonable):
                 assert_never(unhandled_backend)
 
     @property
+    def config(self) -> NodeConfig:
+        """This node's config"""
+        return self._config
+
+    @property
     def fingerprint(self) -> Option[str]:
         """The base64-encoded ed25519 public key of this node."""
         return self._builder.get_fingerprint()
