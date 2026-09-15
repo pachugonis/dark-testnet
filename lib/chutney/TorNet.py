@@ -1045,6 +1045,11 @@ class Network(ToCustomJsonable, FromDecodedJson):
         return self._dir
 
     @property
+    def config(self) -> NetworkConfig:
+        """This network's config"""
+        return self._config
+
+    @property
     def nodes(self) -> Iterable[Node]:
         """The nodes in this network"""
         return self._nodes
