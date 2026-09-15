@@ -30,7 +30,6 @@ import chutney.envvars
 import chutney.network_tests.verify
 import chutney.shadow_util
 import chutney.TorNet
-from chutney.util.ipaddress import IPAddress
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 
@@ -133,7 +132,8 @@ def configure_shadow(
 
 
 def _shadow_multihost_node_config_overrides(
-    controller_ip: IPAddress,
+    *,
+    controller_ip: ipaddress.IPv4Address,
     starting_ip: ipaddress.IPv4Address,
     ip_network: ipaddress.IPv4Network,
 ) -> dict[str, object]:
@@ -165,6 +165,52 @@ def _shadow_multihost_node_config_overrides(
         # where we'll be running the `verify` test.
         hs_target_address=controller_ip,
     )
+
+
+def _rewrite_network_for_shadow_multihost(
+    network: chutney.TorNet.Network,
+    *,
+    ip_network: ipaddress.IPv4Network,
+    controller_ip: ipaddress.IPv4Address,
+    starting_ip: ipaddress.IPv4Address,
+) -> chutney.TorNet.Network:
+    """Rewrite a Network to be compatible with a shadow multihost simulation.
+
+    `ip_network` should contain the IP addresses that the controller and
+    host nodes will be assigned inside the simulation. It will be configured
+    as a trusted network.
+    `controller_ip` is meant to be the IP address of a host inside the simulation
+    from which additional tests will be run. Any hidden services in the network
+    will be configured to forward connections to this address.
+    `starting_ip` is the base IP address that will be assigned to chutney nodes.
+    """
+    overrides = _shadow_multihost_node_config_overrides(
+        ip_network=ip_network, controller_ip=controller_ip, starting_ip=starting_ip
+    )
+    # *Try* to detect if we're clobbering something that was explicitly set.
+    # We won't detect if we're overwriting an option that was explicitly set to
+    # the same value as the default value.
+    default_node_config = chutney.TorNet.NodeConfig()
+    for n in network.nodes:
+        for k, override_value in overrides.items():
+            orig_value = getattr(n.config, k)
+            default_value = getattr(default_node_config, k)
+            if orig_value != default_value and orig_value != override_value:
+                logger.warning(
+                    f"For node {n.nick},"
+                    f" overriding key {k}"
+                    f" from non-default value {orig_value}"
+                    f" to {override_value}"
+                )
+
+    node_configs = [n.config for n in network.nodes]
+    net_config = network.config
+
+    node_configs = [c.specialize(**overrides) for c in node_configs]
+    network = chutney.TorNet.Network(net_config)
+    network.addNodes(node_configs)
+
+    return network
 
 
 class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
@@ -221,17 +267,9 @@ class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
 
 class E2ECLICommand(chutney.TorNet.CLICommand):
     def __init__(self, subparsers: chutney.TorNet.SubParsers) -> None:
-        ip_network = ipaddress.IPv4Network("192.168.0.0/24")
-        host_ips = iter(ip_network.hosts())
-        controller_ip = next(host_ips)
-        starting_ip = next(host_ips)
-        overrides = _shadow_multihost_node_config_overrides(
-            controller_ip=controller_ip, starting_ip=starting_ip, ip_network=ip_network
-        )
         super().__init__(
             subparsers=subparsers,
-            require_net_spec_group=True,
-            node_config_overrides=overrides,
+            require_net_spec_group=None,
         )
         subparser = self._get_subparser()
         subparser.add_argument(
@@ -268,7 +306,6 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
             ),
             default="chutney verify --verify-listen-address=$SHADOW_IP --hs-multi-client=true",
         )
-        self._controller_ip = controller_ip
 
     @staticmethod
     @override
@@ -286,11 +323,9 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         # Note that argparse removes extra whitespace on display, so we can't do
         # multiple paragraphs, lists, etc.
         return textwrap.dedent("""
-            Initializes a chutney network, as specified by command-line args.
-            Most of the options provided by "chutney --init" are allowed, except
-            for some options which are forced for shadow compatibility (such as
-            disabling ipv6). Then creates a shadow config file (shadow.yaml in
-            the network directory), with a virtual host associated with each
+            Loads the "current" chutney network (CHUTNEY_DATA_DIR/nodes), writes
+            a modified version and a shadow configuration file (shadow.yaml) to
+            a *new* nodes directory, with a virtual host associated with each
             chutney node, as well as a "controller" host, which is configured to
             bootstrap the network and run the provided shell code. Finally,
             executes shadow using the generated configuration, with outputs
@@ -299,7 +334,24 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
 
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
+        ip_network: ipaddress.IPv4Network = ipaddress.IPv4Network("192.168.0.0/24")
+        host_ips = iter(ip_network.hosts())
+        controller_ip = next(host_ips)
+        starting_ip = next(host_ips)
+        network = _rewrite_network_for_shadow_multihost(
+            network,
+            ip_network=ip_network,
+            controller_ip=controller_ip,
+            starting_ip=starting_ip,
+        )
+
+        # Init the *new* network, creating a new nodes directory as usual.
+        # In principle it might be nice to support overwriting the
+        # previous nodes directory in-place, to avoid creating an "extra" one
+        # when the previous was generated specifically for this purpose, but
+        # would probably open the door to subtle bugs and footguns.
         network.init(data_dir=chutney.envvars.DATA_DIR.get(ns=ns))
+
         default_net_label = "default-net"
         controller_net_label = "controller-net"
         controller_hostname = "controller-host"
@@ -351,7 +403,7 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
         shadow_config = configure_shadow(
             network,
             controller_hostname=controller_hostname,
-            controller_ip=self._controller_ip,
+            controller_ip=controller_ip,
             controller_shell_code=controller_shell_code,
             network_graph=network_graph,
         )
