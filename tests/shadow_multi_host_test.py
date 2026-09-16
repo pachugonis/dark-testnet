@@ -12,8 +12,8 @@ import ipaddress
 import json
 import logging
 import os
+import shlex
 import shutil
-import subprocess
 import sys
 import textwrap
 import time
@@ -34,15 +34,39 @@ import chutney.TorNet
 logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 
 
+def _wrap_cmd_in_running_network(
+    args: list[str], *, cwd: Optional[str] = None
+) -> list[str]:
+    """Wrap command `args` to be executed in the context of a running chutney network.
+
+    Wraps the single command `args` in a shell script that changes to `cwd`,
+    bootstraps a chutney network, executes the original `args`, tears down
+    the chutney network, and exits with the exit code of `args`.
+
+    This is useful for wrapping a command to be executed inside a shadow simulation.
+    """
+    cwd = cwd or os.getcwd()
+    shell_script = f"""
+    set -eu
+    cd {cwd}
+    teardown() {{
+        chutney stop
+    }}
+    trap teardown EXIT
+    chutney bootstrap
+    {shlex.join(args)}
+    """
+    return ["sh", "-c", shell_script]
+
+
 def configure_shadow(
     net: chutney.TorNet.Network,
     *,
     controller_hostname: str,
-    controller_shell_code: str,
+    controller_args: list[str],
     controller_ip: ipaddress.IPv4Address,
     network_graph: chutney.shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
-    current_script = os.path.abspath(__file__)
     hosts = {}
 
     rpyc_server = "rpyc_classic"
@@ -79,17 +103,8 @@ def configure_shadow(
         ip_addr=str(controller_ip),
         processes=[
             scfg.Process(
-                # Start *this script*, invoking `ControllerNodeCLICommand`
-                path=current_script,
-                args=[
-                    f"--data-dir={net.dir.parent}",
-                    ControllerNodeCLICommand.name(),
-                    f"--controller-shell-code={controller_shell_code}",
-                    # By default, shadow processes start executing in their
-                    # per-host directory. The controller-shell-code might expect
-                    # to run from the directory, though.
-                    f"--cwd={os.getcwd()}",
-                ],
+                path=controller_args[0],
+                args=controller_args[1:],
                 environment=dict(
                     **os.environ,
                     CHUTNEY_DATA_DIR=str(net.dir.parent),
@@ -285,7 +300,7 @@ def _run_e2e(
     node_latency: str,
     node_bandwidth: str,
     node_packet_loss: float,
-    controller_shell_code: str,
+    controller_args: list[str],
     data_dir: Optional[Path] = None,
 ) -> None:
     ip_network: ipaddress.IPv4Network = ipaddress.IPv4Network("192.168.0.0/24")
@@ -319,7 +334,7 @@ def _run_e2e(
         network,
         controller_hostname=controller_hostname,
         controller_ip=controller_ip,
-        controller_shell_code=controller_shell_code,
+        controller_args=_wrap_cmd_in_running_network(controller_args),
         network_graph=network_graph,
     )
     shadow_config_path = network.dir.joinpath("shadow.yaml")
@@ -352,58 +367,6 @@ def _run_e2e(
             " and ensuring it's on your path."
         )
         sys.exit(1)
-
-
-class ControllerNodeCLICommand(chutney.TorNet.CLICommand):
-    def __init__(self, subparsers: chutney.TorNet.SubParsers) -> None:
-        super().__init__(
-            subparsers=subparsers,
-            require_net_spec_group=None,
-        )
-        subparser = self._get_subparser()
-        subparser.add_argument(
-            "--controller-shell-code",
-            type=str,
-            help="shell code to run on controller node",
-        )
-        subparser.add_argument(
-            "--cwd",
-            type=str,
-            help="working directory from which to start executing",
-        )
-
-    @staticmethod
-    @override
-    def name() -> str:
-        return "controller-node"
-
-    @staticmethod
-    @override
-    def help() -> str:
-        return "From inside shadow, run the test"
-
-    @override
-    def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
-        os.chdir(ns.cwd)
-        try:
-            network.bootstrap()
-            sys.stdout.flush()
-            sys.stderr.flush()
-            subprocess.run(
-                [
-                    "/usr/bin/env",
-                    "sh",
-                    "-c",
-                    ns.controller_shell_code,
-                ],
-                check=True,
-            )
-        finally:
-            # whatever happens, we want to try to stop any running network node
-            # processes, allowing the simulation time to move quickly to the
-            # stop-time. Otherwise we'll just keep simulating consensus updates
-            # etc until the stop-time.
-            network.stop()
 
 
 class E2ECLICommand(chutney.TorNet.CLICommand):
@@ -480,7 +443,8 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
             node_latency=check_type(ns.latency, str),
             node_bandwidth=check_type(ns.host_bandwidth, str),
             node_packet_loss=check_type(ns.packet_loss, float),
-            controller_shell_code=check_type(ns.controller_shell_code, str),
+            controller_args=["sh", "-c", check_type(ns.controller_shell_code, str)],
+            data_dir=chutney.envvars.DATA_DIR.get(ns=ns),
         )
 
 
@@ -497,7 +461,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     chutney.envvars.DATA_DIR.register_argparser(parser)
     subparsers = chutney.TorNet.CLICommand.add_subparsers(parser)
     E2ECLICommand(subparsers)
-    ControllerNodeCLICommand(subparsers)
     ns = parser.parse_args(args=argv[1:])
     chutney.TorNet.CLICommand.run_selected_subcommand(ns)
 
