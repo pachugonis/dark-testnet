@@ -315,7 +315,7 @@ def generate_shadow_network_graph(
     )
 
 
-def _run_e2e(
+def run_in_shadow(
     network: chutney.TorNet.Network,
     node_latency: str,
     node_bandwidth: str,
@@ -323,6 +323,16 @@ def _run_e2e(
     controller_args: list[str],
     data_dir: Optional[Path] = None,
 ) -> None:
+    """Runs a chutney network and some given shell code under shadow.
+
+    Loads the "current" chutney network (CHUTNEY_DATA_DIR/nodes), writes
+    a modified version and a shadow configuration file (shadow.yaml) to
+    a *new* nodes directory, with a virtual host associated with each
+    chutney node, as well as a "controller" host, which is configured to
+    bootstrap the network and run the provided shell code. Finally,
+    executes shadow using the generated configuration, with outputs
+    saved to 'shadow.log' and 'shadow.data' in the network directory.
+    """
     ip_network: ipaddress.IPv4Network = ipaddress.IPv4Network("192.168.0.0/24")
     host_ips = iter(ip_network.hosts())
     controller_ip = next(host_ips)
@@ -439,26 +449,17 @@ class E2ECLICommand(chutney.TorNet.CLICommand):
     @staticmethod
     @override
     def help() -> str:
-        return "Runs a chutney network and some given shell code under shadow."
+        doc = check_type(run_in_shadow.__doc__, str)
+        return doc.split("\n\n", maxsplit=1)[0]
 
     @classmethod
     @override
     def description(cls) -> str:
-        # Note that argparse removes extra whitespace on display, so we can't do
-        # multiple paragraphs, lists, etc.
-        return textwrap.dedent("""
-            Loads the "current" chutney network (CHUTNEY_DATA_DIR/nodes), writes
-            a modified version and a shadow configuration file (shadow.yaml) to
-            a *new* nodes directory, with a virtual host associated with each
-            chutney node, as well as a "controller" host, which is configured to
-            bootstrap the network and run the provided shell code. Finally,
-            executes shadow using the generated configuration, with outputs
-            saved to 'shadow.log' and 'shadow.data' in the network directory.
-            """)
+        return check_type(run_in_shadow.__doc__, str)
 
     @override
     def run(self, network: chutney.TorNet.Network, ns: argparse.Namespace) -> None:
-        _run_e2e(
+        run_in_shadow(
             network,
             node_latency=check_type(ns.latency, str),
             node_bandwidth=check_type(ns.host_bandwidth, str),
