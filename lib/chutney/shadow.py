@@ -62,7 +62,7 @@ def _wrap_cmd_in_running_network(
     return ["sh", "-c", shell_script]
 
 
-def configure_shadow(
+def generate_shadow_config(
     net: chutney.TorNet.Network,
     *,
     controller_hostname: str,
@@ -70,6 +70,15 @@ def configure_shadow(
     controller_ip: ipaddress.IPv4Address,
     network_graph: shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
+    """Generate a shadow configuration for the given network.
+
+    A shadow host is generated for each chutney node, using the node's nick
+    as the hostname. Each host runs an rpyc server (so that nodes using the
+    RPYC_INSECURE launcher backend can be remotely started there).
+
+    A "controller" host is also generated, and configured to run the command
+    specified by `controller_args`.
+    """
     hosts = {}
 
     rpyc_server = "rpyc_classic"
@@ -333,7 +342,7 @@ def _run_e2e(
         node_bandwidth=node_bandwidth,
         node_packet_loss=node_packet_loss,
     )
-    shadow_config = configure_shadow(
+    shadow_config = generate_shadow_config(
         network,
         controller_hostname=controller_hostname,
         controller_ip=controller_ip,
