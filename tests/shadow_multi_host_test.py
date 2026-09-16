@@ -28,7 +28,7 @@ from typeguard import check_type
 import chutney.chutney_logging
 import chutney.envvars
 import chutney.network_tests.verify
-import chutney.shadow_util
+import chutney.util.shadow as shadow_util
 import chutney.TorNet
 
 logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
@@ -65,7 +65,7 @@ def configure_shadow(
     controller_hostname: str,
     controller_args: list[str],
     controller_ip: ipaddress.IPv4Address,
-    network_graph: chutney.shadow_util.ShadowNetworkGraph,
+    network_graph: shadow_util.ShadowNetworkGraph,
 ) -> scfg.Config:
     hosts = {}
 
@@ -239,7 +239,7 @@ def _generate_shadow_network_graph(
     controller_latency: str = "1 ms",
     controller_bandwidth: str = "1 Gbit",
     controller_packet_loss: float = 0.0,
-) -> chutney.shadow_util.ShadowNetworkGraph:
+) -> shadow_util.ShadowNetworkGraph:
     """Generate a ShadowNetworkGraph for `network`.
 
     chutney network nodes are all assigned to a single shadow network node,
@@ -258,23 +258,23 @@ def _generate_shadow_network_graph(
     # The "controller" node, from which we run chutney and remotely
     # orchestrate the other nodes, is hard coded to have high bandwidth, and
     # low latency to itself and other nodes.
-    return chutney.shadow_util.ShadowNetworkGraph(
-        default_network_node=chutney.shadow_util.ShadowNetworkNode(
+    return shadow_util.ShadowNetworkGraph(
+        default_network_node=shadow_util.ShadowNetworkNode(
             label=default_net_label,
             host_bandwidth_up=node_bandwidth,
             host_bandwidth_down=node_bandwidth,
-            self_edge_properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+            self_edge_properties=shadow_util.ShadowNetworkEdgeProperties(
                 latency=node_latency,
                 packet_loss=node_packet_loss,
             ),
         ),
         addtl_network_nodes=[
             (
-                chutney.shadow_util.ShadowNetworkNode(
+                shadow_util.ShadowNetworkNode(
                     label=controller_net_label,
                     host_bandwidth_up=controller_bandwidth,
                     host_bandwidth_down=controller_bandwidth,
-                    self_edge_properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+                    self_edge_properties=shadow_util.ShadowNetworkEdgeProperties(
                         latency=controller_latency,
                         packet_loss=controller_packet_loss,
                     ),
@@ -283,10 +283,10 @@ def _generate_shadow_network_graph(
             ),
         ],
         edges=[
-            chutney.shadow_util.ShadowNetworkEdge(
+            shadow_util.ShadowNetworkEdge(
                 src_label=controller_net_label,
                 dst_label=default_net_label,
-                properties=chutney.shadow_util.ShadowNetworkEdgeProperties(
+                properties=shadow_util.ShadowNetworkEdgeProperties(
                     latency=controller_latency,
                     packet_loss=controller_packet_loss,
                 ),
