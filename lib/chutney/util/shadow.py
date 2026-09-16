@@ -1,5 +1,11 @@
 """
-Utilities for setting up shadow simulations for chutney networks
+Utilities for setting up shadow simulations.
+
+We wrote these utilities while developing chutney-related functionality, but
+they aren't chutney-specific. In particular, they don't import other chutney
+modules.
+
+For functionality integrating chutney and shadow functionality see `chutney.shadow`.
 """
 
 from __future__ import annotations

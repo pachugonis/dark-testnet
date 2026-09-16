@@ -1,8 +1,11 @@
-#!/usr/bin/env python3
 """
-A CLI for generating chutney networks compatible with a multi-host shadow configuration,
-the corresponding configuration, and running it under shadow.
-See --help.
+Utilities for setting up shadow simulations for chutney networks.
+
+Also provides a CLI for generating chutney networks compatible with a multi-host
+shadow configuration, the corresponding configuration, and running it under
+shadow.  See --help.
+
+For non-chutney-specific shadow functionality, see `chutney.util.shadow`.
 """
 
 from __future__ import annotations

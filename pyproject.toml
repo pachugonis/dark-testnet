@@ -44,6 +44,7 @@ Issues = "https://gitlab.torproject.org/tpo/core/chutney/-/issues/"
 
 [project.scripts]
 chutney = "chutney.TorNet:__main__"
+chutney-shadow = "chutney.shadow:main"
 
 [tool.setuptools]
 # module root is under `lib` (instead of the default of `src`)
