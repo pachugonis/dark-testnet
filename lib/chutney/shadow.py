@@ -202,7 +202,7 @@ def shadow_multihost_node_config_overrides(
     )
 
 
-def _rewrite_network_for_shadow_multihost(
+def rewrite_network_for_shadow_multihost(
     network: chutney.TorNet.Network,
     *,
     ip_network: ipaddress.IPv4Network,
@@ -327,7 +327,7 @@ def _run_e2e(
     host_ips = iter(ip_network.hosts())
     controller_ip = next(host_ips)
     starting_ip = next(host_ips)
-    network = _rewrite_network_for_shadow_multihost(
+    network = rewrite_network_for_shadow_multihost(
         network,
         ip_network=ip_network,
         controller_ip=controller_ip,
