@@ -248,7 +248,7 @@ def rewrite_network_for_shadow_multihost(
     return network
 
 
-def _generate_shadow_network_graph(
+def generate_shadow_network_graph(
     network: chutney.TorNet.Network,
     *,
     controller_hostname: str,
@@ -342,7 +342,7 @@ def _run_e2e(
     network.init(data_dir=data_dir)
 
     controller_hostname = "controller-host"
-    network_graph = _generate_shadow_network_graph(
+    network_graph = generate_shadow_network_graph(
         network,
         controller_ip=controller_ip,
         controller_hostname=controller_hostname,
