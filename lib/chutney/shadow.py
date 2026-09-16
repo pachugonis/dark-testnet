@@ -158,19 +158,8 @@ def generate_shadow_config(
     )
 
 
-def _shadow_multihost_node_config_overrides(
-    *,
-    controller_ip: ipaddress.IPv4Address,
-    starting_ip: ipaddress.IPv4Address,
-    ip_network: ipaddress.IPv4Network,
-) -> dict[str, object]:
-    """NodeConfig params needed for multihost shadow compatibility
-
-    `starting_ip` is the base IP address to use when allocating addresses.
-    It must be contained in `ip_network`, which all nodes will mark as trusted
-    (and therefore eligible to expose socks ports etc to).
-    """
-    assert starting_ip in ip_network
+def shadow_compatibility_config_overrides() -> dict[str, object]:
+    """NodeConfig params needed for shadow compatibility."""
     return dict(
         # shadow doesn't support IPV6.
         disableipv6=True,
@@ -179,6 +168,25 @@ def _shadow_multihost_node_config_overrides(
         sandbox=False,
         # shadow doesn't support named sockets.
         enable_controlsocket=False,
+    )
+
+
+def shadow_multihost_node_config_overrides(
+    *,
+    controller_ip: ipaddress.IPv4Address,
+    starting_ip: ipaddress.IPv4Address,
+    ip_network: ipaddress.IPv4Network,
+) -> dict[str, object]:
+    """NodeConfig params needed for multihost shadow compatibility.
+
+    Includes the overrides from `shadow_compatibility_config_overrides`.
+
+    `starting_ip` is the base IP address to use when allocating addresses.
+    It must be contained in `ip_network`, which all nodes will mark as trusted
+    (and therefore eligible to expose socks ports etc to).
+    """
+    assert starting_ip in ip_network
+    return shadow_compatibility_config_overrides() | dict(
         # We're putting each node on their own host, so we'll launch processes
         # via rpyc.
         launcher_backend=chutney.TorNet.LauncherBackend.RPYC_INSECURE,
@@ -211,7 +219,7 @@ def _rewrite_network_for_shadow_multihost(
     will be configured to forward connections to this address.
     `starting_ip` is the base IP address that will be assigned to chutney nodes.
     """
-    overrides = _shadow_multihost_node_config_overrides(
+    overrides = shadow_multihost_node_config_overrides(
         ip_network=ip_network, controller_ip=controller_ip, starting_ip=starting_ip
     )
     # *Try* to detect if we're clobbering something that was explicitly set.
