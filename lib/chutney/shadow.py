@@ -117,8 +117,8 @@ def generate_shadow_config(
             scfg.Process(
                 path=controller_args[0],
                 args=controller_args[1:],
-                environment=dict(
-                    **os.environ,
+                environment=os.environ
+                | dict(
                     CHUTNEY_DATA_DIR=str(net.dir.parent),
                     SHADOW_HOSTNAME=controller_hostname,
                     SHADOW_IP=str(controller_ip),
