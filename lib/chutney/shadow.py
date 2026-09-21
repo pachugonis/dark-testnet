@@ -15,11 +15,11 @@ import ipaddress
 import json
 import logging
 import os
+import random
 import shlex
 import shutil
 import sys
 import textwrap
-import time
 from pathlib import Path
 from typing import Optional, Sequence
 from typing_extensions import override
@@ -69,6 +69,7 @@ def generate_shadow_config(
     controller_args: list[str],
     controller_ip: ipaddress.IPv4Address,
     network_graph: shadow_util.ShadowNetworkGraph,
+    simulation_rng_seed: Optional[int] = None,
 ) -> scfg.Config:
     """Generate a shadow configuration for the given network.
 
@@ -78,8 +79,13 @@ def generate_shadow_config(
 
     A "controller" host is also generated, and configured to run the command
     specified by `controller_args`.
+
+    If a `simulation_rng_seed` is not provided, one will be randomly generated.
     """
     hosts = {}
+
+    if simulation_rng_seed is None:
+        simulation_rng_seed = random.randint(0, 2**32 - 1)
 
     rpyc_server = "rpyc_classic"
     if not shutil.which(rpyc_server):
@@ -136,11 +142,7 @@ def generate_shadow_config(
             model_unblocked_syscall_latency=True,
             # Show progress
             progress=True,
-            # Use a different seed each time to avoid getting deterministically
-            # stuck into a flaky failure.
-            # TODO: more-loudly expose what seed was used and add a CLI flag for
-            # overriding.
-            seed=int(time.time()),
+            seed=simulation_rng_seed,
         ),
         experimental=scfg.Experimental(
             # Increasing this from the default value improves performance a bit,
