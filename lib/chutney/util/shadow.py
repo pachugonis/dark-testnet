@@ -169,6 +169,11 @@ class ShadowNetworkGraph:
         """
         return self._g.gml()
 
+    def default_node_id(self) -> int:
+        """Return the id of the "default" network node"""
+        default_label = self._default_network_node.label
+        return self._g.id_for_label(default_label)
+
     def network_node_id_for_hostname(self, hostname: str) -> int:
         """Return the network node id for the given hostname, suitable for shadow config item
         [hosts.<hostname>.network_node_id](https://shadow.github.io/docs/guide/shadow_config_spec.html#hostshostnamenetwork_node_id)
