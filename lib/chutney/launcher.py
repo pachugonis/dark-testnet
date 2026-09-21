@@ -252,7 +252,7 @@ class Launcher(ABC):
         # errors: str | None = None,
         input: Optional[str] = None,
         text: Literal[True],
-        # timeout: float | None = None,
+        timeout: float | None = None,
         # user: str | int | None = None,
         # group: str | int | None = None,
         # extra_groups: Iterable[str | int] | None = None,
@@ -285,7 +285,7 @@ class Launcher(ABC):
             known_bin=known_bin,
             env=env,
         )
-        res = popen.communicate(input=input)
+        res = popen.communicate(input=input, timeout=timeout)
         if check and res.returncode != 0:
             raise CalledProcessError(
                 returncode=res.returncode,
