@@ -37,7 +37,7 @@ import chutney.TorNet
 logger = logging.getLogger(__name__ if __name__ != "__main__" else __file__)
 
 
-def _wrap_cmd_in_running_network(
+def wrap_cmd_in_running_network(
     args: list[str], *, cwd: Optional[str] = None
 ) -> list[str]:
     """Wrap command `args` to be executed in the context of a running chutney network.
@@ -364,7 +364,7 @@ def run_in_shadow(
         network,
         controller_hostname=controller_hostname,
         controller_ip=controller_ip,
-        controller_args=_wrap_cmd_in_running_network(controller_args),
+        controller_args=wrap_cmd_in_running_network(controller_args),
         network_graph=network_graph,
     )
     shadow_config_path = network.dir.joinpath("shadow.yaml")
