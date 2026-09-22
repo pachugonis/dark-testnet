@@ -1089,8 +1089,19 @@ class RpycLauncher(Launcher):
     @staticmethod
     def make_classic(host: str | IPAddress) -> RpycLauncher:
         hostname = str(host)
+
+        def factory() -> rpyc.core.protocol.Connection:
+            # We want to fail fast here if the target service is unreachable.
+            # rpyc.utils.connect doesn't expose the timeout or attempts count,
+            # so we explicitly create the underlying SocketStream instead, which
+            # does.
+            s = rpyc.core.stream.SocketStream.connect(
+                str(host), 18812, timeout=3.0, attempts=1
+            )
+            return rpyc.utils.classic.connect_stream(s)
+
         return RpycLauncher(
-            conn_factory=lambda: rpyc.classic.connect(host=hostname),
+            conn_factory=factory,
             hostname=hostname,
         )
 
