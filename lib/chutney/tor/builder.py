@@ -317,8 +317,7 @@ class LocalNodeBuilder(NodeBuilder):
             if self._hs_hostname_path().exists():
                 logger.debug("Generated hostname %s", self.get_hs_hostname().unwrap())
                 # Done. Terminate and wait for process to exit.
-                p.terminate()
-                res = p.communicate()
+                res = p.shutdown()
                 logger.debug(
                     "tor exited with returncode %d, after terminating", res.returncode
                 )
