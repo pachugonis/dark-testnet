@@ -1087,7 +1087,9 @@ class RpycLauncher(Launcher):
         self._hostname = hostname
 
     @staticmethod
-    def make_classic(host: str | IPAddress) -> RpycLauncher:
+    def make_classic(
+        host: str | IPAddress, port: int = rpyc.utils.classic.DEFAULT_SERVER_PORT
+    ) -> RpycLauncher:
         hostname = str(host)
 
         def factory() -> rpyc.core.protocol.Connection:
@@ -1096,7 +1098,7 @@ class RpycLauncher(Launcher):
             # so we explicitly create the underlying SocketStream instead, which
             # does.
             s = rpyc.core.stream.SocketStream.connect(
-                str(host), 18812, timeout=3.0, attempts=1
+                str(host), port, timeout=3.0, attempts=1
             )
             return rpyc.utils.classic.connect_stream(s)
 

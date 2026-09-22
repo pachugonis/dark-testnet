@@ -34,6 +34,7 @@ from typing import (
 from typing_extensions import assert_never, override
 
 import argparse
+import concurrent
 import copy
 import dataclasses
 import errno
@@ -1345,17 +1346,23 @@ class Network(ToCustomJsonable, FromDecodedJson):
         except Exception as e:
             logger.debug(f"Couldn't load previous network from {data_dir}: {e}")
         if prev_network is not None:
-            for n in prev_network._nodes:
-                node_is_running = False
-                try:
-                    node_is_running = n._controller.isRunning()
-                except Exception as e:
-                    logger.debug(
-                        f"Couldn't determine whether {n.nick} in previous network"
-                        f" {prev_network.dir} is running: {e}"
-                    )
-                if node_is_running:
-                    running += 1
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = {
+                    executor.submit(n._controller.isRunning): n
+                    for n in prev_network._nodes
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    n = futures[future]
+                    node_is_running = False
+                    try:
+                        node_is_running = future.result()
+                    except Exception as e:
+                        logger.debug(
+                            f"Couldn't determine whether {n.nick} in previous network"
+                            f" {prev_network.dir} is running: {str(e)}"
+                        )
+                    if node_is_running:
+                        running += 1
         if running > 0:
             raise ChutneyError("Previous network still running. Try running 'stop'.")
 
