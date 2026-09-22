@@ -13,7 +13,7 @@ import shlex
 import subprocess
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import IO, Optional, Literal, Callable
@@ -90,6 +90,22 @@ class Popen(ABC):
     def kill(self) -> None:
         """Sends SIGKILL to the process"""
         self.send_signal(signal.SIGKILL)
+
+    def shutdown(
+        self,
+        signals_and_timeouts: Iterable[tuple[int, float]] = (
+            (signal.SIGTERM, 5.0),
+            (signal.SIGKILL, 5.0),
+        ),
+    ) -> CompletedProcess[str]:
+        """Sends a series of signals to the process and waits for it to complete."""
+        for sig, timeout in signals_and_timeouts:
+            self.send_signal(sig)
+            try:
+                return self.communicate(timeout=timeout)
+            except chutney.errors.ChutneyTimeoutError:
+                continue
+        raise chutney.errors.ChutneyTimeoutError
 
 
 class Launcher(ABC):
