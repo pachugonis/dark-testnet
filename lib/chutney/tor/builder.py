@@ -711,8 +711,7 @@ def _get_obfs4_extra_args(
             extra_args := _get_obfs4_extra_args_if_present(bridge_path=bridge_path)
         ) is not None:
             # Done. Terminate and wait for process to exit.
-            p.terminate()
-            completed = p.communicate()
+            completed = p.shutdown()
             logger.debug(
                 f"obfs4proxy exited with returncode {completed.returncode}, after terminating"
             )
