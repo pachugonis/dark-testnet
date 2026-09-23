@@ -292,14 +292,17 @@ shadow-test-network:
       # CI_NODE_TOTAL is set to the number of jobs specified via `parallel` below.
       # Only actually run $CI_NODE_TOTAL'th flavor.
       if [ $(($i % $CI_NODE_TOTAL)) -eq 0 ]; then
-        tests/shadow-multi-host-test \
+        chutney \
           --data-dir="$CI_PROJECT_DIR/net/$flavor" \
-          e2e \
+          init \
           --arti="$arti" \
           --tor="$tor" \
           --tor-gencert="$tor_gencert" \
-          --controller-shell-code='chutney verify --verify-listen-address=$SHADOW_IP --hs-multi-client=true' \
           --net="$flavor"
+        chutney-shadow \
+          --data-dir="$CI_PROJECT_DIR/net/$flavor" \
+          e2e \
+          --controller-shell-code='chutney verify --verify-listen-address=$SHADOW_IP --hs-multi-client=true'
       fi
       (( i++ )) || true
     done

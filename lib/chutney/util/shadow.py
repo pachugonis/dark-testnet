@@ -1,5 +1,11 @@
 """
-Utilities for setting up shadow simulations for chutney networks
+Utilities for setting up shadow simulations.
+
+We wrote these utilities while developing chutney-related functionality, but
+they aren't chutney-specific. In particular, they don't import other chutney
+modules.
+
+For functionality integrating chutney and shadow functionality see `chutney.shadow`.
 """
 
 from __future__ import annotations
@@ -162,6 +168,11 @@ class ShadowNetworkGraph:
         [network.graph.inline](https://shadow.github.io/docs/guide/shadow_config_spec.html#networkgraphfileinline)
         """
         return self._g.gml()
+
+    def default_node_id(self) -> int:
+        """Return the id of the "default" network node"""
+        default_label = self._default_network_node.label
+        return self._g.id_for_label(default_label)
 
     def network_node_id_for_hostname(self, hostname: str) -> int:
         """Return the network node id for the given hostname, suitable for shadow config item
