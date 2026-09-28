@@ -317,8 +317,7 @@ class LocalNodeBuilder(NodeBuilder):
             if self._hs_hostname_path().exists():
                 logger.debug("Generated hostname %s", self.get_hs_hostname().unwrap())
                 # Done. Terminate and wait for process to exit.
-                p.terminate()
-                res = p.communicate()
+                res = p.shutdown()
                 logger.debug(
                     "tor exited with returncode %d, after terminating", res.returncode
                 )
@@ -711,8 +710,7 @@ def _get_obfs4_extra_args(
             extra_args := _get_obfs4_extra_args_if_present(bridge_path=bridge_path)
         ) is not None:
             # Done. Terminate and wait for process to exit.
-            p.terminate()
-            completed = p.communicate()
+            completed = p.shutdown()
             logger.debug(
                 f"obfs4proxy exited with returncode {completed.returncode}, after terminating"
             )
