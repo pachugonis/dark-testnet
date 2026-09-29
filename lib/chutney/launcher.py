@@ -16,7 +16,7 @@ import time
 from collections.abc import Iterable, Mapping
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import IO, Optional, Literal, Callable
+from typing import IO, Optional, Literal, Callable, Final
 from typing_extensions import assert_never, TypeAlias, override
 
 import rpyc  # type: ignore
@@ -1038,10 +1038,36 @@ class RpycPopen(Popen):
     def communicate(
         self, input: Optional[str] = None, timeout: Optional[float] = None
     ) -> CompletedProcess[str]:
-        try:
-            stdout, stderr = self._inner.communicate(input=input, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            raise chutney.errors.ChutneyTimeoutError
+        # rpyc has a timeout for each function call. If we hit that, the rpyc
+        # connection will end up in a broken state. To avoid that, we always
+        # provide a timeout to the `communicate` call, and ensure that it's
+        # shorter than rpyc's timeout.
+        #
+        # We simulate the caller's timeout by looping.
+        sync_request_timeout: Final = self._launcher._sync_request_timeout()
+        # We want `max_timeout` to be less than the rpyc
+        # `sync_request_timeout`, with some slack to account for additional
+        # overhead.
+        max_timeout: Final = sync_request_timeout / 2.0
+        deadline: Final = None if timeout is None else time.time() + timeout
+        while True:
+            if deadline is not None:
+                remaining = deadline - time.time()
+                if remaining <= 0.0:
+                    raise chutney.errors.ChutneyTimeoutError
+                timeout = min(max_timeout, remaining)
+            else:
+                timeout = max_timeout
+            try:
+                stdout, stderr = self._inner.communicate(input=input, timeout=timeout)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            # Supplying input to `communicate` after an input has already
+            # been provided is undefined behavior. All input already
+            # provided should already be buffered by the Popen object (or
+            # already read by the process).
+            input = None
         return CompletedProcess(
             args=self._inner.args,
             returncode=self._inner.returncode,
@@ -1122,6 +1148,22 @@ class RpycLauncher(Launcher):
             conn_factory=factory,
             hostname=hostname,
         )
+
+    def _sync_request_timeout(self) -> float:
+        """rpyc "Default timeout for waiting results" for our connection.
+
+        See `sync_request_timeout` at
+        <https://rpyc.readthedocs.io/en/latest/api/core_protocol.html#module-rpyc.core.protocol>
+        """
+        conn = self._get_conn()
+        try:
+            # rpyc doesn't seem to provide a public way to get to this, or the
+            # config in general. For now, this works, though:
+            return float(conn._config["sync_request_timeout"])
+        except (AttributeError, KeyError):
+            _logger.warning("Couldn't get sync_request_timeout; guessing")
+            # The documented default value.
+            return 30.0
 
     @override
     def hostname(self) -> str:
