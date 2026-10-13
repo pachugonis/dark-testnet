@@ -638,7 +638,9 @@ def _closerange(start: int, end: int) -> None:
     os.closerange iterates the full list of integers in the range, which can be quite slow,
     especially under shadow.
     """
-    for fd_s in os.listdir("/proc/self/fd"):
+    # /proc/self/fd is Linux-specific; macOS and the BSDs list the same thing at /dev/fd.
+    fd_dir = "/proc/self/fd" if os.path.isdir("/proc/self/fd") else "/dev/fd"
+    for fd_s in os.listdir(fd_dir):
         fd = int(fd_s)
         if fd in range(start, end + 1):
             try:
