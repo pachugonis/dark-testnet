@@ -1,0 +1,13 @@
+# The Dark test network: directory authorities, relays, a client and a hidden
+# service. As on the real network, there are no exits.
+Authority = Node(tag="a", authority=1, relay=1)
+Relay = Node(tag="r", relay=1)
+# The client also serves DNS, so that tests can check what it answers.
+Client = Node(tag="c", client=1, enable_dnsport=1, launch_phase=2)
+HS = Node(tag="h", hs=1, launch_phase=2)
+
+# A hidden service connection needs five relays besides the client and the
+# service: a path of three, a rendezvous point and an introduction point.
+NODES = Authority.getN(3) + Relay.getN(4) + Client.getN(1) + HS.getN(1)
+
+ConfigureNodes(NODES)
