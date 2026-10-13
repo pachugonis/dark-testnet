@@ -431,9 +431,11 @@ class Node(ToCustomJsonable):
     def hs_targetport(self) -> Option[int]:
         """Target port of this node's hidden service, if any."""
         if self._config.hs:
-            # Currently all hidden services redirect to the same port,
+            # By default all hidden services redirect to the same port,
             # for compatibility with the test in `network_tests/verify.py`
-            return Option(chutney.network_tests.verify.LISTEN_PORT)
+            return Option(
+                self._config.hs_target_port or chutney.network_tests.verify.LISTEN_PORT
+            )
         else:
             return Option(None)
 
@@ -649,6 +651,10 @@ class NodeConfig(ToCustomJsonable, FromDecodedJson):
     hs_target_address: IPAddress = dataclasses.field(
         default_factory=lambda: NodeConfig._HS_TARGET_ADDRESS_ENV.get()
     )
+    # Target port for incoming hidden service connections, if not the port of
+    # the listener in `network_tests/verify.py`. That test supports no other:
+    # a network that sets this is not one to run `verify` on.
+    hs_target_port: Optional[int] = None
     # subdirectory of data dir in which to store restricted discovery
     # client keys. aka ClientOnionAuthDir in torrc.
     # Unused in arti, which stores these keys opaquely.

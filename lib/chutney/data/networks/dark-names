@@ -1,0 +1,21 @@
+# The Dark test network with a name registry: `dark-basic`, and one more
+# hidden service for the registry to be reached at.
+#
+# The registry's service forwards to a port of its own, which the `verify`
+# test does not support: this network is for tests that bring their own
+# listeners.
+Authority = Node(tag="a", authority=1, relay=1)
+Relay = Node(tag="r", relay=1)
+Client = Node(tag="c", client=1, enable_dnsport=1, launch_phase=2)
+HS = Node(tag="h", hs=1, launch_phase=2)
+RegistryHS = Node(tag="hr", hs=1, hs_target_port=4748, launch_phase=2)
+
+NODES = (
+    Authority.getN(3)
+    + Relay.getN(4)
+    + Client.getN(1)
+    + HS.getN(1)
+    + RegistryHS.getN(1)
+)
+
+ConfigureNodes(NODES)
