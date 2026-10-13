@@ -571,7 +571,7 @@ class LocalNodeBuilder(NodeBuilder):
             # As per <https://spec.torproject.org/intro/conventions.html#binascii>
             private_key32 = private_key32.strip("=")
             priv_key_path.write_text(
-                hs_address.removesuffix(".onion")
+                hs_address.removesuffix(".dark")
                 + ":descriptor:x25519:"
                 + private_key32
             )

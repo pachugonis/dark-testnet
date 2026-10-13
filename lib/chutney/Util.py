@@ -244,9 +244,11 @@ def validate_onion_address(s: str) -> None:
     #   - VERSION is a one byte version field (default value '\x03')
     #   - ".onion checksum" is a constant string
     #   - CHECKSUM is truncated to two bytes before inserting it in onion_address
-    dot_onion: Final = ".onion"
+    # Dark keeps the address encoding above (including the ".onion checksum"
+    # constant) and changes only the suffix.
+    dot_onion: Final = ".dark"
     if not s.endswith(dot_onion):
-        raise ChutneyError(f"Invalid onion address '{s}': missing .onion suffix")
+        raise ChutneyError(f"Invalid onion address '{s}': missing {dot_onion} suffix")
     try:
         decoded: Final[bytes] = base64.b32decode(
             s.removesuffix(dot_onion), casefold=True
